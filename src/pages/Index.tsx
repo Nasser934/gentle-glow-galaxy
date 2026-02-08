@@ -42,7 +42,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <header className="relative overflow-hidden">
-        <div className="hero-gradient absolute inset-0 opacity-[0.03]" />
+        <div className="hero-gradient absolute inset-0 opacity-[0.03] pointer-events-none" />
         <nav className="container mx-auto flex items-center justify-between px-6 py-5">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg hero-gradient">
@@ -50,7 +50,7 @@ const Index = () => {
             </div>
             <span className="font-display text-xl font-bold text-foreground">Concept AI</span>
           </div>
-          <Button onClick={() => navigate("/analyze")} size="sm">
+          <Button type="button" onClick={() => navigate("/analyze")} size="sm">
             Start Analysis
           </Button>
         </nav>
@@ -75,15 +75,15 @@ const Index = () => {
               Evaluate project concepts with structured, AI-driven feasibility analysis. Get instant
               scores, risk assessments, and data-backed recommendations.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-4">
-              <Button size="lg" onClick={() => navigate("/analyze")} className="gap-2 px-8 text-base">
-                Start New Analysis <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
-                Learn More
-              </Button>
-            </div>
           </motion.div>
+          <div className="mt-10 flex items-center justify-center gap-4">
+            <Button type="button" size="lg" onClick={() => navigate("/analyze")} className="gap-2 px-8 text-base">
+              Start New Analysis <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="lg" variant="outline" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
+              Learn More
+            </Button>
+          </div>
         </div>
       </header>
 
