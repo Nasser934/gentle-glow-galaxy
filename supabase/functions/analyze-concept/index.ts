@@ -12,7 +12,7 @@ async function safeJson(url: string) {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0" },
-      signal: AbortSignal.timeout(6500),
+      signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
     return await res.json();
@@ -293,7 +293,7 @@ Be specific, realistic, and consultant-grade.`;
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
