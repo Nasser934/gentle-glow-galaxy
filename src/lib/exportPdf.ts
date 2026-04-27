@@ -1,5 +1,7 @@
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+// html2canvas-pro supports modern CSS color functions (oklch/lab/color-mix)
+// that the original html2canvas crashes on — needed for shadcn/Tailwind tokens.
+import html2canvas from "html2canvas-pro";
 
 /**
  * Renders each `[data-pdf-page]` element from the given root into a single
