@@ -11,6 +11,8 @@ export async function exportReportToPdf(rootEl: HTMLElement, fileName: string) {
   const pages = Array.from(rootEl.querySelectorAll<HTMLElement>("[data-pdf-page]"));
   if (pages.length === 0) throw new Error("No pages to export");
 
+  await document.fonts?.ready;
+
   const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
   const pdfW = pdf.internal.pageSize.getWidth();
   const pdfH = pdf.internal.pageSize.getHeight();
@@ -47,5 +49,18 @@ export async function exportReportToPdf(rootEl: HTMLElement, fileName: string) {
     pdf.addImage(img, "JPEG", x, y, renderW, renderH);
   }
 
-  pdf.save(fileName);
+  const blob = pdf.output("blob");
+  if (!blob || blob.size < 1000) throw new Error("PDF file was not generated correctly.");
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+  return { fileName: link.download, bytes: blob.size, pages: pages.length };
 }
