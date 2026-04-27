@@ -8,6 +8,7 @@ import { FMARTRadar } from "@/components/report/FMARTRadar";
 import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
 import { exportReportToPdf } from "@/lib/exportPdf";
+import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
@@ -120,6 +121,22 @@ const Results = () => {
           </div>
         </div>
       </nav>
+
+      {/* Interactive dashboard (not part of PDF) */}
+      <div className="container mx-auto px-6 py-8 no-print">
+        <InteractiveDashboard report={report} inputs={inputs} />
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
+          <div>
+            <h3 className="font-display text-xl font-bold text-foreground">Printable Report</h3>
+            <p className="text-sm text-muted-foreground">7-page A4 layout — exported as the PDF below.</p>
+          </div>
+          <Button onClick={handleDownload} disabled={downloading} className="gap-2">
+            {downloading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
+              : <><Download className="h-4 w-4" /> Download Report PDF</>}
+          </Button>
+        </div>
+      </div>
 
       {/* PDF root */}
       <div ref={pdfRootRef} className="space-y-6 py-8">
