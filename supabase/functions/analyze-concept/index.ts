@@ -255,13 +255,16 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const publicResearch = await fetchPublicResearch(inputs);
+
     const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing).
 You MUST call the "provide_report" tool. All numbers must be realistic given the budget, industry, geography, and timeline.
 - Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
 - Pick realistic TAM/SAM/SOM with credible CAGR.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
 - Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
-- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.`;
+- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.
+- Use the public research context below as directional evidence. Do not overstate it; if coverage is limited, say so in research.confidence and qualify insights.`;
 
     const userPrompt = `Generate the full feasibility report for this concept:
 
@@ -280,6 +283,9 @@ You MUST call the "provide_report" tool. All numbers must be realistic given the
 **Known Risks:** ${inputs.knownRisks || "None"}
 **Regulatory:** ${inputs.regulatoryConsiderations || "None"}
 **Technology Readiness:** ${inputs.technologyReadiness || "Not specified"}
+
+Public research context from free sources (Reddit public search, Hacker News, Wikipedia/open web snippets):
+${JSON.stringify(publicResearch, null, 2)}
 
 Be specific, realistic, and consultant-grade.`;
 
@@ -325,6 +331,10 @@ Be specific, realistic, and consultant-grade.`;
       market: parsed.market,
       customer: parsed.customer,
       competitors: parsed.competitors,
+      research: {
+        ...parsed.research,
+        citations: publicResearch.citations,
+      },
       financials: {
         currency: parsed.financials.currency,
         capExTotal: { low: parsed.financials.capExLow, high: parsed.financials.capExHigh, mid: parsed.financials.capExMid },
