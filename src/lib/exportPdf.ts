@@ -17,13 +17,19 @@ export async function exportReportToPdf(rootEl: HTMLElement, fileName: string) {
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
-    const canvas = await html2canvas(page, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-      windowWidth: page.scrollWidth,
-    });
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await html2canvas(page, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+        windowWidth: page.scrollWidth,
+      });
+    } catch (err) {
+      console.error(`[exportPdf] page ${i + 1} render failed`, err);
+      throw new Error(`Could not render page ${i + 1}: ${(err as Error)?.message ?? "unknown error"}`);
+    }
     const img = canvas.toDataURL("image/jpeg", 0.92);
 
     // Fit by width; if taller than page, scale by height.
