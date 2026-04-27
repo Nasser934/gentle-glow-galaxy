@@ -8,6 +8,7 @@ import { FMARTRadar } from "@/components/report/FMARTRadar";
 import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
 import { exportReportToPdf } from "@/lib/exportPdf";
+import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
