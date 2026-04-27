@@ -6,6 +6,82 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
+
+async function safeJson(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "ConceptAIResearchBot/1.0" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchPublicResearch(inputs: Record<string, string>) {
+  const query = [inputs.projectName, inputs.industry, inputs.location].filter(Boolean).join(" ").slice(0, 160);
+  const encoded = encodeURIComponent(query);
+
+  const [reddit, hn, wiki, duck] = await Promise.all([
+    safeJson(`https://www.reddit.com/search.json?q=${encoded}&sort=relevance&limit=8`),
+    safeJson(`https://hn.algolia.com/api/v1/search?query=${encoded}&tags=story&hitsPerPage=6`),
+    safeJson(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encoded}&limit=5&format=json&origin=*`),
+    safeJson(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`),
+  ]);
+
+  const citations: Array<{ title: string; url: string; source: string; takeaway: string }> = [];
+  const redditSignals: string[] = [];
+  const webSignals: string[] = [];
+
+  const redditPosts = reddit?.data?.children ?? [];
+  for (const child of redditPosts.slice(0, 8)) {
+    const post = child?.data;
+    const title = textFrom(post?.title).trim();
+    if (!title) continue;
+    const score = Number(post?.score ?? 0);
+    const comments = Number(post?.num_comments ?? 0);
+    const subreddit = textFrom(post?.subreddit, "reddit");
+    redditSignals.push(`${title} — r/${subreddit}, ${score} upvotes, ${comments} comments`);
+    citations.push({
+      title,
+      source: `Reddit · r/${subreddit}`,
+      url: `https://www.reddit.com${textFrom(post?.permalink, "/search")}`,
+      takeaway: `Community signal with ${comments} comments and ${score} upvotes.`,
+    });
+  }
+
+  for (const hit of (hn?.hits ?? []).slice(0, 6)) {
+    const title = textFrom(hit?.title || hit?.story_title).trim();
+    if (!title) continue;
+    const points = Number(hit?.points ?? 0);
+    const comments = Number(hit?.num_comments ?? 0);
+    webSignals.push(`${title} — Hacker News, ${points} points, ${comments} comments`);
+    citations.push({ title, source: "Hacker News", url: textFrom(hit?.url || `https://news.ycombinator.com/item?id=${hit?.objectID}`), takeaway: `Tech-market discussion signal with ${comments} comments.` });
+  }
+
+  const wikiTitles = Array.isArray(wiki?.[1]) ? wiki[1] : [];
+  const wikiUrls = Array.isArray(wiki?.[3]) ? wiki[3] : [];
+  wikiTitles.slice(0, 5).forEach((title: string, i: number) => {
+    webSignals.push(`${title} — Wikipedia/reference coverage`);
+    citations.push({ title, source: "Wikipedia", url: textFrom(wikiUrls[i], "https://www.wikipedia.org"), takeaway: "Reference coverage related to market/category context." });
+  });
+
+  const abstract = textFrom(duck?.AbstractText).trim();
+  if (abstract) webSignals.unshift(abstract.slice(0, 260));
+
+  return {
+    query,
+    generatedAt: new Date().toISOString(),
+    redditSignals: redditSignals.slice(0, 8),
+    webSignals: webSignals.slice(0, 10),
+    citations: citations.slice(0, 12),
+    coverage: citations.length >= 6 ? "Medium" : citations.length >= 2 ? "Low" : "Limited",
+  };
+}
+
 const reportSchema = {
   type: "object",
   properties: {
@@ -71,6 +147,21 @@ const reportSchema = {
         },
         required: ["name","model","weakness","edge"], additionalProperties: false,
       },
+    },
+    research: {
+      type: "object",
+      properties: {
+        overview: { type: "string", description: "Concise market research synthesis from provided public signals." },
+        confidence: { type: "string", enum: ["High", "Medium", "Low"] },
+        sentiment: { type: "string", enum: ["Positive", "Mixed", "Negative", "Insufficient data"] },
+        keySignals: { type: "array", items: { type: "string" }, description: "5–7 concise research-backed market signals." },
+        painPoints: { type: "array", items: { type: "string" }, description: "3–6 customer pain points inferred from research and concept context." },
+        competitorMentions: { type: "array", items: { type: "string" }, description: "3–6 competitor/category mentions from the research context." },
+        redditSignals: { type: "array", items: { type: "string" }, description: "2–5 Reddit/community insights, or note limited evidence." },
+        webSignals: { type: "array", items: { type: "string" }, description: "3–6 public web/reference insights." },
+      },
+      required: ["overview","confidence","sentiment","keySignals","painPoints","competitorMentions","redditSignals","webSignals"],
+      additionalProperties: false,
     },
     financials: {
       type: "object",
@@ -146,7 +237,7 @@ const reportSchema = {
     recommendations: { type: "array", items: { type: "string" }, description: "5–7 strategic recommendations." },
     nextSteps: { type: "array", items: { type: "string" }, description: "4–6 next steps." },
   },
-  required: ["executiveSummary","scores","market","customer","competitors","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
+  required: ["executiveSummary","scores","market","customer","competitors","research","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
   additionalProperties: false,
 };
 
@@ -164,13 +255,16 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const publicResearch = await fetchPublicResearch(inputs);
+
     const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing).
 You MUST call the "provide_report" tool. All numbers must be realistic given the budget, industry, geography, and timeline.
 - Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
 - Pick realistic TAM/SAM/SOM with credible CAGR.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
 - Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
-- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.`;
+- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.
+- Use the public research context below as directional evidence. Do not overstate it; if coverage is limited, say so in research.confidence and qualify insights.`;
 
     const userPrompt = `Generate the full feasibility report for this concept:
 
@@ -190,13 +284,16 @@ You MUST call the "provide_report" tool. All numbers must be realistic given the
 **Regulatory:** ${inputs.regulatoryConsiderations || "None"}
 **Technology Readiness:** ${inputs.technologyReadiness || "Not specified"}
 
+Public research context from free sources (Reddit public search, Hacker News, Wikipedia/open web snippets):
+${JSON.stringify(publicResearch, null, 2)}
+
 Be specific, realistic, and consultant-grade.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -234,6 +331,10 @@ Be specific, realistic, and consultant-grade.`;
       market: parsed.market,
       customer: parsed.customer,
       competitors: parsed.competitors,
+      research: {
+        ...parsed.research,
+        citations: publicResearch.citations,
+      },
       financials: {
         currency: parsed.financials.currency,
         capExTotal: { low: parsed.financials.capExLow, high: parsed.financials.capExHigh, mid: parsed.financials.capExMid },
