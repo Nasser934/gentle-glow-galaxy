@@ -96,7 +96,7 @@ const Results = () => {
     }
   };
 
-  const totalPages = 7;
+  const totalPages = 8;
   const cur = report.financials.currency;
 
   return (
@@ -259,8 +259,60 @@ const Results = () => {
           </table>
         </ReportPage>
 
-        {/* ============== PAGE 4 — COMPETITORS ============== */}
+        {/* ============== PAGE 4 — PUBLIC RESEARCH ============== */}
         <ReportPage pageNum={4} total={totalPages} projectName={inputs.projectName}>
+          <SectionTitle n="3">Public Market Research</SectionTitle>
+          {report.research ? (
+            <>
+              <div className="mb-4 rounded-md border border-[#dbeafe] bg-[#eff6ff] p-4">
+                <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[#1f4ed8]">
+                  Free-source insight · {report.research.confidence} confidence · {report.research.sentiment} sentiment
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#334155]">{report.research.overview}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <SubTitle>Key Signals</SubTitle>
+                  <ul className="space-y-1.5 text-[10.5px] text-[#334155]">
+                    {report.research.keySignals.slice(0, 6).map((s, i) => <li key={i} className="flex gap-2"><span className="text-[#1f4ed8]">■</span><span>{s}</span></li>)}
+                  </ul>
+                </div>
+                <div>
+                  <SubTitle>Customer Pain Points</SubTitle>
+                  <ul className="space-y-1.5 text-[10.5px] text-[#334155]">
+                    {report.research.painPoints.slice(0, 6).map((s, i) => <li key={i} className="flex gap-2"><span className="text-[#1f4ed8]">■</span><span>{s}</span></li>)}
+                  </ul>
+                </div>
+              </div>
+
+              <SubTitle>Community + Web Evidence</SubTitle>
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-[#1f4ed8] text-white">
+                    <th className="border border-[#1f4ed8] px-2 py-1.5 text-left">Source</th>
+                    <th className="border border-[#1f4ed8] px-2 py-1.5 text-left">Signal</th>
+                    <th className="border border-[#1f4ed8] px-2 py-1.5 text-left">Takeaway</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.research.citations.slice(0, 8).map((c, i) => (
+                    <tr key={c.url} className={i % 2 ? "bg-[#f8fafc]" : ""}>
+                      <td className="border border-[#e2e8f0] px-2 py-1.5 font-semibold text-[#0f172a]">{c.source}</td>
+                      <td className="border border-[#e2e8f0] px-2 py-1.5 text-[#334155]">{c.title}</td>
+                      <td className="border border-[#e2e8f0] px-2 py-1.5 text-[#475569]">{c.takeaway}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="text-[12px] text-[#475569]">Run a new analysis to include public Reddit/web research evidence in this report.</p>
+          )}
+        </ReportPage>
+
+        {/* ============== PAGE 5 — COMPETITORS ============== */}
+        <ReportPage pageNum={5} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="3">Competitive Landscape</SectionTitle>
           <SubTitle>3.1 Direct Competitors</SubTitle>
           <table className="w-full border-collapse text-[11px]">
@@ -285,8 +337,8 @@ const Results = () => {
           </table>
         </ReportPage>
 
-        {/* ============== PAGE 5 — CAPEX ============== */}
-        <ReportPage pageNum={5} total={totalPages} projectName={inputs.projectName}>
+        {/* ============== PAGE 6 — CAPEX ============== */}
+        <ReportPage pageNum={6} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="4">Financial Plan</SectionTitle>
           <SubTitle>4.1 Startup Costs (CapEx) — {cur}</SubTitle>
           <table className="mb-4 w-full border-collapse text-[11px]">
@@ -320,8 +372,8 @@ const Results = () => {
           <CapExBarChart data={report.financials.capEx} currency={cur} />
         </ReportPage>
 
-        {/* ============== PAGE 6 — OPEX + SCENARIOS ============== */}
-        <ReportPage pageNum={6} total={totalPages} projectName={inputs.projectName}>
+        {/* ============== PAGE 7 — OPEX + SCENARIOS ============== */}
+        <ReportPage pageNum={7} total={totalPages} projectName={inputs.projectName}>
           <SubTitle>4.2 Monthly Operating Costs — {cur}</SubTitle>
           <table className="mb-5 w-full border-collapse text-[11px]">
             <thead>
@@ -375,8 +427,8 @@ const Results = () => {
           )}
         </ReportPage>
 
-        {/* ============== PAGE 7 — RISKS + FUNDING + RECS ============== */}
-        <ReportPage pageNum={7} total={totalPages} projectName={inputs.projectName}>
+        {/* ============== PAGE 8 — RISKS + FUNDING + RECS ============== */}
+        <ReportPage pageNum={8} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="5">Risk Assessment</SectionTitle>
           <table className="mb-5 w-full border-collapse text-[11px]">
             <thead>
