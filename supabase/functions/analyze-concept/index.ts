@@ -148,6 +148,21 @@ const reportSchema = {
         required: ["name","model","weakness","edge"], additionalProperties: false,
       },
     },
+    research: {
+      type: "object",
+      properties: {
+        overview: { type: "string", description: "Concise market research synthesis from provided public signals." },
+        confidence: { type: "string", enum: ["High", "Medium", "Low"] },
+        sentiment: { type: "string", enum: ["Positive", "Mixed", "Negative", "Insufficient data"] },
+        keySignals: { type: "array", items: { type: "string" }, description: "5–7 concise research-backed market signals." },
+        painPoints: { type: "array", items: { type: "string" }, description: "3–6 customer pain points inferred from research and concept context." },
+        competitorMentions: { type: "array", items: { type: "string" }, description: "3–6 competitor/category mentions from the research context." },
+        redditSignals: { type: "array", items: { type: "string" }, description: "2–5 Reddit/community insights, or note limited evidence." },
+        webSignals: { type: "array", items: { type: "string" }, description: "3–6 public web/reference insights." },
+      },
+      required: ["overview","confidence","sentiment","keySignals","painPoints","competitorMentions","redditSignals","webSignals"],
+      additionalProperties: false,
+    },
     financials: {
       type: "object",
       properties: {
@@ -222,7 +237,7 @@ const reportSchema = {
     recommendations: { type: "array", items: { type: "string" }, description: "5–7 strategic recommendations." },
     nextSteps: { type: "array", items: { type: "string" }, description: "4–6 next steps." },
   },
-  required: ["executiveSummary","scores","market","customer","competitors","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
+  required: ["executiveSummary","scores","market","customer","competitors","research","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
   additionalProperties: false,
 };
 
