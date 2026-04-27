@@ -2,8 +2,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, DollarSign, Target, AlertTriangle, Clock, Users, Globe2, Activity, PieChart as PieChartIcon, Route } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  DollarSign,
+  Globe2,
+  PieChart as PieChartIcon,
+  Route,
+  Target,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { FMARTRadar } from "./FMARTRadar";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
@@ -19,13 +46,18 @@ const CHART_COLORS = [
 ];
 
 const verdictTone = (v: string) =>
-  v === "PROCEED" ? "bg-emerald-500 text-white"
-  : v === "PROCEED WITH CAUTION" ? "bg-amber-500 text-white"
-  : v === "REVISE" ? "bg-orange-500 text-white"
-  : "bg-rose-600 text-white";
+  v === "PROCEED" ? "bg-success text-success-foreground"
+  : v === "PROCEED WITH CAUTION" ? "bg-warning text-warning-foreground"
+  : v === "REVISE" ? "bg-warning text-warning-foreground"
+  : "bg-destructive text-destructive-foreground";
+
+const riskTone = (level: string) =>
+  level === "Low" ? "bg-success/10 text-success border-success/20"
+  : level === "Med" ? "bg-warning/10 text-warning border-warning/20"
+  : "bg-destructive/10 text-destructive border-destructive/20";
 
 const Kpi = ({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) => (
-  <Card>
+  <Card className="overflow-hidden">
     <CardContent className="p-5">
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -41,7 +73,7 @@ const Kpi = ({ icon: Icon, label, value, sub }: { icon: any; label: string; valu
   </Card>
 );
 
-const toNumber = (value: string) => {
+const toNumber = (value?: string) => {
   const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : 0;
 };
@@ -64,121 +96,335 @@ const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
   </Card>
 );
 
-export const InteractiveDashboard = ({
-  report, inputs,
-}: { report: FeasibilityReport; inputs: ConceptInputs }) => {
+export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityReport; inputs: ConceptInputs }) => {
   const cur = report.financials.currency;
+  const scoreData = [
+    { name: "Financial", score: report.scores.financial, finding: report.scores.financialFinding },
+    { name: "Market", score: report.scores.market, finding: report.scores.marketFinding },
+    { name: "Achievable", score: report.scores.achievability, finding: report.scores.achievabilityFinding },
+    { name: "Operational", score: report.scores.operational, finding: report.scores.operationalFinding },
+    { name: "Risk", score: report.scores.risk, finding: report.scores.riskFinding },
+    { name: "Timing", score: report.scores.timing, finding: report.scores.timingFinding },
+  ];
+  const riskData = report.risks.map((risk) => ({
+    name: risk.name,
+    exposure: levelScore(risk.probability) * levelScore(risk.impact),
+    probability: levelScore(risk.probability),
+    impact: levelScore(risk.impact),
+    level: risk.level,
+  }));
+  const fundingData = report.fundingMix.map((item) => ({ name: item.source, value: toNumber(item.share) || 1 }));
+  const scenarioData = report.financials.scenarios.map((item) => ({
+    scenario: item.scenario,
+    probability: toNumber(item.probability),
+    revenue: toNumber(item.annualRevenue),
+    breakEven: toNumber(item.breakEven),
+  }));
+  const opExData = report.financials.opEx.map((item) => ({ name: item.category, monthly: item.monthly, annual: item.annual }));
+  const marketShareData = [
+    { name: "TAM", value: toNumber(report.market.tamValue) || 100 },
+    { name: "SAM", value: toNumber(report.market.samValue) || 35 },
+    { name: "SOM", value: toNumber(report.market.somValue) || 8 },
+  ];
+  const research = report.research;
+  const researchCount = research?.citations?.length ?? 0;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-2xl font-bold text-foreground">{inputs.projectName} — Live Dashboard</h2>
-          <p className="text-sm text-muted-foreground">Interactive overview · scroll down for the printable report.</p>
+          <p className="text-sm text-muted-foreground">Interactive feasibility command center with market research, charts, risk signals, and financial figures.</p>
         </div>
         <Badge className={`px-3 py-1.5 text-sm font-bold ${verdictTone(report.scores.verdict)}`}>
           {report.scores.verdict}
         </Badge>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={Target}    label="Overall Score"  value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
-        <Kpi icon={DollarSign} label="Investment"     value={report.financials.investmentRange} sub={cur} />
-        <Kpi icon={Clock}     label="Break-Even"     value={report.financials.breakEvenSummary} />
-        <Kpi icon={TrendingUp} label="Market (TAM)"   value={report.market.tamValue} sub={`CAGR ${report.market.tamCagr}`} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Kpi icon={Target} label="Overall Score" value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
+        <Kpi icon={DollarSign} label="Investment" value={report.financials.investmentRange} sub={cur} />
+        <Kpi icon={Clock} label="Break-Even" value={report.financials.breakEvenSummary} />
+        <Kpi icon={TrendingUp} label="Market TAM" value={report.market.tamValue} sub={`CAGR ${report.market.tamCagr}`} />
+        <Kpi icon={Globe2} label="Research Signals" value={`${researchCount || "—"}`} sub={research?.confidence ? `${research.confidence} confidence` : "Free public sources"} />
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">FMART Score Radar</CardTitle></CardHeader>
-          <CardContent><FMARTRadar scores={report.scores} /></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">Market Growth — TAM vs SAM</CardTitle></CardHeader>
-          <CardContent><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></CardContent>
-        </Card>
-      </div>
+      <Tabs defaultValue="score" className="space-y-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-3 xl:grid-cols-6">
+          <TabsTrigger value="score" className="gap-2"><Activity className="h-4 w-4" /> Score</TabsTrigger>
+          <TabsTrigger value="market" className="gap-2"><TrendingUp className="h-4 w-4" /> Market</TabsTrigger>
+          <TabsTrigger value="financial" className="gap-2"><PieChartIcon className="h-4 w-4" /> Financial</TabsTrigger>
+          <TabsTrigger value="risk" className="gap-2"><AlertTriangle className="h-4 w-4" /> Risk</TabsTrigger>
+          <TabsTrigger value="research" className="gap-2"><Globe2 className="h-4 w-4" /> Research</TabsTrigger>
+          <TabsTrigger value="roadmap" className="gap-2"><Route className="h-4 w-4" /> Roadmap</TabsTrigger>
+        </TabsList>
 
-      {/* Score bars */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Dimension breakdown</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            ["Financial",     report.scores.financial,     report.scores.financialFinding],
-            ["Market",        report.scores.market,        report.scores.marketFinding],
-            ["Achievability", report.scores.achievability, report.scores.achievabilityFinding],
-            ["Operational",   report.scores.operational,   report.scores.operationalFinding],
-            ["Risk (inv.)",   report.scores.risk,          report.scores.riskFinding],
-            ["Timing",        report.scores.timing,        report.scores.timingFinding],
-          ].map(([label, score, finding]) => (
-            <div key={label as string}>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">{label as string}</span>
-                <span className="font-semibold text-primary">{(score as number).toFixed(1)} / 10</span>
-              </div>
-              <Progress value={(score as number) * 10} className="h-2" />
-              <p className="mt-1 text-xs text-muted-foreground">{finding as string}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* CapEx + Risks */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Startup costs (CapEx) — {cur}</CardTitle></CardHeader>
-          <CardContent><CapExBarChart data={report.financials.capEx} currency={cur} /></CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Top risks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {report.risks.slice(0, 6).map((r, i) => (
-                <div key={i} className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-foreground">{r.name}</div>
-                    <p className="line-clamp-2 text-xs text-muted-foreground">{r.mitigation}</p>
+        <TabsContent value="score" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.2fr]">
+            <Card>
+              <CardHeader><CardTitle className="text-base">FMART Radar</CardTitle></CardHeader>
+              <CardContent><FMARTRadar scores={report.scores} /></CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Score Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <YAxis domain={[0, 10]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Bar dataKey="score" radius={[6, 6, 0, 0]}>
+                        {scoreData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Dimension Findings</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {scoreData.map((item) => (
+                <div key={item.name} className="rounded-md border border-border bg-card p-3">
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground">{item.name}</span>
+                    <span className="font-semibold text-primary">{item.score.toFixed(1)} / 10</span>
                   </div>
-                  <Badge
-                    className={
-                      r.level === "Low" ? "bg-emerald-100 text-emerald-800"
-                      : r.level === "Med" ? "bg-amber-100 text-amber-800"
-                      : "bg-rose-100 text-rose-800"
-                    }
-                  >
-                    {r.level}
-                  </Badge>
+                  <Progress value={item.score * 10} className="h-2" />
+                  <p className="mt-2 text-xs text-muted-foreground">{item.finding}</p>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* Recommendations */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-4 w-4 text-primary" /> Strategic recommendations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 text-sm text-foreground">
-            {report.recommendations.map((r, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                <span>{r}</span>
-              </li>
+        <TabsContent value="market" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Market Growth — TAM vs SAM</CardTitle></CardHeader>
+              <CardContent><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">TAM / SAM / SOM Funnel</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={marketShareData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.22} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {[
+              ["TAM", report.market.tamValue, report.market.tamLabel, report.market.tamCagr],
+              ["SAM", report.market.samValue, report.market.samLabel, report.market.samCagr],
+              ["SOM", report.market.somValue, report.market.somLabel, report.market.somCagr],
+            ].map(([label, value, desc, cagr]) => (
+              <Card key={label}>
+                <CardContent className="p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+                  <div className="mt-1 font-display text-2xl font-bold text-primary">{value}</div>
+                  <p className="mt-2 text-sm text-foreground">{desc}</p>
+                  <Badge variant="outline" className="mt-3">CAGR {cagr}</Badge>
+                </CardContent>
+              </Card>
             ))}
-          </ul>
-        </CardContent>
-      </Card>
+          </div>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Competitor Positioning</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {report.competitors.map((competitor) => (
+                <div key={competitor.name} className="rounded-md border border-border p-3">
+                  <div className="font-semibold text-foreground">{competitor.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{competitor.model}</div>
+                  <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
+                    <p><span className="font-semibold text-destructive">Weakness:</span> {competitor.weakness}</p>
+                    <p><span className="font-semibold text-primary">Your edge:</span> {competitor.edge}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="financial" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Startup Costs (CapEx) — {cur}</CardTitle></CardHeader>
+              <CardContent><CapExBarChart data={report.financials.capEx} currency={cur} /></CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Operating Cost Run Rate</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={opExData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
+                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Legend />
+                      <Bar dataKey="monthly" name="Monthly" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      <Line type="monotone" dataKey="annual" name="Annual" stroke="hsl(var(--success))" strokeWidth={2.5} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Revenue Scenarios</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={scenarioData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="scenario" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <YAxis yAxisId="left" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Legend />
+                      <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      <Line yAxisId="right" type="monotone" dataKey="probability" name="Probability %" stroke="hsl(var(--warning))" strokeWidth={2.5} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Funding Mix</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={fundingData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+                        {fundingData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="risk" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Risk Exposure Ranking</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={riskData} layout="vertical" margin={{ top: 8, right: 24, left: 120, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" domain={[0, 9]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fill: "hsl(var(--foreground))", fontSize: 10 }} width={120} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                      <Bar dataKey="exposure" radius={[0, 6, 6, 0]}>
+                        {riskData.map((item, i) => <Cell key={i} fill={item.level === "High" ? "hsl(var(--destructive))" : item.level === "Med" ? "hsl(var(--warning))" : "hsl(var(--success))"} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Top Risk Controls</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {report.risks.slice(0, 6).map((risk, i) => (
+                  <div key={i} className="rounded-md border border-border p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-semibold text-foreground">{risk.name}</div>
+                      <Badge variant="outline" className={riskTone(risk.level)}>{risk.level}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{risk.mitigation}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="research" className="space-y-4">
+          {research ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                    <Globe2 className="h-4 w-4 text-primary" /> Free-source market research
+                    <Badge variant="outline">{research.confidence} confidence</Badge>
+                    <Badge variant="outline">{research.sentiment}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed text-foreground">{research.overview}</p>
+                </CardContent>
+              </Card>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <MiniInsight title="Key market signals" items={research.keySignals} />
+                <MiniInsight title="Customer pain points" items={research.painPoints} />
+                <MiniInsight title="Reddit/community signals" items={research.redditSignals} />
+                <MiniInsight title="Open web signals" items={research.webSignals} />
+              </div>
+              <Card>
+                <CardHeader><CardTitle className="text-base">Research Citations</CardTitle></CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-2">
+                  {research.citations.slice(0, 8).map((citation) => (
+                    <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{citation.source}</div>
+                      <div className="mt-1 line-clamp-2 font-medium text-foreground">{citation.title}</div>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{citation.takeaway}</p>
+                    </a>
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">Run a new analysis to include free public Reddit/web research signals.</CardContent></Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="roadmap" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4 text-primary" /> Strategic Recommendations</CardTitle></CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-foreground">
+                  {report.recommendations.map((item, i) => (
+                    <li key={i} className="flex gap-2"><span className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span><span>{item}</span></li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Route className="h-4 w-4 text-primary" /> Execution Roadmap</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {report.nextSteps.map((step, i) => (
+                    <div key={i} className="grid grid-cols-[2rem_1fr] gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</div>
+                      <div className="rounded-md border border-border p-3 text-sm text-foreground">{step}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
