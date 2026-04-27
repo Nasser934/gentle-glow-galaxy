@@ -17,8 +17,8 @@ const ReportPage = ({
 }: { pageNum: number; total: number; projectName: string; children: React.ReactNode }) => (
   <div
     data-pdf-page
-    className="report-page mx-auto bg-white text-[#0f172a] shadow-xl"
-    style={{ width: "794px", minHeight: "1123px", padding: "48px 56px", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }}
+    className="report-page relative mx-auto bg-white text-[#0f172a] shadow-xl"
+    style={{ width: "794px", minHeight: "1123px", padding: "48px 56px 72px", boxSizing: "border-box", fontFamily: "Inter, sans-serif" }}
   >
     <div className="mb-6 flex items-center justify-between border-b-2 border-[#1f4ed8] pb-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#1f4ed8]">
