@@ -85,11 +85,12 @@ const Results = () => {
   const handleDownload = async () => {
     if (!pdfRootRef.current) return;
     setDownloading(true);
+    const toastId = toast.loading("Generating PDF file…");
     try {
-      await exportReportToPdf(pdfRootRef.current, `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}.pdf`);
-      toast.success("Report downloaded.");
+      const result = await exportReportToPdf(pdfRootRef.current, `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}.pdf`);
+      toast.success(`PDF download started: ${result.fileName}`, { id: toastId });
     } catch (e: any) {
-      toast.error(e?.message || "PDF export failed.");
+      toast.error(e?.message || "PDF export failed.", { id: toastId });
     } finally {
       setDownloading(false);
     }
