@@ -6,6 +6,82 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
+
+async function safeJson(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "ConceptAIResearchBot/1.0" },
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchPublicResearch(inputs: Record<string, string>) {
+  const query = [inputs.projectName, inputs.industry, inputs.location].filter(Boolean).join(" ").slice(0, 160);
+  const encoded = encodeURIComponent(query);
+
+  const [reddit, hn, wiki, duck] = await Promise.all([
+    safeJson(`https://www.reddit.com/search.json?q=${encoded}&sort=relevance&limit=8`),
+    safeJson(`https://hn.algolia.com/api/v1/search?query=${encoded}&tags=story&hitsPerPage=6`),
+    safeJson(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encoded}&limit=5&format=json&origin=*`),
+    safeJson(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`),
+  ]);
+
+  const citations: Array<{ title: string; url: string; source: string; takeaway: string }> = [];
+  const redditSignals: string[] = [];
+  const webSignals: string[] = [];
+
+  const redditPosts = reddit?.data?.children ?? [];
+  for (const child of redditPosts.slice(0, 8)) {
+    const post = child?.data;
+    const title = textFrom(post?.title).trim();
+    if (!title) continue;
+    const score = Number(post?.score ?? 0);
+    const comments = Number(post?.num_comments ?? 0);
+    const subreddit = textFrom(post?.subreddit, "reddit");
+    redditSignals.push(`${title} — r/${subreddit}, ${score} upvotes, ${comments} comments`);
+    citations.push({
+      title,
+      source: `Reddit · r/${subreddit}`,
+      url: `https://www.reddit.com${textFrom(post?.permalink, "/search")}`,
+      takeaway: `Community signal with ${comments} comments and ${score} upvotes.`,
+    });
+  }
+
+  for (const hit of (hn?.hits ?? []).slice(0, 6)) {
+    const title = textFrom(hit?.title || hit?.story_title).trim();
+    if (!title) continue;
+    const points = Number(hit?.points ?? 0);
+    const comments = Number(hit?.num_comments ?? 0);
+    webSignals.push(`${title} — Hacker News, ${points} points, ${comments} comments`);
+    citations.push({ title, source: "Hacker News", url: textFrom(hit?.url || `https://news.ycombinator.com/item?id=${hit?.objectID}`), takeaway: `Tech-market discussion signal with ${comments} comments.` });
+  }
+
+  const wikiTitles = Array.isArray(wiki?.[1]) ? wiki[1] : [];
+  const wikiUrls = Array.isArray(wiki?.[3]) ? wiki[3] : [];
+  wikiTitles.slice(0, 5).forEach((title: string, i: number) => {
+    webSignals.push(`${title} — Wikipedia/reference coverage`);
+    citations.push({ title, source: "Wikipedia", url: textFrom(wikiUrls[i], "https://www.wikipedia.org"), takeaway: "Reference coverage related to market/category context." });
+  });
+
+  const abstract = textFrom(duck?.AbstractText).trim();
+  if (abstract) webSignals.unshift(abstract.slice(0, 260));
+
+  return {
+    query,
+    generatedAt: new Date().toISOString(),
+    redditSignals: redditSignals.slice(0, 8),
+    webSignals: webSignals.slice(0, 10),
+    citations: citations.slice(0, 12),
+    coverage: citations.length >= 6 ? "Medium" : citations.length >= 2 ? "Low" : "Limited",
+  };
+}
+
 const reportSchema = {
   type: "object",
   properties: {
