@@ -94,6 +94,25 @@ export interface Competitor {
   edge: string;
 }
 
+export interface ResearchCitation {
+  title: string;
+  url: string;
+  source: string;
+  takeaway: string;
+}
+
+export interface MarketResearch {
+  overview: string;
+  confidence: "High" | "Medium" | "Low";
+  sentiment: "Positive" | "Mixed" | "Negative" | "Insufficient data";
+  keySignals: string[];
+  painPoints: string[];
+  competitorMentions: string[];
+  redditSignals: string[];
+  webSignals: string[];
+  citations: ResearchCitation[];
+}
+
 // ============================================================
 // Financials
 // ============================================================
@@ -166,6 +185,7 @@ export interface FeasibilityReport {
   market: MarketSizing;
   customer: CustomerProfile;
   competitors: Competitor[];
+  research?: MarketResearch;
 
   financials: Financials;
 
