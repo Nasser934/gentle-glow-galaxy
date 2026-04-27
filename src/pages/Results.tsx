@@ -129,7 +129,7 @@ const Results = () => {
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
           <div>
             <h3 className="font-display text-xl font-bold text-foreground">Printable Report</h3>
-            <p className="text-sm text-muted-foreground">7-page A4 layout — exported as the PDF below.</p>
+            <p className="text-sm text-muted-foreground">8-page A4 layout — exported as the PDF below.</p>
           </div>
           <Button onClick={handleDownload} disabled={downloading} className="gap-2">
             {downloading
