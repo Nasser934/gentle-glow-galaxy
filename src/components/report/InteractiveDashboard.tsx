@@ -1,11 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, DollarSign, Target, AlertTriangle, Clock, Users } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TrendingUp, DollarSign, Target, AlertTriangle, Clock, Users, Globe2, Activity, PieChart as PieChartIcon, Route } from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FMARTRadar } from "./FMARTRadar";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+
+const CHART_COLORS = [
+  "hsl(var(--primary))",
+  "hsl(var(--success))",
+  "hsl(var(--warning))",
+  "hsl(var(--destructive))",
+  "hsl(var(--accent-foreground))",
+  "hsl(var(--muted-foreground))",
+];
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-emerald-500 text-white"
@@ -26,6 +37,29 @@ const Kpi = ({ icon: Icon, label, value, sub }: { icon: any; label: string; valu
           {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}
         </div>
       </div>
+    </CardContent>
+  </Card>
+);
+
+const toNumber = (value: string) => {
+  const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+};
+
+const levelScore = (level: string) => level === "High" ? 3 : level === "Med" ? 2 : 1;
+
+const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
+  <Card>
+    <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+    <CardContent>
+      <ul className="space-y-2 text-sm text-foreground">
+        {items.slice(0, 5).map((item, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </CardContent>
   </Card>
 );
