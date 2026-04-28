@@ -273,3 +273,26 @@ export const TECHNOLOGY_READINESS = [
   "Experimental / R&D Phase",
   "Unknown / Not Yet Assessed",
 ] as const;
+
+export const BUSINESS_MODELS = [
+  "SaaS / Subscription Software",
+  "Marketplace / Platform",
+  "Hardware / Devices",
+  "Professional Services",
+  "Consumer Product (D2C)",
+  "Wholesale / Distribution",
+  "Infrastructure / Capex Project",
+  "Government Contract / PPP",
+  "Other",
+] as const;
+
+export const REVENUE_MODELS = [
+  "Recurring subscription",
+  "Transaction / commission fee",
+  "License / one-time sale",
+  "Usage-based metering",
+  "Advertising",
+  "Project / milestone billing",
+  "Tariff / regulated revenue",
+  "Mixed",
+] as const;
