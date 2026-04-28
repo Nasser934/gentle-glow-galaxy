@@ -81,7 +81,7 @@ Project context:
 ${ctx}
 
 User's partial draft (continue / complete naturally — keep their wording when present):
-"""${partial || "(empty)"}"""
+"""${safePartial || "(empty)"}"""
 
 Return ONLY the completed text for this field.`;
 
