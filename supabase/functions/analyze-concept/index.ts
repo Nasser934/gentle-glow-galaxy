@@ -469,9 +469,6 @@ Research context — coverage=${publicResearch.coverage}, grounded=${publicResea
 ${JSON.stringify(publicResearch, null, 2)}
 
 Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain when relevant.`;
-${JSON.stringify(publicResearch, null, 2)}
-
-Be specific, realistic, and consultant-grade.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
