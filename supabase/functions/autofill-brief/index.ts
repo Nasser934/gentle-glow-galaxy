@@ -78,6 +78,17 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
                   location: { type: "string", description: "City and/or country" },
                   description: { type: "string" },
                   strategicObjectives: { type: "string" },
+                  businessModel: { type: "string", enum: [
+                    "SaaS / Subscription Software","Marketplace / Platform","Hardware / Devices",
+                    "Professional Services","Consumer Product (D2C)","Wholesale / Distribution",
+                    "Infrastructure / Capex Project","Government Contract / PPP","Other"
+                  ]},
+                  revenueModel: { type: "string", enum: [
+                    "Recurring subscription","Transaction / commission fee","License / one-time sale",
+                    "Usage-based metering","Advertising","Project / milestone billing",
+                    "Tariff / regulated revenue","Mixed"
+                  ]},
+                  founderExperience: { type: "string", description: "1-2 sentences: years and domain experience." },
                   budgetRange: { type: "string", enum: ["< $50,000","$50,000 – $250,000","$250,000 – $1M","$1M – $5M","$5M – $25M","> $25M"] },
                   timeline: { type: "string", enum: ["< 3 months","3 – 6 months","6 – 12 months","1 – 2 years","2 – 5 years","> 5 years"] },
                   teamSize: { type: "string", enum: ["1 – 5","6 – 15","16 – 50","51 – 100","> 100"] },
@@ -88,11 +99,14 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
                   knownRisks: { type: "string" },
                   regulatoryConsiderations: { type: "string" },
                   technologyReadiness: { type: "string", enum: ["Proven / Mature","Established / Widely Used","Emerging / Early Adoption","Experimental / R&D Phase","Unknown / Not Yet Assessed"] },
+                  competitorUrls: { type: "string", description: "Empty string — user will fill manually." },
                 },
                 required: [
                   "projectName","industry","location","description","strategicObjectives",
+                  "businessModel","revenueModel","founderExperience",
                   "budgetRange","timeline","teamSize","dependencies","assumptions",
-                  "constraints","successFactors","knownRisks","regulatoryConsiderations","technologyReadiness"
+                  "constraints","successFactors","knownRisks","regulatoryConsiderations","technologyReadiness",
+                  "competitorUrls"
                 ],
                 additionalProperties: false,
               },
