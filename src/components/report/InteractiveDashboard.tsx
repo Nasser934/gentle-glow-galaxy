@@ -32,6 +32,7 @@ import {
   YAxis,
 } from "recharts";
 import { FMARTRadar } from "./FMARTRadar";
+import { MethodologyPanel } from "./MethodologyPanel";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -160,6 +161,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         </TabsList>
 
         <TabsContent value="score" className="space-y-4">
+          <MethodologyPanel scores={report.scores} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.2fr]">
             <Card>
               <CardHeader><CardTitle className="text-base">FMART Radar</CardTitle></CardHeader>
