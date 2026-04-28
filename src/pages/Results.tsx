@@ -150,11 +150,16 @@ const Results = () => {
             <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
               <ArrowLeft className="h-3.5 w-3.5" /> New
             </Button>
+            <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
+              {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Share"}
+            </Button>
             <Button size="sm" onClick={handleDownload} disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
               {downloading
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
                 : <><Download className="h-3.5 w-3.5" /> Download PDF</>}
             </Button>
+            <UserMenu />
           </div>
         </div>
       </nav>
