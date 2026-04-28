@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   ConceptInputs, INDUSTRIES, BUDGET_RANGES, TIMELINES, TEAM_SIZES, TECHNOLOGY_READINESS,
-  initialInputs,
+  BUSINESS_MODELS, REVENUE_MODELS, initialInputs,
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -21,7 +21,7 @@ const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constrain
 type EssayField =
   | "description" | "strategicObjectives" | "dependencies"
   | "assumptions" | "constraints" | "successFactors"
-  | "knownRisks" | "regulatoryConsiderations";
+  | "knownRisks" | "regulatoryConsiderations" | "founderExperience";
 
 const Analyze = () => {
   const navigate = useNavigate();
@@ -210,6 +210,30 @@ const Analyze = () => {
                 <div className="space-y-2">
                   <EssayLabel field="strategicObjectives">Strategic Objectives</EssayLabel>
                   <Textarea value={inputs.strategicObjectives} onChange={(e) => set("strategicObjectives", e.target.value)} placeholder="Key strategic objectives this project aims to achieve…" rows={3} maxLength={1500} />
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Business Model</Label>
+                    <Select value={inputs.businessModel} onValueChange={(v) => set("businessModel", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
+                      <SelectContent>{BUSINESS_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Revenue Model</Label>
+                    <Select value={inputs.revenueModel} onValueChange={(v) => set("revenueModel", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select revenue model" /></SelectTrigger>
+                      <SelectContent>{REVENUE_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <EssayLabel field="founderExperience">Founder / Team Experience</EssayLabel>
+                  <Textarea value={inputs.founderExperience} onChange={(e) => set("founderExperience", e.target.value)} placeholder="Years of experience, prior exits, domain expertise…" rows={2} maxLength={1000} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Competitor URLs <span className="text-xs text-muted-foreground">(optional · one per line)</span></Label>
+                  <Textarea value={inputs.competitorUrls} onChange={(e) => set("competitorUrls", e.target.value)} placeholder={"https://competitor1.com\nhttps://competitor2.com"} rows={2} maxLength={800} />
                 </div>
               </>
             )}
