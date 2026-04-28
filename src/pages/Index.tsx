@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 
 const features = [
   {
@@ -76,6 +77,7 @@ const Index = () => {
             >
               Start analysis
             </Button>
+            <UserMenu />
           </div>
         </div>
       </nav>

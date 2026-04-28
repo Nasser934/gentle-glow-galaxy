@@ -1,8 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Download, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, BarChart3, Download, Loader2, Share2, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { FMARTRadar } from "@/components/report/FMARTRadar";
@@ -10,6 +11,7 @@ import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
 import { exportReportToPdf } from "@/lib/exportPdf";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
+import { saveReport } from "@/lib/reports";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
@@ -67,9 +69,28 @@ const Results = () => {
   const navigate = useNavigate();
   const pdfRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [shareSlug, setShareSlug] = useState<string | null>(null);
+  const [savingShare, setSavingShare] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const report = location.state?.report as FeasibilityReport | undefined;
   const inputs = location.state?.inputs as ConceptInputs | undefined;
+  const existingSlug = location.state?.slug as string | undefined;
+
+  useEffect(() => {
+    if (existingSlug) setShareSlug(existingSlug);
+  }, [existingSlug]);
+
+  // Auto-save once on first load
+  useEffect(() => {
+    if (!report || !inputs || existingSlug || shareSlug) return;
+    let cancelled = false;
+    saveReport(inputs, report)
+      .then((d) => { if (!cancelled) setShareSlug(d.slug); })
+      .catch((e) => console.warn("auto-save failed", e));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!report || !inputs) {
     return (
@@ -97,6 +118,19 @@ const Results = () => {
     }
   };
 
+  const handleShare = async () => {
+    let slug = shareSlug;
+    if (!slug) {
+      setSavingShare(true);
+      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); }
+      catch (e: any) { toast.error(e.message); setSavingShare(false); return; }
+      setSavingShare(false);
+    }
+    const url = `${window.location.origin}/r/${slug}`;
+    try { await navigator.clipboard.writeText(url); setCopied(true); toast.success("Share link copied"); setTimeout(() => setCopied(false), 2000); }
+    catch { toast.info(url); }
+  };
+
   const totalPages = 8;
   const cur = report.financials.currency;
 
@@ -116,11 +150,16 @@ const Results = () => {
             <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
               <ArrowLeft className="h-3.5 w-3.5" /> New
             </Button>
+            <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
+              {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Share"}
+            </Button>
             <Button size="sm" onClick={handleDownload} disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
               {downloading
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
                 : <><Download className="h-3.5 w-3.5" /> Download PDF</>}
             </Button>
+            <UserMenu />
           </div>
         </div>
       </nav>
