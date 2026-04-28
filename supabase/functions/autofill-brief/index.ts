@@ -6,17 +6,38 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MAX_BRIEF_LEN = 1500;
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 60_000 * 10;
+const ipHits = new Map<string, number[]>();
+function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (arr.length >= RATE_LIMIT_MAX) return { ok: false, retryAfter: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - arr[0])) / 1000) };
+  arr.push(now); ipHits.set(ip, arr);
+  return { ok: true };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { brief } = await req.json();
-    if (!brief || typeof brief !== "string" || brief.trim().length < 10) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rl = rateLimit(ip);
+    if (!rl.ok) {
+      return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.retryAfter ?? 60) },
+      });
+    }
+
+    const { brief: rawBrief } = await req.json();
+    if (!rawBrief || typeof rawBrief !== "string" || rawBrief.trim().length < 10) {
       return new Response(JSON.stringify({ error: "Brief must be at least 10 characters." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const brief = rawBrief.slice(0, MAX_BRIEF_LEN);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
