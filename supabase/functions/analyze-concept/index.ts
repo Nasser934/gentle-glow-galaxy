@@ -229,9 +229,40 @@ const reportSchema = {
         riskFinding:          { type: "string" },
         timingFinding:        { type: "string" },
         operationalFinding:   { type: "string" },
+        weights: {
+          type: "object",
+          description: "FMART dimension weights as decimals 0-1, summing to 1.0. Adapt to industry: capex-heavy projects weight Financial+Risk higher; tech startups weight Market+Timing higher.",
+          properties: {
+            financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
+            risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
+          },
+          required: ["financial","market","achievability","risk","timing","operational"],
+          additionalProperties: false,
+        },
+        confidence: {
+          type: "object",
+          description: "Per-dimension analyst confidence 0-100 (% certain). Lower this where research evidence is thin.",
+          properties: {
+            financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
+            risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
+          },
+          required: ["financial","market","achievability","risk","timing","operational"],
+          additionalProperties: false,
+        },
+        rationale: {
+          type: "object",
+          description: "1–2 sentence rationale per dimension explaining the score. Reference evidence and assumptions.",
+          properties: {
+            financial: { type: "string" }, market: { type: "string" }, achievability: { type: "string" },
+            risk: { type: "string" }, timing: { type: "string" }, operational: { type: "string" },
+          },
+          required: ["financial","market","achievability","risk","timing","operational"],
+          additionalProperties: false,
+        },
       },
       required: ["financial","market","achievability","risk","timing","operational","overall","verdict",
-        "financialFinding","marketFinding","achievabilityFinding","riskFinding","timingFinding","operationalFinding"],
+        "financialFinding","marketFinding","achievabilityFinding","riskFinding","timingFinding","operationalFinding",
+        "weights","confidence","rationale"],
       additionalProperties: false,
     },
     market: {
