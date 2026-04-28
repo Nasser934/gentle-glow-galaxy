@@ -430,14 +430,18 @@ serve(async (req) => {
 
     const publicResearch = await fetchPublicResearch(inputs);
 
-    const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing).
+    const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing · Operational).
 You MUST call the "provide_report" tool. All numbers must be realistic given the budget, industry, geography, and timeline.
 - Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
 - Pick realistic TAM/SAM/SOM with credible CAGR.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
 - Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
 - Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.
-- Use the public research context below as directional evidence. Do not overstate it; if coverage is limited, say so in research.confidence and qualify insights.`;
+- The 'overall' score MUST equal the weighted sum: sum(scores[d] * weights[d]) for the 6 dimensions; weights MUST sum to 1.0.
+- Set per-dimension confidence honestly (0–100). If grounded web research is missing, lower Market/Timing confidence accordingly.
+- Provide a concise rationale per dimension referencing the evidence and assumptions used.
+- Use the research context below as directional evidence. Do not overstate; if coverage is "Limited" or "Low", say so in research.confidence and qualify insights.
+- When competitor scrapes are present, reference them by name in the competitors array and competitorMentions.`;
 
     const userPrompt = `Generate the full feasibility report for this concept:
 
@@ -446,6 +450,9 @@ You MUST call the "provide_report" tool. All numbers must be realistic given the
 **Location:** ${inputs.location || "Not specified"}
 **Description:** ${inputs.description}
 **Strategic Objectives:** ${inputs.strategicObjectives || "Not specified"}
+**Business Model:** ${inputs.businessModel || "Not specified"}
+**Revenue Model:** ${inputs.revenueModel || "Not specified"}
+**Founder / Team Experience:** ${inputs.founderExperience || "Not specified"}
 **Budget Range:** ${inputs.budgetRange || "Not specified"}
 **Timeline:** ${inputs.timeline || "Not specified"}
 **Team Size:** ${inputs.teamSize || "Not specified"}
@@ -456,8 +463,12 @@ You MUST call the "provide_report" tool. All numbers must be realistic given the
 **Known Risks:** ${inputs.knownRisks || "None"}
 **Regulatory:** ${inputs.regulatoryConsiderations || "None"}
 **Technology Readiness:** ${inputs.technologyReadiness || "Not specified"}
+**Competitor URLs (user-supplied):** ${inputs.competitorUrls || "None"}
 
-Public research context from free sources (Reddit public search, Hacker News, Wikipedia/open web snippets):
+Research context — coverage=${publicResearch.coverage}, grounded=${publicResearch.grounded}:
+${JSON.stringify(publicResearch, null, 2)}
+
+Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain when relevant.`;
 ${JSON.stringify(publicResearch, null, 2)}
 
 Be specific, realistic, and consultant-grade.`;
