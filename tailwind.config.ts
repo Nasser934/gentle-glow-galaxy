@@ -14,8 +14,20 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        display: ["Space Grotesk", "system-ui", "sans-serif"],
+        sans: ['"Inter var"', "Inter", "SF Pro Display", "system-ui", "sans-serif"],
+        display: ['"Inter var"', "Inter", "SF Pro Display", "system-ui", "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "SF Mono", "Menlo", "monospace"],
+      },
+      fontWeight: {
+        normal: "400",
+        medium: "510",
+        semibold: "590",
+      },
+      letterSpacing: {
+        "display-xl": "-0.099em",
+        "display-lg": "-0.044em",
+        "display": "-0.022em",
+        "tighter": "-0.011em",
       },
       colors: {
         border: "hsl(var(--border))",

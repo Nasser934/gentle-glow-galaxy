@@ -1,50 +1,57 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://rsms.me/inter/inter.css');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================
+   Linear-inspired design system (open-design / linear-app)
+   Dark-mode-native. Whisper-thin borders. Indigo-violet accent.
+   =========================================================== */
+
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 220 30% 10%;
+    /* Light mode — Linear's quieter side */
+    --background: 210 11% 97%;       /* #f7f8f8 */
+    --foreground: 220 13% 9%;        /* near-black */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 30% 10%;
+    --card-foreground: 220 13% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 30% 10%;
+    --popover-foreground: 220 13% 9%;
 
-    --primary: 217 71% 45%;
+    --primary: 234 56% 60%;          /* #5e6ad2 brand indigo */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 20% 94%;
-    --secondary-foreground: 220 30% 15%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 13% 15%;
 
-    --muted: 220 15% 92%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 220 13% 94%;
+    --muted-foreground: 220 9% 46%;
 
-    --accent: 217 71% 95%;
-    --accent-foreground: 217 71% 30%;
+    --accent: 234 100% 97%;
+    --accent-foreground: 234 56% 50%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 60% 42%;
+    --success: 138 60% 41%;          /* #27a644 */
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 217 71% 45%;
+    --border: 218 14% 89%;
+    --input: 218 14% 89%;
+    --ring: 234 56% 60%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;                /* 8px panels, 6px buttons via -2px */
 
-    --hero-gradient: linear-gradient(135deg, hsl(217 71% 45%), hsl(230 65% 35%));
-    --card-shadow: 0 4px 24px -4px hsl(217 71% 45% / 0.08);
-    --card-shadow-hover: 0 8px 32px -4px hsl(217 71% 45% / 0.15);
+    --hero-gradient: radial-gradient(circle at 50% 0%, hsl(234 56% 60% / 0.18), transparent 60%);
+    --card-shadow: 0 1px 0 hsl(220 13% 0% / 0.04);
+    --card-shadow-hover: 0 4px 12px hsl(220 13% 0% / 0.08);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -53,56 +60,57 @@
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217 71% 45%;
+    --sidebar-ring: 234 56% 60%;
   }
 
   .dark {
-    --background: 222 30% 8%;
-    --foreground: 210 40% 95%;
+    /* Dark mode — Linear's native medium */
+    --background: 220 7% 4%;         /* #08090a marketing black */
+    --foreground: 210 11% 97%;       /* #f7f8f8 — never pure white */
 
-    --card: 222 25% 12%;
-    --card-foreground: 210 40% 95%;
+    --card: 220 7% 7%;               /* #0f1011 panel */
+    --card-foreground: 210 11% 97%;
 
-    --popover: 222 25% 12%;
-    --popover-foreground: 210 40% 95%;
+    --popover: 220 6% 10%;           /* #191a1b elevated */
+    --popover-foreground: 210 11% 97%;
 
-    --primary: 217 71% 55%;
+    --primary: 235 100% 72%;         /* #7170ff accent violet */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 20% 18%;
-    --secondary-foreground: 210 40% 90%;
+    --secondary: 220 6% 16%;         /* #28282c */
+    --secondary-foreground: 218 17% 85%;
 
-    --muted: 220 15% 18%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 220 6% 10%;
+    --muted-foreground: 218 7% 57%;  /* #8a8f98 tertiary */
 
-    --accent: 217 50% 20%;
-    --accent-foreground: 217 71% 75%;
+    --accent: 234 30% 18%;
+    --accent-foreground: 235 100% 78%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 152 55% 38%;
+    --success: 138 60% 41%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 85% 45%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 85% 55%;
+    --warning-foreground: 220 13% 9%;
 
-    --border: 220 15% 22%;
-    --input: 220 15% 22%;
-    --ring: 217 71% 55%;
+    --border: 220 8% 16%;            /* #23252a */
+    --input: 220 8% 16%;
+    --ring: 235 100% 72%;
 
-    --hero-gradient: linear-gradient(135deg, hsl(217 71% 55%), hsl(230 65% 40%));
-    --card-shadow: 0 4px 24px -4px hsl(0 0% 0% / 0.3);
-    --card-shadow-hover: 0 8px 32px -4px hsl(0 0% 0% / 0.5);
+    --hero-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, hsl(234 56% 50% / 0.25), transparent 70%);
+    --card-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.04);
+    --card-shadow-hover: 0 4px 16px hsl(0 0% 0% / 0.4), inset 0 0 0 1px hsl(0 0% 100% / 0.08);
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 217 71% 55%;
+    --sidebar-background: 220 7% 6%;
+    --sidebar-foreground: 218 17% 85%;
+    --sidebar-primary: 235 100% 72%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217 71% 55%;
+    --sidebar-accent: 220 6% 12%;
+    --sidebar-accent-foreground: 210 11% 97%;
+    --sidebar-border: 220 8% 14%;
+    --sidebar-ring: 235 100% 72%;
   }
 }
 
@@ -111,45 +119,75 @@
     @apply border-border;
   }
 
+  html {
+    font-feature-settings: "cv01", "ss03", "cv11";
+  }
+
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter var', 'Inter', system-ui, -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+    font-feature-settings: "cv01", "ss03", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+    font-feature-settings: "cv01", "ss03", "cv11";
+    font-weight: 510;
   }
+
+  /* Linear's compressed display tracking */
+  .text-display-xl { font-size: 4.5rem; line-height: 1; letter-spacing: -0.099em; font-weight: 510; }
+  .text-display-lg { font-size: 3rem; line-height: 1.05; letter-spacing: -0.044em; font-weight: 510; }
+  .text-display    { font-size: 2rem; line-height: 1.13; letter-spacing: -0.022em; font-weight: 510; }
 }
 
 @layer utilities {
   .hero-gradient {
     background: var(--hero-gradient);
   }
+  .card-shadow { box-shadow: var(--card-shadow); }
+  .card-shadow-hover { box-shadow: var(--card-shadow-hover); }
 
-  .card-shadow {
-    box-shadow: var(--card-shadow);
+  /* Linear's signature semi-transparent borders on dark surfaces */
+  .border-hairline {
+    border: 1px solid hsl(0 0% 100% / 0.06);
+  }
+  .dark .border-hairline {
+    border: 1px solid hsl(0 0% 100% / 0.06);
   }
 
-  .card-shadow-hover {
-    box-shadow: var(--card-shadow-hover);
+  .surface-1 {
+    background: hsl(var(--card));
+    box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.04);
+  }
+  .dark .surface-1 {
+    background: hsl(220 7% 7%);
+    box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.06);
   }
 
-  .score-gauge {
-    stroke-linecap: round;
-    transition: stroke-dashoffset 1s ease-in-out;
+  .surface-2 {
+    background: hsl(var(--popover));
+    box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.05);
+  }
+
+  .text-balance { text-wrap: balance; }
+
+  /* Subtle grain noise like Linear */
+  .grain::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
   }
 }
 
 @media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  .print-only {
-    display: block !important;
-  }
-
-  body {
-    background: white !important;
-    color: black !important;
-  }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: white !important; color: black !important; }
 }
