@@ -44,33 +44,109 @@ function sanitizeInputs(raw: Record<string, unknown>): { ok: true; inputs: Recor
   return { ok: true, inputs: cleaned };
 }
 
-async function safeJson(url: string) {
+async function safeJson(url: string, init?: RequestInit) {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "ConceptAIResearchBot/1.0" },
-      signal: AbortSignal.timeout(3000),
+      ...init,
+      headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     return await res.json();
-  } catch (_) {
-    return null;
-  }
+  } catch (_) { return null; }
+}
+
+async function safeText(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "ConceptAIResearchBot/1.0", "Accept": "text/html,application/xhtml+xml" },
+      signal: AbortSignal.timeout(4000),
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const txt = await res.text();
+    return txt.slice(0, 200_000);
+  } catch (_) { return null; }
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTitle(html: string) {
+  const m = html.match(/<title[^>]*>([^<]{3,200})<\/title>/i);
+  return m ? m[1].trim() : null;
+}
+
+async function tavilySearch(query: string) {
+  const key = Deno.env.get("TAVILY_API_KEY");
+  if (!key) return null;
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: key, query, search_depth: "basic",
+        max_results: 8, include_answer: true, include_raw_content: false,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) { console.warn("Tavily HTTP", res.status); return null; }
+    return await res.json();
+  } catch (e) { console.warn("Tavily err", e); return null; }
+}
+
+async function scrapeCompetitors(rawUrls: string) {
+  const urls = (rawUrls || "")
+    .split(/[\s,]+/).map((u) => u.trim()).filter(Boolean)
+    .filter((u) => /^https?:\/\//i.test(u)).slice(0, 4);
+  if (!urls.length) return [];
+  const out: Array<{ url: string; title: string | null; excerpt: string }> = [];
+  await Promise.all(urls.map(async (url) => {
+    const html = await safeText(url);
+    if (!html) return;
+    out.push({
+      url,
+      title: extractTitle(html),
+      excerpt: stripHtml(html).slice(0, 1200),
+    });
+  }));
+  return out;
 }
 
 async function fetchPublicResearch(inputs: Record<string, string>) {
   const query = [inputs.projectName, inputs.industry, inputs.location].filter(Boolean).join(" ").slice(0, 160);
+  const tavilyQuery = [inputs.projectName, inputs.industry, inputs.location, "market size competitors"].filter(Boolean).join(" ").slice(0, 200);
   const encoded = encodeURIComponent(query);
 
-  const [reddit, hn, wiki, duck] = await Promise.all([
+  const [reddit, hn, wiki, duck, tavily, competitors] = await Promise.all([
     safeJson(`https://www.reddit.com/search.json?q=${encoded}&sort=relevance&limit=8`),
     safeJson(`https://hn.algolia.com/api/v1/search?query=${encoded}&tags=story&hitsPerPage=6`),
     safeJson(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encoded}&limit=5&format=json&origin=*`),
     safeJson(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`),
+    tavilySearch(tavilyQuery),
+    scrapeCompetitors(inputs.competitorUrls || ""),
   ]);
 
   const citations: Array<{ title: string; url: string; source: string; takeaway: string }> = [];
   const redditSignals: string[] = [];
   const webSignals: string[] = [];
+
+  // Tavily — highest-value source
+  if (tavily?.answer) webSignals.unshift(`Tavily synthesis: ${String(tavily.answer).slice(0, 320)}`);
+  for (const r of (tavily?.results ?? []).slice(0, 6)) {
+    const title = textFrom(r?.title).trim();
+    const url = textFrom(r?.url);
+    if (!title || !url) continue;
+    const snippet = textFrom(r?.content).slice(0, 260);
+    webSignals.push(`${title} — ${snippet}`);
+    citations.push({ title, source: "Tavily web", url, takeaway: snippet || "Web search citation." });
+  }
 
   const redditPosts = reddit?.data?.children ?? [];
   for (const child of redditPosts.slice(0, 8)) {
@@ -82,8 +158,7 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
     const subreddit = textFrom(post?.subreddit, "reddit");
     redditSignals.push(`${title} — r/${subreddit}, ${score} upvotes, ${comments} comments`);
     citations.push({
-      title,
-      source: `Reddit · r/${subreddit}`,
+      title, source: `Reddit · r/${subreddit}`,
       url: `https://www.reddit.com${textFrom(post?.permalink, "/search")}`,
       takeaway: `Community signal with ${comments} comments and ${score} upvotes.`,
     });
@@ -108,13 +183,28 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
   const abstract = textFrom(duck?.AbstractText).trim();
   if (abstract) webSignals.unshift(abstract.slice(0, 260));
 
+  // Competitor scrapes — directly cited
+  for (const c of competitors) {
+    citations.push({
+      title: c.title || c.url,
+      source: "User-supplied competitor",
+      url: c.url,
+      takeaway: c.excerpt.slice(0, 240),
+    });
+    webSignals.push(`${c.title || c.url} — homepage excerpt: ${c.excerpt.slice(0, 220)}`);
+  }
+
+  const hasGroundedSearch = !!tavily;
   return {
-    query,
-    generatedAt: new Date().toISOString(),
+    query, generatedAt: new Date().toISOString(),
     redditSignals: redditSignals.slice(0, 8),
-    webSignals: webSignals.slice(0, 10),
-    citations: citations.slice(0, 12),
-    coverage: citations.length >= 6 ? "Medium" : citations.length >= 2 ? "Low" : "Limited",
+    webSignals: webSignals.slice(0, 14),
+    citations: citations.slice(0, 16),
+    competitorScrapes: competitors,
+    coverage: hasGroundedSearch && citations.length >= 6 ? "High"
+            : citations.length >= 6 ? "Medium"
+            : citations.length >= 2 ? "Low" : "Limited",
+    grounded: hasGroundedSearch,
   };
 }
 
