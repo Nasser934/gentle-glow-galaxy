@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, BarChart3, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -128,7 +129,7 @@ const Analyze = () => {
             </div>
             <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
           </button>
-          <ThemeToggle />
+          <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
         </div>
       </nav>
 
