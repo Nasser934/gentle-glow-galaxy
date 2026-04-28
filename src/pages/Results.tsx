@@ -102,22 +102,23 @@ const Results = () => {
   return (
     <div className="min-h-screen bg-[#eef2f7]">
       {/* Top toolbar */}
-      <nav className="sticky top-0 z-10 border-b border-border bg-card no-print">
-        <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg hero-gradient">
-              <BarChart3 className="h-4 w-4 text-primary-foreground" />
+      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl no-print">
+        <div className="container mx-auto flex h-14 items-center justify-between px-6">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="font-display text-lg font-bold">Concept AI</span>
+            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
           </button>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => navigate("/analyze")} className="gap-2">
-              <ArrowLeft className="h-4 w-4" /> New Analysis
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
+              <ArrowLeft className="h-3.5 w-3.5" /> New
             </Button>
-            <Button onClick={handleDownload} disabled={downloading} className="gap-2">
+            <Button size="sm" onClick={handleDownload} disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
               {downloading
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
-                : <><Download className="h-4 w-4" /> Download Report</>}
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                : <><Download className="h-3.5 w-3.5" /> Download PDF</>}
             </Button>
           </div>
         </div>
