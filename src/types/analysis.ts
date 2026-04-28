@@ -9,6 +9,10 @@ export interface ConceptInputs {
   location: string;
   description: string;
   strategicObjectives: string;
+  // Business model (Phase 2)
+  businessModel: string;        // e.g. SaaS, Marketplace, Hardware, Services
+  revenueModel: string;         // e.g. Subscription, Transaction fee, License
+  founderExperience: string;    // years/domain experience summary
   // Scope & Resources
   budgetRange: string;
   timeline: string;
@@ -22,6 +26,8 @@ export interface ConceptInputs {
   knownRisks: string;
   regulatoryConsiderations: string;
   technologyReadiness: string;
+  // Competitive intel (Phase 2 — comma/newline-separated URLs)
+  competitorUrls: string;
 }
 
 export const initialInputs: ConceptInputs = {
@@ -30,6 +36,9 @@ export const initialInputs: ConceptInputs = {
   location: "",
   description: "",
   strategicObjectives: "",
+  businessModel: "",
+  revenueModel: "",
+  founderExperience: "",
   budgetRange: "",
   timeline: "",
   teamSize: "",
@@ -40,6 +49,7 @@ export const initialInputs: ConceptInputs = {
   knownRisks: "",
   regulatoryConsiderations: "",
   technologyReadiness: "",
+  competitorUrls: "",
 };
 
 // ============================================================
@@ -60,6 +70,19 @@ export interface FMARTScores {
   riskFinding: string;
   timingFinding: string;
   operationalFinding: string;
+  // Phase 4 — methodology transparency
+  weights?: {
+    financial: number; market: number; achievability: number;
+    risk: number; timing: number; operational: number;
+  };
+  confidence?: {
+    financial: number; market: number; achievability: number;
+    risk: number; timing: number; operational: number;
+  };
+  rationale?: {
+    financial: string; market: string; achievability: string;
+    risk: string; timing: string; operational: string;
+  };
 }
 
 // ============================================================
@@ -249,4 +272,27 @@ export const TECHNOLOGY_READINESS = [
   "Emerging / Early Adoption",
   "Experimental / R&D Phase",
   "Unknown / Not Yet Assessed",
+] as const;
+
+export const BUSINESS_MODELS = [
+  "SaaS / Subscription Software",
+  "Marketplace / Platform",
+  "Hardware / Devices",
+  "Professional Services",
+  "Consumer Product (D2C)",
+  "Wholesale / Distribution",
+  "Infrastructure / Capex Project",
+  "Government Contract / PPP",
+  "Other",
+] as const;
+
+export const REVENUE_MODELS = [
+  "Recurring subscription",
+  "Transaction / commission fee",
+  "License / one-time sale",
+  "Usage-based metering",
+  "Advertising",
+  "Project / milestone billing",
+  "Tariff / regulated revenue",
+  "Mixed",
 ] as const;
