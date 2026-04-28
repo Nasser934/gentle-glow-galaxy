@@ -40,7 +40,7 @@ export async function getReportBySlug(slug: string) {
     .eq("slug", slug)
     .maybeSingle();
   if (error) throw error;
-  return data as ReportRow | null;
+  return (data as unknown) as ReportRow | null;
 }
 
 export async function listMyReports() {
