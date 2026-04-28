@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useRef, useState } from "react";
 import { ArrowLeft, BarChart3, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { FMARTRadar } from "@/components/report/FMARTRadar";
