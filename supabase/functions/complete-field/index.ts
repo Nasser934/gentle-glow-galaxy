@@ -15,6 +15,7 @@ const FIELD_GUIDE: Record<string, { label: string; hint: string; max: number }> 
   successFactors: { label: "Critical Success Factors", hint: "What must go right (3–6 bullets in prose).", max: 500 },
   knownRisks: { label: "Known Risks", hint: "Top 4–6 risks with brief context.", max: 600 },
   regulatoryConsiderations: { label: "Regulatory & Compliance", hint: "Relevant regulations, licensing, standards.", max: 500 },
+  founderExperience: { label: "Founder / Team Experience", hint: "Years and domain experience, prior exits, key strengths.", max: 400 },
 };
 
 const RATE_LIMIT_MAX = 30;
