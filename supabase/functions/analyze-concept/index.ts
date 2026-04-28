@@ -8,6 +8,42 @@ const corsHeaders = {
 
 const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 
+// Per-IP rate limiting (in-memory; resets on cold start). Protects against budget abuse.
+const RATE_LIMIT_MAX = 8;        // requests per window per IP
+const RATE_LIMIT_WINDOW_MS = 60_000 * 10; // 10 minutes
+const ipHits = new Map<string, number[]>();
+function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (arr.length >= RATE_LIMIT_MAX) {
+    return { ok: false, retryAfter: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - arr[0])) / 1000) };
+  }
+  arr.push(now);
+  ipHits.set(ip, arr);
+  if (ipHits.size > 5000) {
+    // Prevent unbounded growth
+    for (const [k, v] of ipHits) if (v.every((t) => now - t > RATE_LIMIT_WINDOW_MS)) ipHits.delete(k);
+  }
+  return { ok: true };
+}
+
+// Server-side input length caps (defense in depth — clients also enforce maxLength).
+const MAX_FIELD_LEN = 3000;
+const MAX_TOTAL_LEN = 18000;
+function sanitizeInputs(raw: Record<string, unknown>): { ok: true; inputs: Record<string, string> } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "Invalid inputs payload" };
+  const cleaned: Record<string, string> = {};
+  let total = 0;
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v !== "string") continue;
+    const trimmed = v.slice(0, MAX_FIELD_LEN);
+    cleaned[k] = trimmed;
+    total += trimmed.length;
+    if (total > MAX_TOTAL_LEN) return { ok: false, error: "Input too large" };
+  }
+  return { ok: true, inputs: cleaned };
+}
+
 async function safeJson(url: string) {
   try {
     const res = await fetch(url, {
@@ -245,8 +281,24 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { inputs } = await req.json();
-    if (!inputs?.projectName || !inputs?.industry || !inputs?.description) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
+    const rl = rateLimit(ip);
+    if (!rl.ok) {
+      return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.retryAfter ?? 60) },
+      });
+    }
+
+    const body = await req.json();
+    const sanitized = sanitizeInputs(body?.inputs ?? {});
+    if (!sanitized.ok) {
+      return new Response(JSON.stringify({ error: sanitized.error }), {
+        status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const inputs = sanitized.inputs;
+    if (!inputs.projectName || !inputs.industry || !inputs.description) {
       return new Response(JSON.stringify({ error: "Missing required project fields" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
