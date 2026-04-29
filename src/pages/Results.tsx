@@ -1,7 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Download, Loader2, Share2, Check, Copy } from "lucide-react";
+import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { toast } from "sonner";
@@ -10,6 +13,8 @@ import { FMARTRadar } from "@/components/report/FMARTRadar";
 import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
 import { exportReportToPdf } from "@/lib/exportPdf";
+import { exportReportToPptx } from "@/lib/exportPptx";
+import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport } from "@/lib/reports";
 
@@ -118,6 +123,28 @@ const Results = () => {
     }
   };
 
+  const handleExportPptx = async () => {
+    setDownloading(true);
+    const id = toast.loading("Generating PowerPoint deck…");
+    try {
+      const baseName = `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}`;
+      await exportReportToPptx(report, inputs, `${baseName}.pptx`);
+      toast.success("Deck downloaded", { id });
+    } catch (e: any) { toast.error(e?.message || "PPTX export failed", { id }); }
+    finally { setDownloading(false); }
+  };
+
+  const handleExportXlsx = async () => {
+    setDownloading(true);
+    const id = toast.loading("Generating Excel workbook…");
+    try {
+      const baseName = `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}`;
+      await exportReportToXlsx(report, inputs, `${baseName}.xlsx`);
+      toast.success("Workbook downloaded", { id });
+    } catch (e: any) { toast.error(e?.message || "XLSX export failed", { id }); }
+    finally { setDownloading(false); }
+  };
+
   const handleShare = async () => {
     let slug = shareSlug;
     if (!slug) {
@@ -154,11 +181,20 @@ const Results = () => {
               {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
               {copied ? "Copied" : "Share"}
             </Button>
-            <Button size="sm" onClick={handleDownload} disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
-              {downloading
-                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                : <><Download className="h-3.5 w-3.5" /> Download PDF</>}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
+                  {downloading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                    : <><Download className="h-3.5 w-3.5" /> Export</>}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <UserMenu />
           </div>
         </div>

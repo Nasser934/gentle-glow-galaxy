@@ -35,6 +35,7 @@ import { FMARTRadar } from "./FMARTRadar";
 import { MethodologyPanel } from "./MethodologyPanel";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
+import { SensitivityPanel } from "./SensitivityPanel";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const CHART_COLORS = [
@@ -321,10 +322,12 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               </CardContent>
             </Card>
           </div>
+          <SensitivityPanel report={report} />
         </TabsContent>
 
         <TabsContent value="risk" className="space-y-4">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+
             <Card>
               <CardHeader><CardTitle className="text-base">Risk Exposure Ranking</CardTitle></CardHeader>
               <CardContent>
