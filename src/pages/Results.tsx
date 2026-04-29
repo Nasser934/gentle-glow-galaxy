@@ -181,11 +181,20 @@ const Results = () => {
               {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
               {copied ? "Copied" : "Share"}
             </Button>
-            <Button size="sm" onClick={handleDownload} disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
-              {downloading
-                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                : <><Download className="h-3.5 w-3.5" /> Download PDF</>}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
+                  {downloading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                    : <><Download className="h-3.5 w-3.5" /> Export</>}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <UserMenu />
           </div>
         </div>
