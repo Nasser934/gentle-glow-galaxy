@@ -15,6 +15,7 @@ import {
   BUSINESS_MODELS, REVENUE_MODELS, initialInputs,
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
+import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 
@@ -197,6 +198,20 @@ const Analyze = () => {
                       <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
                       <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
                     </Select>
+                    {(() => {
+                      const tpl = findTemplate(inputs.industry);
+                      if (!tpl) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => { setInputs((p) => applyTemplate(p, tpl)); toast.success(`Applied ${tpl.label} template`); }}
+                          className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                          title={tpl.blurb}
+                        >
+                          <Sparkles className="h-3 w-3" /> Apply {tpl.label} template
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-2">
                     <Label>Location (City / Country)</Label>
