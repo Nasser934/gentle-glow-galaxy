@@ -1,7 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Download, Loader2, Share2, Check, Copy } from "lucide-react";
+import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { toast } from "sonner";
@@ -10,6 +13,8 @@ import { FMARTRadar } from "@/components/report/FMARTRadar";
 import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
 import { exportReportToPdf } from "@/lib/exportPdf";
+import { exportReportToPptx } from "@/lib/exportPptx";
+import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport } from "@/lib/reports";
 
