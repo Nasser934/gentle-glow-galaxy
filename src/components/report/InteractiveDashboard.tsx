@@ -36,6 +36,7 @@ import { MethodologyPanel } from "./MethodologyPanel";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
+import { EvidenceChips } from "./EvidenceChips";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const CHART_COLORS = [
@@ -82,7 +83,7 @@ const toNumber = (value?: string) => {
 
 const levelScore = (level: string) => level === "High" ? 3 : level === "Med" ? 2 : 1;
 
-const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
+const MiniInsight = ({ title, items, citations }: { title: string; items: string[]; citations?: FeasibilityReport["research"]["citations"] }) => (
   <Card>
     <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
     <CardContent>
@@ -90,7 +91,10 @@ const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
         {items.slice(0, 5).map((item, i) => (
           <li key={i} className="flex gap-2">
             <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-            <span>{item}</span>
+            <div className="min-w-0 flex-1">
+              <span>{item}</span>
+              <EvidenceChips text={item} citations={citations} />
+            </div>
           </li>
         ))}
       </ul>
@@ -198,6 +202,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                   </div>
                   <Progress value={item.score * 10} className="h-2" />
                   <p className="mt-2 text-xs text-muted-foreground">{item.finding}</p>
+                  <EvidenceChips text={item.finding} citations={research?.citations} />
                 </div>
               ))}
             </CardContent>
@@ -379,10 +384,10 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <MiniInsight title="Key market signals" items={research.keySignals} />
-                <MiniInsight title="Customer pain points" items={research.painPoints} />
-                <MiniInsight title="Reddit/community signals" items={research.redditSignals} />
-                <MiniInsight title="Open web signals" items={research.webSignals} />
+                <MiniInsight title="Key market signals" items={research.keySignals} citations={research.citations} />
+                <MiniInsight title="Customer pain points" items={research.painPoints} citations={research.citations} />
+                <MiniInsight title="Reddit/community signals" items={research.redditSignals} citations={research.citations} />
+                <MiniInsight title="Open web signals" items={research.webSignals} citations={research.citations} />
               </div>
               <Card>
                 <CardHeader><CardTitle className="text-base">Research Citations</CardTitle></CardHeader>
