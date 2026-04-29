@@ -123,6 +123,28 @@ const Results = () => {
     }
   };
 
+  const handleExportPptx = async () => {
+    setDownloading(true);
+    const id = toast.loading("Generating PowerPoint deck…");
+    try {
+      const baseName = `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}`;
+      await exportReportToPptx(report, inputs, `${baseName}.pptx`);
+      toast.success("Deck downloaded", { id });
+    } catch (e: any) { toast.error(e?.message || "PPTX export failed", { id }); }
+    finally { setDownloading(false); }
+  };
+
+  const handleExportXlsx = async () => {
+    setDownloading(true);
+    const id = toast.loading("Generating Excel workbook…");
+    try {
+      const baseName = `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}`;
+      await exportReportToXlsx(report, inputs, `${baseName}.xlsx`);
+      toast.success("Workbook downloaded", { id });
+    } catch (e: any) { toast.error(e?.message || "XLSX export failed", { id }); }
+    finally { setDownloading(false); }
+  };
+
   const handleShare = async () => {
     let slug = shareSlug;
     if (!slug) {
