@@ -322,9 +322,9 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               </CardContent>
             </Card>
           </div>
+          <SensitivityPanel report={report} />
         </TabsContent>
 
-        <TabsContent value="risk" className="space-y-4">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <Card>
               <CardHeader><CardTitle className="text-base">Risk Exposure Ranking</CardTitle></CardHeader>
