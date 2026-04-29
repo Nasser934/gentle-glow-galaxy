@@ -35,6 +35,7 @@ import { FMARTRadar } from "./FMARTRadar";
 import { MethodologyPanel } from "./MethodologyPanel";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
+import { SensitivityPanel } from "./SensitivityPanel";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const CHART_COLORS = [
