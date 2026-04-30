@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,17 +52,46 @@ async function safeJson(url: string, init?: RequestInit) {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (_) { return null; }
+// SSRF guard — reject private/loopback/link-local/metadata IPs
+function isPrivateIp(ip: string): boolean {
+  if (!ip) return true;
+  if (ip === "127.0.0.1" || ip === "0.0.0.0" || ip === "::1") return true;
+  if (ip.startsWith("169.254.")) return true; // link-local & cloud metadata
+  if (ip.startsWith("10.")) return true;
+  if (ip.startsWith("192.168.")) return true;
+  const m = ip.match(/^172\.(\d+)\./);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  if (ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
+  return false;
+}
+
+async function isUrlSafe(url: string): Promise<boolean> {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname;
+    // Block obvious local hostnames
+    if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false;
+    // If host is already a literal IP, check directly
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
+      return !isPrivateIp(host);
+    }
+    // Resolve DNS and reject if any A record is private
+    try {
+      const ips = await Deno.resolveDns(host, "A");
+      if (!ips.length || ips.some(isPrivateIp)) return false;
+    } catch { return false; }
+    return true;
+  } catch { return false; }
 }
 
 async function safeText(url: string) {
+  if (!(await isUrlSafe(url))) return null;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0", "Accept": "text/html,application/xhtml+xml" },
       signal: AbortSignal.timeout(4000),
-      redirect: "follow",
+      redirect: "manual",
     });
     if (!res.ok) return null;
     const txt = await res.text();
@@ -402,6 +432,25 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    // Require authenticated user (mitigates SSRF abuse and budget abuse)
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const supabaseAuth = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(authHeader.replace("Bearer ", ""));
+    if (claimsErr || !claimsData?.claims?.sub) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
     const rl = rateLimit(ip);
     if (!rl.ok) {
