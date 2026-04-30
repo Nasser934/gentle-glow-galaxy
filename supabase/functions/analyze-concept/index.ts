@@ -52,6 +52,11 @@ async function safeJson(url: string, init?: RequestInit) {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
       signal: AbortSignal.timeout(5000),
     });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) { return null; }
+}
+
 // SSRF guard — reject private/loopback/link-local/metadata IPs
 function isPrivateIp(ip: string): boolean {
   if (!ip) return true;
