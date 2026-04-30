@@ -52,17 +52,46 @@ async function safeJson(url: string, init?: RequestInit) {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (_) { return null; }
+// SSRF guard — reject private/loopback/link-local/metadata IPs
+function isPrivateIp(ip: string): boolean {
+  if (!ip) return true;
+  if (ip === "127.0.0.1" || ip === "0.0.0.0" || ip === "::1") return true;
+  if (ip.startsWith("169.254.")) return true; // link-local & cloud metadata
+  if (ip.startsWith("10.")) return true;
+  if (ip.startsWith("192.168.")) return true;
+  const m = ip.match(/^172\.(\d+)\./);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  if (ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
+  return false;
+}
+
+async function isUrlSafe(url: string): Promise<boolean> {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname;
+    // Block obvious local hostnames
+    if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false;
+    // If host is already a literal IP, check directly
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
+      return !isPrivateIp(host);
+    }
+    // Resolve DNS and reject if any A record is private
+    try {
+      const ips = await Deno.resolveDns(host, "A");
+      if (!ips.length || ips.some(isPrivateIp)) return false;
+    } catch { return false; }
+    return true;
+  } catch { return false; }
 }
 
 async function safeText(url: string) {
+  if (!(await isUrlSafe(url))) return null;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "ConceptAIResearchBot/1.0", "Accept": "text/html,application/xhtml+xml" },
       signal: AbortSignal.timeout(4000),
-      redirect: "follow",
+      redirect: "manual",
     });
     if (!res.ok) return null;
     const txt = await res.text();
