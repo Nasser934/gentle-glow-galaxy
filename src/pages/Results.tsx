@@ -573,6 +573,7 @@ const Results = () => {
             {report.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
           </ol>
         </ReportPage>
+        </div>
       </div>
     </div>
   );
