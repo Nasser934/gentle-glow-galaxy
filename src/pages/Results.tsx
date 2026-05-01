@@ -200,13 +200,13 @@ const Results = () => {
         </div>
       </nav>
 
-      {/* Interactive dashboard (not part of PDF) */}
+      {/* Interactive dashboard (the only on-screen view) */}
       <div className="container mx-auto px-6 py-8 no-print">
         <InteractiveDashboard report={report} inputs={inputs} />
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/40 p-5">
           <div>
-            <h3 className="font-display text-xl font-bold text-foreground">Printable Report</h3>
-            <p className="text-sm text-muted-foreground">8-page A4 layout — exported as the PDF below.</p>
+            <h3 className="font-display text-lg font-semibold text-foreground">Printable PDF report</h3>
+            <p className="text-sm text-muted-foreground">8-page A4 document, designed separately from the dashboard. Download to view.</p>
           </div>
           <Button onClick={handleDownload} disabled={downloading} className="gap-2">
             {downloading
@@ -216,8 +216,12 @@ const Results = () => {
         </div>
       </div>
 
-      {/* PDF root */}
-      <div ref={pdfRootRef} className="space-y-6 py-8">
+      {/* PDF root — rendered off-screen for html2canvas capture only */}
+      <div
+        aria-hidden="true"
+        style={{ position: "fixed", left: "-10000px", top: 0, width: "794px", pointerEvents: "none" }}
+      >
+        <div ref={pdfRootRef} className="space-y-6 py-8 bg-white">
 
         {/* ============== PAGE 1 — COVER ============== */}
         <ReportPage pageNum={1} total={totalPages} projectName={inputs.projectName}>
