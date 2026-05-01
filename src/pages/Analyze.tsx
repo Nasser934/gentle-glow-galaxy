@@ -96,7 +96,16 @@ const Analyze = () => {
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
-      if (error) throw error;
+      if (error) {
+        // FunctionsHttpError exposes the response body via .context
+        let detail = error.message;
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
+          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
+        } catch (_) { /* ignore */ }
+        throw new Error(detail);
+      }
       if (data?.error) throw new Error(data.error);
       navigate("/results", { state: { report: data, inputs } });
     } catch (e: any) {
