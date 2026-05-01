@@ -9,11 +9,11 @@ export const CapExBarChart = ({ data, currency }: { data: CapExItem[]; currency:
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 24, left: 110, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-            label={{ value: currency, position: "insideBottom", offset: -2, style: { fill: "hsl(var(--muted-foreground))", fontSize: 11 } }} />
-          <YAxis type="category" dataKey="name" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} width={110} />
-          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
+          <XAxis type="number" tick={{ fill: "#64748b", fontSize: 11 }}
+            label={{ value: currency, position: "insideBottom", offset: -2, style: { fill: "#64748b", fontSize: 11 } }} />
+          <YAxis type="category" dataKey="name" tick={{ fill: "#0f172a", fontSize: 11 }} width={110} />
+          <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 8 }} />
           <Bar dataKey="value" radius={[0, 6, 6, 0]}>
             {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Bar>
