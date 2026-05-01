@@ -440,20 +440,30 @@ serve(async (req) => {
     // Require authenticated user (mitigates SSRF abuse and budget abuse)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Please sign in to run an analysis." }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const token = authHeader.replace("Bearer ", "");
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(authHeader.replace("Bearer ", ""));
-    if (claimsErr || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string | undefined;
+    try {
+      const { data: claimsData } = await supabaseAuth.auth.getClaims(token);
+      userId = claimsData?.claims?.sub as string | undefined;
+    } catch (_) { /* fall through to getUser */ }
+    if (!userId) {
+      const { data: userData, error: userErr } = await supabaseAuth.auth.getUser(token);
+      if (userErr || !userData?.user?.id) {
+        console.warn("auth failed:", userErr?.message);
+        return new Response(JSON.stringify({ error: "Your session has expired. Please sign in again." }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = userData.user.id;
     }
 
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
