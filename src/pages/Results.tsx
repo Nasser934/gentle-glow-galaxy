@@ -201,28 +201,60 @@ const Results = () => {
         </div>
       </nav>
 
-      {/* Interactive dashboard (the only on-screen view) */}
-      <div className="container mx-auto px-6 py-8 no-print">
-        <InteractiveDashboard report={report} inputs={inputs} />
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/40 p-5">
-          <div>
-            <h3 className="font-display text-lg font-semibold text-foreground">Printable PDF report</h3>
-            <p className="text-sm text-muted-foreground">8-page A4 document, designed separately from the dashboard. Download to view.</p>
-          </div>
-          <Button onClick={handleDownload} disabled={downloading} className="gap-2">
-            {downloading
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
-              : <><Download className="h-4 w-4" /> Download Report PDF</>}
-          </Button>
+      {/* ============== SCREEN PAGE 1 — INTERACTIVE DASHBOARD ============== */}
+      <section className="container mx-auto px-4 sm:px-6 py-8 no-print">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+            Page 1 · Dashboard
+          </span>
+          <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
+        <InteractiveDashboard report={report} inputs={inputs} />
+      </section>
+
+      {/* Divider between the two on-screen pages */}
+      <div className="container mx-auto px-4 sm:px-6 no-print">
+        <div className="my-4 border-t border-dashed border-border/70" />
       </div>
 
-      {/* PDF root — rendered off-screen for html2canvas capture only */}
-      <div
-        aria-hidden="true"
-        style={{ position: "fixed", left: "-10000px", top: 0, width: "794px", pointerEvents: "none" }}
-      >
-        <div ref={pdfRootRef} className="space-y-6 py-8 bg-white">
+      {/* ============== SCREEN PAGE 2 — REPORT PREVIEW ============== */}
+      <section className="container mx-auto px-4 sm:px-6 py-8 no-print">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+              Page 2 · Report Preview
+            </span>
+            <span className="text-xs text-muted-foreground">Exact preview of the printable PDF</span>
+          </div>
+          <Button onClick={handleDownload} disabled={downloading} size="sm" className="gap-2">
+            {downloading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
+              : <><Download className="h-4 w-4" /> Download PDF</>}
+          </Button>
+        </div>
+
+        {/* Scaled-to-fit wrapper so the 794px-wide A4 preview fits any viewport (incl. mobile) */}
+        <div className="report-preview-wrap overflow-hidden rounded-xl border border-border bg-[#eef2f7] p-3 sm:p-6">
+          <div className="report-preview-scale mx-auto" style={{ width: "794px" }}>
+            <div ref={pdfRootRef} className="space-y-6 bg-transparent">
+              {/* pages injected below */}
+            </div>
+          </div>
+        </div>
+
+        <style>{`
+          .report-preview-wrap { container-type: inline-size; }
+          .report-preview-scale { transform-origin: top center; }
+          @container (max-width: 820px) {
+            .report-preview-scale { transform: scale(calc((100cqw - 24px) / 794)); }
+            .report-preview-wrap { height: auto; }
+          }
+        `}</style>
+      </section>
+
+      {/* Hidden duplicate root removed — pdfRootRef now lives inside the on-screen preview */}
+      <div style={{ display: "none" }}>
+        <div className="space-y-6 py-8 bg-white">
 
         {/* ============== PAGE 1 — DASHBOARD SNAPSHOT ============== */}
         <DashboardSnapshot report={report} inputs={inputs} pageNum={1} total={totalPages} />
