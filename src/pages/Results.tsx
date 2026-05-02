@@ -16,6 +16,7 @@ import { exportReportToPdf } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
+import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
 
 /* ------------------------------------------------------------------ */
@@ -158,7 +159,7 @@ const Results = () => {
     catch { toast.info(url); }
   };
 
-  const totalPages = 8;
+  const totalPages = 9; // 1 dashboard snapshot + 8 report pages
   const cur = report.financials.currency;
 
   return (
@@ -223,8 +224,11 @@ const Results = () => {
       >
         <div ref={pdfRootRef} className="space-y-6 py-8 bg-white">
 
-        {/* ============== PAGE 1 — COVER ============== */}
-        <ReportPage pageNum={1} total={totalPages} projectName={inputs.projectName}>
+        {/* ============== PAGE 1 — DASHBOARD SNAPSHOT ============== */}
+        <DashboardSnapshot report={report} inputs={inputs} pageNum={1} total={totalPages} />
+
+        {/* ============== PAGE 2 — COVER ============== */}
+        <ReportPage pageNum={2} total={totalPages} projectName={inputs.projectName}>
           <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-[#64748b]">Project</div>
           <h1 className="mb-1 font-display text-[42px] font-extrabold leading-tight text-[#0f172a]">FEASIBILITY REPORT</h1>
           <p className="mb-8 text-[15px] text-[#475569]">{inputs.projectName}{inputs.location ? ` — ${inputs.location}` : ""}</p>
@@ -265,7 +269,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 2 — EXECUTIVE SUMMARY + RADAR ============== */}
-        <ReportPage pageNum={2} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={3} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="1">Executive Summary</SectionTitle>
           <p className="mb-4 whitespace-pre-line text-[12px] leading-relaxed text-[#334155]">{report.executiveSummary}</p>
 
@@ -305,7 +309,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 3 — MARKET ANALYSIS ============== */}
-        <ReportPage pageNum={3} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={4} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="2">Market Analysis</SectionTitle>
 
           <SubTitle>2.1 Market Sizing (TAM · SAM · SOM)</SubTitle>
@@ -341,7 +345,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 4 — PUBLIC RESEARCH ============== */}
-        <ReportPage pageNum={4} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={5} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="3">Public Market Research</SectionTitle>
           {report.research ? (
             <>
@@ -393,7 +397,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 5 — COMPETITORS ============== */}
-        <ReportPage pageNum={5} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={6} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="3">Competitive Landscape</SectionTitle>
           <SubTitle>3.1 Direct Competitors</SubTitle>
           <table className="w-full border-collapse text-[11px]">
@@ -419,7 +423,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 6 — CAPEX ============== */}
-        <ReportPage pageNum={6} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={7} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="4">Financial Plan</SectionTitle>
           <SubTitle>4.1 Startup Costs (CapEx) — {cur}</SubTitle>
           <table className="mb-4 w-full border-collapse text-[11px]">
@@ -454,7 +458,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 7 — OPEX + SCENARIOS ============== */}
-        <ReportPage pageNum={7} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={8} total={totalPages} projectName={inputs.projectName}>
           <SubTitle>4.2 Monthly Operating Costs — {cur}</SubTitle>
           <table className="mb-5 w-full border-collapse text-[11px]">
             <thead>
@@ -509,7 +513,7 @@ const Results = () => {
         </ReportPage>
 
         {/* ============== PAGE 8 — RISKS + FUNDING + RECS ============== */}
-        <ReportPage pageNum={8} total={totalPages} projectName={inputs.projectName}>
+        <ReportPage pageNum={9} total={totalPages} projectName={inputs.projectName}>
           <SectionTitle n="5">Risk Assessment</SectionTitle>
           <table className="mb-5 w-full border-collapse text-[11px]">
             <thead>
