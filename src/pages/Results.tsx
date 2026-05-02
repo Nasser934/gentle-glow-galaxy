@@ -224,7 +224,10 @@ const Results = () => {
       >
         <div ref={pdfRootRef} className="space-y-6 py-8 bg-white">
 
-        {/* ============== PAGE 1 — COVER ============== */}
+        {/* ============== PAGE 1 — DASHBOARD SNAPSHOT ============== */}
+        <DashboardSnapshot report={report} inputs={inputs} pageNum={1} total={totalPages} />
+
+        {/* ============== PAGE 2 — COVER ============== */}
         <ReportPage pageNum={2} total={totalPages} projectName={inputs.projectName}>
           <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-[#64748b]">Project</div>
           <h1 className="mb-1 font-display text-[42px] font-extrabold leading-tight text-[#0f172a]">FEASIBILITY REPORT</h1>
