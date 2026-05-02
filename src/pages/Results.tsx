@@ -237,24 +237,6 @@ const Results = () => {
         <div className="report-preview-wrap overflow-hidden rounded-xl border border-border bg-[#eef2f7] p-3 sm:p-6">
           <div className="report-preview-scale mx-auto" style={{ width: "794px" }}>
             <div ref={pdfRootRef} className="space-y-6 bg-transparent">
-              {/* pages injected below */}
-            </div>
-          </div>
-        </div>
-
-        <style>{`
-          .report-preview-wrap { container-type: inline-size; }
-          .report-preview-scale { transform-origin: top center; }
-          @container (max-width: 820px) {
-            .report-preview-scale { transform: scale(calc((100cqw - 24px) / 794)); }
-            .report-preview-wrap { height: auto; }
-          }
-        `}</style>
-      </section>
-
-      {/* Hidden duplicate root removed — pdfRootRef now lives inside the on-screen preview */}
-      <div style={{ display: "none" }}>
-        <div className="space-y-6 py-8 bg-white">
 
         {/* ============== PAGE 1 — DASHBOARD SNAPSHOT ============== */}
         <DashboardSnapshot report={report} inputs={inputs} pageNum={1} total={totalPages} />
