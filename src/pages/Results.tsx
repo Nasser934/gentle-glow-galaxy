@@ -591,8 +591,18 @@ const Results = () => {
             {report.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
           </ol>
         </ReportPage>
+            </div>
+          </div>
         </div>
-      </div>
+
+        <style>{`
+          .report-preview-wrap { container-type: inline-size; }
+          .report-preview-scale { transform-origin: top center; }
+          @container (max-width: 820px) {
+            .report-preview-scale { transform: scale(calc((100cqw - 24px) / 794)); transform-origin: top left; margin-left: 0 !important; }
+          }
+        `}</style>
+      </section>
     </div>
   );
 };
