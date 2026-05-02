@@ -16,6 +16,7 @@ import { exportReportToPdf } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
+import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
 
 /* ------------------------------------------------------------------ */
