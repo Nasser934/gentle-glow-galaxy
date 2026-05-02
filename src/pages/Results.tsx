@@ -159,7 +159,7 @@ const Results = () => {
     catch { toast.info(url); }
   };
 
-  const totalPages = 8;
+  const totalPages = 9; // 1 dashboard snapshot + 8 report pages
   const cur = report.financials.currency;
 
   return (
