@@ -597,9 +597,10 @@ const Results = () => {
 
         <style>{`
           .report-preview-wrap { container-type: inline-size; }
-          .report-preview-scale { transform-origin: top center; }
           @container (max-width: 820px) {
-            .report-preview-scale { transform: scale(calc((100cqw - 24px) / 794)); transform-origin: top left; margin-left: 0 !important; }
+            .report-preview-scale {
+              zoom: calc((100cqw - 24px) / 794);
+            }
           }
         `}</style>
       </section>
