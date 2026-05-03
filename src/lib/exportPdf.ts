@@ -51,7 +51,22 @@ const setFill  = (pdf: jsPDF, c: [number, number, number]) => pdf.setFillColor(c
 const setDraw  = (pdf: jsPDF, c: [number, number, number]) => pdf.setDrawColor(c[0], c[1], c[2]);
 
 function ensureSpace(ctx: PdfCtx, needed: number) {
-  if (ctx.y + needed > PAGE_H - 64) addPage(ctx);
+  if (ctx.y + needed > PAGE_H - 60) addPage(ctx);
+}
+
+function kv(ctx: PdfCtx, label: string, value: string | undefined) {
+  if (!value) return;
+  const { pdf } = ctx;
+  pdf.setFontSize(9);
+  const valLines = pdf.splitTextToSize(value, CONTENT_W - 130) as string[];
+  ensureSpace(ctx, valLines.length * 12 + 2);
+  setColor(pdf, COLORS.muted);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(label, M, ctx.y);
+  setColor(pdf, COLORS.text);
+  pdf.setFont("helvetica", "normal");
+  pdf.text(valLines, M + 130, ctx.y);
+  ctx.y += Math.max(12, valLines.length * 12) + 2;
 }
 
 function pageHeader(ctx: PdfCtx) {
