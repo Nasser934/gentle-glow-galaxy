@@ -51,7 +51,22 @@ const setFill  = (pdf: jsPDF, c: [number, number, number]) => pdf.setFillColor(c
 const setDraw  = (pdf: jsPDF, c: [number, number, number]) => pdf.setDrawColor(c[0], c[1], c[2]);
 
 function ensureSpace(ctx: PdfCtx, needed: number) {
-  if (ctx.y + needed > PAGE_H - 64) addPage(ctx);
+  if (ctx.y + needed > PAGE_H - 60) addPage(ctx);
+}
+
+function kv(ctx: PdfCtx, label: string, value: string | undefined) {
+  if (!value) return;
+  const { pdf } = ctx;
+  pdf.setFontSize(9);
+  const valLines = pdf.splitTextToSize(value, CONTENT_W - 130) as string[];
+  ensureSpace(ctx, valLines.length * 12 + 2);
+  setColor(pdf, COLORS.muted);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(label, M, ctx.y);
+  setColor(pdf, COLORS.text);
+  pdf.setFont("helvetica", "normal");
+  pdf.text(valLines, M + 130, ctx.y);
+  ctx.y += Math.max(12, valLines.length * 12) + 2;
 }
 
 function pageHeader(ctx: PdfCtx) {
@@ -97,7 +112,8 @@ function addPage(ctx: PdfCtx) {
 }
 
 function sectionTitle(ctx: PdfCtx, n: string, text: string) {
-  ensureSpace(ctx, 28);
+  ensureSpace(ctx, 26);
+  if (ctx.y > 80) ctx.y += 4;
   const { pdf } = ctx;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
@@ -105,17 +121,18 @@ function sectionTitle(ctx: PdfCtx, n: string, text: string) {
   pdf.text(`${n}.`, M, ctx.y);
   setColor(pdf, COLORS.text);
   pdf.text(text.toUpperCase(), M + 18, ctx.y);
-  ctx.y += 16;
+  ctx.y += 14;
 }
 
 function subTitle(ctx: PdfCtx, text: string) {
-  ensureSpace(ctx, 22);
+  ensureSpace(ctx, 18);
+  ctx.y += 2;
   const { pdf } = ctx;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9.5);
   setColor(pdf, [51, 65, 85]);
   pdf.text(text.toUpperCase(), M, ctx.y);
-  ctx.y += 12;
+  ctx.y += 11;
 }
 
 function paragraph(ctx: PdfCtx, text: string, opts: { size?: number; color?: [number, number, number]; gap?: number } = {}) {
@@ -126,13 +143,13 @@ function paragraph(ctx: PdfCtx, text: string, opts: { size?: number; color?: [nu
   pdf.setFontSize(size);
   setColor(pdf, opts.color ?? COLORS.text);
   const lines = pdf.splitTextToSize(text, CONTENT_W) as string[];
-  const lh = size * 1.4;
+  const lh = size * 1.35;
   for (const ln of lines) {
     ensureSpace(ctx, lh);
     pdf.text(ln, M, ctx.y);
     ctx.y += lh;
   }
-  ctx.y += opts.gap ?? 4;
+  ctx.y += opts.gap ?? 3;
 }
 
 function bulletList(ctx: PdfCtx, items: string[], opts: { numbered?: boolean; size?: number } = {}) {
@@ -364,9 +381,32 @@ export async function exportReportToPdf(
   const marketImg = chartImgs[3] ?? null;
   const capexImg  = chartImgs[4] ?? null;
 
-  /* ---------- PAGE 2 — Executive snapshot ---------- */
+  /* ---------- Body — flows continuously ---------- */
   addPage(ctx);
-  sectionTitle(ctx, "1", "Executive Summary");
+
+  // 1. Project Brief — surfaces the user inputs that were missing in PDF
+  sectionTitle(ctx, "1", "Project Brief");
+  kv(ctx, "Project", inputs.projectName);
+  kv(ctx, "Industry", inputs.industry);
+  kv(ctx, "Location", inputs.location);
+  kv(ctx, "Business Model", inputs.businessModel);
+  kv(ctx, "Revenue Model", inputs.revenueModel);
+  kv(ctx, "Budget Range", inputs.budgetRange);
+  kv(ctx, "Timeline", inputs.timeline);
+  kv(ctx, "Team Size", inputs.teamSize);
+  kv(ctx, "Tech Readiness", inputs.technologyReadiness);
+  kv(ctx, "Founder Experience", inputs.founderExperience);
+  if (inputs.description)          { ctx.y += 2; subTitle(ctx, "Concept Description"); paragraph(ctx, inputs.description, { size: 9 }); }
+  if (inputs.strategicObjectives)  { subTitle(ctx, "Strategic Objectives");  paragraph(ctx, inputs.strategicObjectives, { size: 9 }); }
+  if (inputs.assumptions)          { subTitle(ctx, "Assumptions");           paragraph(ctx, inputs.assumptions, { size: 9 }); }
+  if (inputs.constraints)          { subTitle(ctx, "Constraints");           paragraph(ctx, inputs.constraints, { size: 9 }); }
+  if (inputs.successFactors)       { subTitle(ctx, "Success Factors");       paragraph(ctx, inputs.successFactors, { size: 9 }); }
+  if (inputs.knownRisks)           { subTitle(ctx, "Known Risks (Input)");   paragraph(ctx, inputs.knownRisks, { size: 9 }); }
+  if (inputs.regulatoryConsiderations) { subTitle(ctx, "Regulatory Considerations"); paragraph(ctx, inputs.regulatoryConsiderations, { size: 9 }); }
+  if (inputs.dependencies)         { subTitle(ctx, "Dependencies");          paragraph(ctx, inputs.dependencies, { size: 9 }); }
+
+  // 2. Executive Summary
+  sectionTitle(ctx, "2", "Executive Summary");
   paragraph(ctx, report.executiveSummary, { size: 9.5 });
 
   subTitle(ctx, "FMART Scoring Overview");
@@ -387,20 +427,42 @@ export async function exportReportToPdf(
       { content: `${report.scores.overall.toFixed(1)} / 10`, styles: { fillColor: COLORS.softBlue, textColor: COLORS.primary, fontStyle: "bold" } },
       { content: `RECOMMENDED — ${report.scores.verdict}`, styles: { fillColor: COLORS.softBlue, textColor: COLORS.primary, fontStyle: "bold" } },
     ]],
-    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 5, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 14;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 8;
+
+  if (report.scores.weights || report.scores.confidence) {
+    subTitle(ctx, "Scoring Methodology — Weights & Confidence");
+    const w = report.scores.weights as any;
+    const c = report.scores.confidence as any;
+    const rat = report.scores.rationale as any;
+    autoTable(pdf, {
+      startY: ctx.y,
+      margin: { left: M, right: M },
+      head: [["Dimension", "Weight", "Confidence", "Rationale"]],
+      body: ["financial","market","achievability","risk","timing","operational"].map(k => [
+        k.charAt(0).toUpperCase() + k.slice(1),
+        w ? `${Math.round((w[k] ?? 0) * 100)}%` : "—",
+        c ? `${Math.round((c[k] ?? 0) * 100)}%` : "—",
+        rat ? (rat[k] ?? "—") : "—",
+      ]),
+      styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+      headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: COLORS.surface },
+      didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
+    });
+    ctx.y = (pdf as any).lastAutoTable.finalY + 8;
+  }
 
   subTitle(ctx, "FMART 5-Dimension Score Radar");
-  await placeChart(ctx, repRadar, 240);
+  await placeChart(ctx, repRadar, 220);
 
-  /* ---------- PAGE — Market ---------- */
-  addPage(ctx);
-  sectionTitle(ctx, "2", "Market Analysis");
-  subTitle(ctx, "2.1 Market Sizing (TAM · SAM · SOM)");
+  // 3. Market
+  sectionTitle(ctx, "3", "Market Analysis");
+  subTitle(ctx, "3.1 Market Sizing (TAM · SAM · SOM)");
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
@@ -410,19 +472,19 @@ export async function exportReportToPdf(
       ["SAM", report.market.samLabel, report.market.samValue, report.market.samCagr],
       ["SOM", report.market.somLabel, report.market.somValue, report.market.somCagr],
     ],
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 5, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
   if (marketImg) {
     subTitle(ctx, "Figure — Market Growth Projection");
-    await placeChart(ctx, marketImg, 200);
+    await placeChart(ctx, marketImg, 180);
   }
 
-  subTitle(ctx, "2.2 Customer Profile");
+  subTitle(ctx, "3.2 Customer Profile");
   const cust = report.customer;
   autoTable(pdf, {
     startY: ctx.y,
@@ -434,14 +496,14 @@ export async function exportReportToPdf(
       ["Willingness to Pay",   cust.willingnessToPay],
       ["Behavior",             cust.behavior],
     ],
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 5, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 120, fillColor: COLORS.surface } },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
   if (report.competitors?.length) {
-    subTitle(ctx, "2.3 Competitive Landscape");
+    subTitle(ctx, "3.3 Competitive Landscape");
     autoTable(pdf, {
       startY: ctx.y,
       margin: { left: M, right: M },
@@ -452,13 +514,63 @@ export async function exportReportToPdf(
       alternateRowStyles: { fillColor: COLORS.surface },
       didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
     });
-    ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+    ctx.y = (pdf as any).lastAutoTable.finalY + 6;
   }
 
-  /* ---------- PAGE — Financials ---------- */
-  addPage(ctx);
-  sectionTitle(ctx, "3", "Financial Analysis");
-  subTitle(ctx, `3.1 Capital Expenditure (${report.financials.currency})`);
+  if (report.research) {
+    const r = report.research;
+    subTitle(ctx, "3.4 Market Research & Signals");
+    paragraph(ctx, r.overview, { size: 9 });
+    autoTable(pdf, {
+      startY: ctx.y,
+      margin: { left: M, right: M },
+      body: [["Confidence", r.confidence], ["Sentiment", r.sentiment]],
+      styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 120, fillColor: COLORS.surface } },
+      didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
+    });
+    ctx.y = (pdf as any).lastAutoTable.finalY + 6;
+
+    if (r.keySignals?.length)        { subTitle(ctx, "Key Signals");         bulletList(ctx, r.keySignals,        { size: 9 }); }
+    if (r.painPoints?.length)        { subTitle(ctx, "Pain Points");         bulletList(ctx, r.painPoints,        { size: 9 }); }
+    if (r.competitorMentions?.length){ subTitle(ctx, "Competitor Mentions"); bulletList(ctx, r.competitorMentions,{ size: 9 }); }
+    if (r.redditSignals?.length)     { subTitle(ctx, "Reddit Signals");      bulletList(ctx, r.redditSignals,     { size: 9 }); }
+    if (r.webSignals?.length)        { subTitle(ctx, "Web Signals");         bulletList(ctx, r.webSignals,        { size: 9 }); }
+
+    if (r.citations?.length) {
+      subTitle(ctx, "Citations");
+      autoTable(pdf, {
+        startY: ctx.y,
+        margin: { left: M, right: M },
+        head: [["Source", "Title", "Takeaway"]],
+        body: r.citations.map(c => [c.source, c.title, c.takeaway]),
+        styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+        headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: COLORS.surface },
+        didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
+      });
+      ctx.y = (pdf as any).lastAutoTable.finalY + 6;
+    }
+  }
+
+  // 4. Financials
+  sectionTitle(ctx, "4", "Financial Analysis");
+  autoTable(pdf, {
+    startY: ctx.y,
+    margin: { left: M, right: M },
+    body: [
+      ["Investment Range", report.financials.investmentRange],
+      ["Break-Even",       report.financials.breakEvenSummary],
+      ...(report.financials.ltvCacRatio ? [["LTV : CAC", report.financials.ltvCacRatio]] : []),
+      ["CapEx (Mid)", `${report.financials.currency} ${report.financials.capExTotal.mid.toLocaleString()}  (range ${report.financials.capExTotal.low.toLocaleString()}–${report.financials.capExTotal.high.toLocaleString()})`],
+    ],
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
+    columnStyles: { 0: { fontStyle: "bold", cellWidth: 130, fillColor: COLORS.surface } },
+    didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
+  });
+  ctx.y = (pdf as any).lastAutoTable.finalY + 8;
+
+  subTitle(ctx, `4.1 Capital Expenditure (${report.financials.currency})`);
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
@@ -469,13 +581,11 @@ export async function exportReportToPdf(
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
-  if (capexImg) {
-    await placeChart(ctx, capexImg, 200);
-  }
+  if (capexImg) await placeChart(ctx, capexImg, 180);
 
-  subTitle(ctx, `3.2 Operating Expenses (${report.financials.currency})`);
+  subTitle(ctx, `4.2 Operating Expenses (${report.financials.currency})`);
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
@@ -486,9 +596,9 @@ export async function exportReportToPdf(
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
-  subTitle(ctx, "3.3 Revenue Scenarios");
+  subTitle(ctx, "4.3 Revenue Scenarios");
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
@@ -499,11 +609,10 @@ export async function exportReportToPdf(
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 12;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 8;
 
-  /* ---------- PAGE — Risks ---------- */
-  addPage(ctx);
-  sectionTitle(ctx, "4", "Risk Assessment");
+  // 5. Risks
+  sectionTitle(ctx, "5", "Risk Assessment");
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
@@ -514,11 +623,11 @@ export async function exportReportToPdf(
     alternateRowStyles: { fillColor: COLORS.surface },
     didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
   });
-  ctx.y = (pdf as any).lastAutoTable.finalY + 16;
+  ctx.y = (pdf as any).lastAutoTable.finalY + 8;
 
-  /* ---------- PAGE — Funding ---------- */
+  // 6. Funding
   if (report.fundingMix?.length) {
-    sectionTitle(ctx, "5", "Funding Mix");
+    sectionTitle(ctx, "6", "Funding Mix");
     autoTable(pdf, {
       startY: ctx.y,
       margin: { left: M, right: M },
@@ -529,26 +638,25 @@ export async function exportReportToPdf(
       alternateRowStyles: { fillColor: COLORS.surface },
       didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
     });
-    ctx.y = (pdf as any).lastAutoTable.finalY + 10;
+    ctx.y = (pdf as any).lastAutoTable.finalY + 6;
     if (report.fundingAdvisory) paragraph(ctx, report.fundingAdvisory, { size: 9 });
   }
 
-  /* ---------- PAGE — Recommendations & Next Steps ---------- */
-  addPage(ctx);
-  sectionTitle(ctx, "6", "Strategic Recommendations");
+  // 7. Recommendations
+  sectionTitle(ctx, "7", "Strategic Recommendations");
   bulletList(ctx, report.recommendations || [], { numbered: true });
 
+  // 8. Next steps
   if (report.nextSteps?.length) {
-    sectionTitle(ctx, "7", "Next Steps");
+    sectionTitle(ctx, "8", "Next Steps");
     bulletList(ctx, report.nextSteps, { numbered: true });
   }
 
-  // Optional: dashboard charts on a final summary page
+  // 9. Dashboard snapshot (only if charts captured)
   if (dashRadar || dashBars) {
-    addPage(ctx);
-    sectionTitle(ctx, "8", "Live Dashboard Snapshot");
-    if (dashRadar) { subTitle(ctx, "FMART Radar"); await placeChart(ctx, dashRadar, 230); }
-    if (dashBars)  { subTitle(ctx, "Score Distribution"); await placeChart(ctx, dashBars, 200); }
+    sectionTitle(ctx, "9", "Live Dashboard Snapshot");
+    if (dashRadar) { subTitle(ctx, "FMART Radar"); await placeChart(ctx, dashRadar, 210); }
+    if (dashBars)  { subTitle(ctx, "Score Distribution"); await placeChart(ctx, dashBars, 180); }
   }
 
   // Save
