@@ -115,7 +115,11 @@ const Results = () => {
     setDownloading(true);
     const toastId = toast.loading("Generating PDF file…");
     try {
-      const result = await exportReportToPdf(pdfRootRef.current, `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}.pdf`);
+      const result = await exportReportToPdf(
+        pdfRootRef.current,
+        `${report.reportId}_${inputs.projectName.replace(/\s+/g, "_")}.pdf`,
+        { report, inputs },
+      );
       toast.success(`PDF download started: ${result.fileName}`, { id: toastId });
     } catch (e: any) {
       toast.error(e?.message || "PDF export failed.", { id: toastId });
