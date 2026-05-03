@@ -112,7 +112,8 @@ function addPage(ctx: PdfCtx) {
 }
 
 function sectionTitle(ctx: PdfCtx, n: string, text: string) {
-  ensureSpace(ctx, 28);
+  ensureSpace(ctx, 26);
+  if (ctx.y > 80) ctx.y += 4;
   const { pdf } = ctx;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
@@ -120,17 +121,18 @@ function sectionTitle(ctx: PdfCtx, n: string, text: string) {
   pdf.text(`${n}.`, M, ctx.y);
   setColor(pdf, COLORS.text);
   pdf.text(text.toUpperCase(), M + 18, ctx.y);
-  ctx.y += 16;
+  ctx.y += 14;
 }
 
 function subTitle(ctx: PdfCtx, text: string) {
-  ensureSpace(ctx, 22);
+  ensureSpace(ctx, 18);
+  ctx.y += 2;
   const { pdf } = ctx;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9.5);
   setColor(pdf, [51, 65, 85]);
   pdf.text(text.toUpperCase(), M, ctx.y);
-  ctx.y += 12;
+  ctx.y += 11;
 }
 
 function paragraph(ctx: PdfCtx, text: string, opts: { size?: number; color?: [number, number, number]; gap?: number } = {}) {
@@ -141,13 +143,13 @@ function paragraph(ctx: PdfCtx, text: string, opts: { size?: number; color?: [nu
   pdf.setFontSize(size);
   setColor(pdf, opts.color ?? COLORS.text);
   const lines = pdf.splitTextToSize(text, CONTENT_W) as string[];
-  const lh = size * 1.4;
+  const lh = size * 1.35;
   for (const ln of lines) {
     ensureSpace(ctx, lh);
     pdf.text(ln, M, ctx.y);
     ctx.y += lh;
   }
-  ctx.y += opts.gap ?? 4;
+  ctx.y += opts.gap ?? 3;
 }
 
 function bulletList(ctx: PdfCtx, items: string[], opts: { numbered?: boolean; size?: number } = {}) {
