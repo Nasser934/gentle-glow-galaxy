@@ -82,6 +82,7 @@ const Index = () => {
         </div>
       </nav>
 
+      <main>
       {/* ---------- Hero ---------- */}
       <header className="relative overflow-hidden">
         <div className="hero-gradient pointer-events-none absolute inset-0" />
@@ -266,6 +267,7 @@ const Index = () => {
         </div>
       </section>
 
+      </main>
       {/* ---------- Footer ---------- */}
       <footer className="border-t border-border/60 py-8">
         <div className="container mx-auto flex flex-col items-center justify-between gap-3 px-6 text-[12px] text-muted-foreground sm:flex-row">
