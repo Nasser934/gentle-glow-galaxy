@@ -22,7 +22,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 9%;
 
-    --primary: 234 56% 60%;          /* #5e6ad2 brand indigo */
+    --primary: 234 56% 48%;          /* darkened for WCAG AA contrast on light bg */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 220 14% 96%;
