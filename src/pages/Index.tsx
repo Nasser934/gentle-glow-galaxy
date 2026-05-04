@@ -82,6 +82,7 @@ const Index = () => {
         </div>
       </nav>
 
+      <main>
       {/* ---------- Hero ---------- */}
       <header className="relative overflow-hidden">
         <div className="hero-gradient pointer-events-none absolute inset-0" />
