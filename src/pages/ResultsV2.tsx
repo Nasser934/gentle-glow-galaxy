@@ -111,9 +111,9 @@ const ResultsV2 = () => {
       return;
     }
     setBusy("export");
-    const id = toast.loading("Generating PDF report…");
+    const id = toast.loading("Generating full PDF report…");
     try {
-      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV2");
+      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV3");
       const result = await exportReportToPdfV2(exportRootRef.current, `${baseFileName}.pdf`, { report, inputs });
       toast.success(`PDF download started: ${result.fileName}`, { id });
     } catch (error: unknown) {
@@ -164,7 +164,7 @@ const ResultsV2 = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="sm" disabled={busy === "export"} className="h-8 gap-1.5">{busy === "export" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Export</Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={exportPdf} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPdf} className="gap-2"><FileText className="h-4 w-4 text-primary" /> Full PDF report (.pdf)</DropdownMenuItem>
                 <DropdownMenuItem onClick={exportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
                 <DropdownMenuItem onClick={exportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
               </DropdownMenuContent>
