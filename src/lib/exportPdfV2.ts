@@ -2,15 +2,17 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
-type PdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number } };
+type PdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number }; putTotalPages?: (placeholder: string) => void };
 type PdfExportPayload = { report: FeasibilityReport; inputs: ConceptInputs };
 type Cell = string | number;
 
+const totalPagesPlaceholder = "{total_pages_count_string}";
 const page = { width: 595.28, height: 841.89, margin: 48, bottom: 62 };
 const color = {
   navy: [0, 32, 96] as [number, number, number],
   teal: [0, 163, 161] as [number, number, number],
   amber: [232, 160, 0] as [number, number, number],
+  green: [27, 107, 58] as [number, number, number],
   red: [192, 57, 43] as [number, number, number],
   text: [26, 26, 46] as [number, number, number],
   muted: [88, 96, 112] as [number, number, number],
@@ -57,17 +59,25 @@ const acv = (report: FeasibilityReport) => {
   const m = t.match(/\$?(\d+(?:\.\d+)?)\s*k\s*ACV/i);
   return m ? Number(m[1]) * 1000 : 100_000;
 };
+function correctedMarket(report: FeasibilityReport) {
+  const rawTam = parseAmount(report.market.tamValue, 1_900_000_000) / 1_000_000_000;
+  const rawSam = parseAmount(report.market.samValue, 2_100_000_000) / 1_000_000_000;
+  const som = parseAmount(report.market.somValue, 85_000_000) / 1_000_000_000;
+  const correctedTam = rawSam >= rawTam ? Math.max(rawSam * 2.4, rawTam) : rawTam;
+  return { tam: correctedTam, sam: Math.min(rawSam, correctedTam * 0.65), som: Math.min(som, Math.min(rawSam, correctedTam * 0.65)), tamCorrected: rawSam >= rawTam };
+}
 
-function header(pdf: jsPDF, title: string, reportId: string) {
+function header(pdf: jsPDF, title: string, reportId: string, section = "Feasibility Report") {
   fc(pdf, color.navy); pdf.rect(0, 0, page.width, 8, "F");
   tc(pdf, color.navy); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
   pdf.text("CONCEPT AI · FEASIBILITY REPORT", page.margin, 28);
   tc(pdf, color.muted); pdf.setFont("helvetica", "normal"); pdf.text(title || "Untitled", page.width - page.margin, 28, { align: "right" });
   dc(pdf, color.border); pdf.line(page.margin, page.height - 42, page.width - page.margin, page.height - 42);
-  pdf.setFontSize(7.5); pdf.text(`Report ${reportId} | Concept AI | Page ${pdf.getNumberOfPages()}`, page.margin, page.height - 26);
+  pdf.setFontSize(7.2);
+  pdf.text(`Report ${reportId} | ${section} | Concept AI | Confidential | Page ${pdf.getNumberOfPages()} of ${totalPagesPlaceholder}`, page.margin, page.height - 26);
 }
-function addPage(pdf: jsPDF, title: string, reportId: string) { pdf.addPage(); header(pdf, title, reportId); return 62; }
-function need(pdf: jsPDF, y: number, h: number, title: string, reportId: string) { return y + h > page.height - page.bottom ? addPage(pdf, title, reportId) : y; }
+function addPage(pdf: jsPDF, title: string, reportId: string, section?: string) { pdf.addPage(); header(pdf, title, reportId, section); return 62; }
+function need(pdf: jsPDF, y: number, h: number, title: string, reportId: string, section?: string) { return y + h > page.height - page.bottom ? addPage(pdf, title, reportId, section) : y; }
 function cover(pdf: jsPDF, report: FeasibilityReport, inputs: ConceptInputs, model: string) {
   fc(pdf, color.navy); pdf.rect(0, 0, page.width, page.height, "F");
   fc(pdf, [0, 22, 70]); pdf.rect(0, page.height - 112, page.width, 112, "F");
@@ -78,12 +88,10 @@ function cover(pdf: jsPDF, report: FeasibilityReport, inputs: ConceptInputs, mod
   pdf.text(`${inputs.industry || "Strategic Feasibility"} · ${inputs.location || "Target market"}`, page.margin, 190 + lines.length * 34);
   tc(pdf, color.white); pdf.setFont("helvetica", "normal"); pdf.setFontSize(11);
   pdf.text(`${clean(report.classification, "Confidential")} — ${model}`, page.margin, 270);
-  pdf.setFontSize(9); pdf.text(`Report ID: ${clean(report.reportId)}`, page.margin, page.height - 72);
-  pdf.text(`Date: ${clean(report.dateIssued)}`, page.margin + 170, page.height - 72);
-  pdf.text(`Prepared by: ${clean(report.preparedBy, "Concept AI")}`, page.margin + 310, page.height - 72);
+  pdf.setFontSize(9); pdf.text(`Report ID: ${clean(report.reportId)} | Date: ${clean(report.dateIssued)} | Prepared by: ${clean(report.preparedBy, "Concept AI")}`, page.margin, page.height - 72);
 }
 function major(pdf: jsPDF, y: number, label: string, action: string, title: string, reportId: string) {
-  y = need(pdf, y, 62, title, reportId);
+  y = need(pdf, y, 62, title, reportId, label);
   fc(pdf, color.navy); pdf.rect(page.margin, y - 10, page.width - page.margin * 2, 3, "F");
   tc(pdf, color.navy); pdf.setFont("helvetica", "bold"); pdf.setFontSize(12);
   const lines = pdf.splitTextToSize(`${label.toUpperCase()} — ${action}`, page.width - page.margin * 2) as string[];
@@ -93,7 +101,7 @@ function major(pdf: jsPDF, y: number, label: string, action: string, title: stri
 }
 function sub(pdf: jsPDF, y: number, label: string, title: string, reportId: string) {
   y = need(pdf, y, 26, title, reportId);
-  tc(pdf, color.navy); pdf.setFont("helvetica", "bold"); pdf.setFontSize(10.5); pdf.text(label.toUpperCase(), page.margin, y);
+  tc(pdf, color.navy); pdf.setFont("helvetica", "bold"); pdf.setFontSize(10.2); pdf.text(label.toUpperCase(), page.margin, y);
   return y + 14;
 }
 function para(pdf: jsPDF, y: number, text: string, title: string, reportId: string) {
@@ -157,37 +165,38 @@ function methodologyRows(report: FeasibilityReport): Cell[][] {
   return dims.map((d) => [d[0].toUpperCase() + d.slice(1), w?.[d] !== undefined ? pct(w[d] * 100) : "—", conf?.[d] !== undefined ? pct(conf[d]) : "—", clean(rat?.[d])]);
 }
 function marketRows(report: FeasibilityReport): Cell[][] {
-  const tam = parseAmount(report.market.tamValue, 100_000_000_000) / 1_000_000_000;
-  const sam = parseAmount(report.market.samValue, 25_000_000_000) / 1_000_000_000;
-  const tamCagr = parseCagr(report.market.tamCagr, 0.164);
-  const samCagr = parseCagr(report.market.samCagr, 0.11);
-  return Array.from({ length: 5 }, (_, i) => [2026 + i, (tam * Math.pow(1 + tamCagr, i)).toFixed(1), (sam * Math.pow(1 + samCagr, i)).toFixed(1)]);
+  const m = correctedMarket(report);
+  const tamCagr = parseCagr(report.market.tamCagr, 0.142);
+  const samCagr = parseCagr(report.market.samCagr, tamCagr);
+  return Array.from({ length: 5 }, (_, i) => [2026 + i, (m.tam * Math.pow(1 + tamCagr, i)).toFixed(1), (m.sam * Math.pow(1 + samCagr, i)).toFixed(1)]);
 }
 function wedgeFor(name: string, inputs: ConceptInputs) {
   const n = name.toLowerCase();
+  if (/ibm|cloud pak/.test(n)) return "Modular API-first deployment in 8-12 weeks versus IBM's heavy implementation cycles; transparent per-agency pricing versus bundled mainframe licensing.";
+  if (/palantir|gotham|foundry/.test(n)) return "Open data model with audit-accessible logic versus proprietary black-box analytics, supporting oversight and public procurement accountability.";
+  if (/tyler/.test(n)) return "Cross-departmental data exchange beyond justice and law-enforcement silos, supporting health, finance and transport agencies on one governed layer.";
   if (/aws|redshift|quicksight/.test(n)) return "Business-user dashboards with predictable per-seat pricing, reducing the AWS cost black-box and data-engineering dependency.";
   if (/snowflake/.test(n)) return "Predictable packaged analytics experience versus egress-sensitive consumption and separate BI tooling.";
   if (/tableau|salesforce/.test(n)) return "Lower enterprise TCO with fewer creator-license constraints and lighter dashboard administration.";
-  if (/azure|synapse|power bi|microsoft/.test(n)) return "No DAX learning curve; analysts can build governed dashboards faster with less IT dependency.";
+  if (/azure|synapse|power bi|microsoft|oracle|oci/.test(n)) return "Pre-existing FedRAMP pathway plus agency-specific workflow logic that reduces custom build work across inter-agency data exchanges.";
   if (/looker|google/.test(n)) return "Self-service analytics without requiring LookML expertise, reducing dependency on data engineering.";
   if (/sap/.test(n)) return "Faster 8-12 week deployment versus long ERP implementation cycles and SI-heavy delivery.";
-  if (/oracle/.test(n)) return "Flexible licensing and modern UI versus rigid contracts and DBA-heavy operation.";
   return `${inputs.projectName || "The platform"} should compete through a named workflow wedge tied to the incumbent's specific friction.`;
 }
 function architectureRows(internal: boolean): Cell[][] {
   if (internal) return [["Integration Layer", "API gateway + ETL/ELT connectors", "Standardize SAP, Oracle, SQL Server, Excel and departmental app ingestion"], ["Data Store", "Hybrid warehouse/lakehouse", "Support data residency, governed datasets and scalable analytics"], ["Governance", "Catalog, lineage, RBAC and audit logs", "Reduce conflicting departmental reports"], ["Analytics Layer", "Semantic model + BI dashboards", "Governed self-service reporting"], ["Security", "SSO, encryption and monitoring", "Reduce breach risk and support compliance review"]];
-  return [["Application Layer", "Multi-tenant enterprise SaaS", "Workspace, roles, usage telemetry and admin controls"], ["Data Layer", "Cloud warehouse + connector framework", "ERP/CRM/Snowflake/Redshift connectors and governed datasets"], ["Security", "SSO, SOC2 roadmap, audit logs", "Enterprise procurement requirement"], ["Deployment", "Cloud marketplace + private cloud option", "Reduce buying and compliance friction"], ["AI Layer", "Natural-language query and anomaly detection", "Business-user differentiation beyond dashboards"]];
+  return [["Application Layer", "Multi-tenant enterprise SaaS", "Workspace, roles, usage telemetry and admin controls"], ["Data Layer", "Secure connector framework", "Agency, ERP, justice, finance and health-system data exchange"], ["Security", "Zero Trust, audit logs, SOC2/FedRAMP roadmap", "Core buying requirement for public-sector data sharing"], ["Deployment", "Cloud marketplace + sovereign/private cloud", "Support national data-residency and procurement requirements"], ["AI Layer", "Natural-language query and anomaly detection", "Business-user differentiation beyond static dashboards"]];
 }
 function riskOwner(risk: string) {
   const t = risk.toLowerCase();
   if (/legacy|integration|technical|engineering/.test(t)) return "CTO / Data Platform Lead";
   if (/change|adoption|resistance|churn/.test(t)) return "Customer Success Lead";
-  if (/security|privacy|compliance|law/.test(t)) return "CISO / Legal Counsel";
-  if (/market|competition|pricing|gtm/.test(t)) return "Commercial Lead";
+  if (/security|privacy|compliance|law|cyber/.test(t)) return "CISO / Legal Counsel";
+  if (/market|competition|pricing|gtm|policy|funding/.test(t)) return "Executive Sponsor";
   return "Executive Sponsor";
 }
 function riskRows(report: FeasibilityReport): Cell[][] {
-  const base = report.financials.capExTotal?.mid || parseAmount(report.financials.investmentRange, 3_000_000);
+  const base = report.financials.capExTotal?.mid || parseAmount(report.financials.investmentRange, 15_000_000);
   const prob = { Low: 15, Med: 35, High: 60 } as const;
   const impact = { Low: 0.1, Med: 0.25, High: 0.45 } as const;
   return report.risks.map((r) => {
@@ -204,9 +213,9 @@ function opexRows(report: FeasibilityReport, internal: boolean): Cell[][] {
 }
 function enterpriseCashFlow(report: FeasibilityReport): Cell[][] {
   const monthlyContract = acv(report) / 12;
-  const baseOpex = report.financials.opEx?.reduce((s, x) => s + (Number.isFinite(x.monthly) ? x.monthly : 0), 0) || 230_000;
-  const monthlyOpex = baseOpex + 65_000;
-  let cash = report.financials.capExTotal?.mid || 3_000_000;
+  const baseOpex = report.financials.opEx?.reduce((s, x) => s + (Number.isFinite(x.monthly) ? x.monthly : 0), 0) || 575_000;
+  const monthlyOpex = baseOpex + (report.financials.opEx?.some((x) => /customer success/i.test(x.category)) ? 0 : 65_000);
+  let cash = report.financials.capExTotal?.mid || 15_000_000;
   let active = 0;
   const logos = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7];
   return logos.map((n, i) => {
@@ -221,20 +230,23 @@ function enterpriseScenarioRows(report: FeasibilityReport): Cell[][] {
   const a = acv(report);
   return [["Optimistic", "20%", "125 enterprises", money(report.financials.currency, 125 * a), "1%", "18 months"], ["Base Case", "60%", "45 enterprises", money(report.financials.currency, 45 * a), "2.5%", "22 months"], ["Pessimistic", "20%", "12 enterprises", money(report.financials.currency, 12 * a), "6%", "40 months"]];
 }
+function sensitivityRows(report: FeasibilityReport): Cell[][] {
+  return [["Monthly churn", "1%", "2.5%", "6%", "Highest break-even sensitivity"], ["CAC / procurement cost", "USD 150k", "USD 250k", "USD 400k", "Controls payback and runway"], ["Pilot conversion", "50%", "30%", "15%", "Determines if Year 1 customer plan is credible"], ["Cloud/SOC run cost", "-10%", "Base", "+20%", "Pressure-tests OpEx resilience"]];
+}
 function investorRows(report: FeasibilityReport): Cell[][] {
   const a = acv(report), customers = [12, 45, 85, 140, 220], mult = [6, 7, 8, 9, 10];
   return customers.map((count, i) => [`Y${i + 1}`, `${count} customers`, money(report.financials.currency, count * a), `${mult[i]}x ARR`, money(report.financials.currency, count * a * mult[i])]);
 }
 function pricingRows(report: FeasibilityReport): Cell[][] {
   const a = acv(report);
-  return [["Pilot", "1 business unit / 25-50 users", money(report.financials.currency, 50_000), "90-day pilot, 3 connectors, guided implementation"], ["Enterprise Core", "50-500 users", money(report.financials.currency, a), "Governed dashboards, 10 connectors, SSO, audit logs, standard SLA"], ["Enterprise Plus", "500+ users / regulated workloads", money(report.financials.currency, a * 2.5), "Advanced governance, data residency, premium support, custom connectors"]];
+  return [["Pilot", "1 agency / 25-50 users", money(report.financials.currency, 50_000), "90-day pilot, 3 connectors, guided implementation"], ["Enterprise Core", "50-500 users", money(report.financials.currency, a), "Governed exchange, 10 connectors, SSO, audit logs, standard SLA"], ["National Plus", "500+ users / regulated workloads", money(report.financials.currency, a * 2.5), "FedRAMP/high-impact controls, data residency, premium support, custom connectors"]];
 }
 function enterpriseGtmRows(): Cell[][] {
-  return [["Founder-led enterprise outbound", "Win design partners", "Matches $50M+ target customers and security-heavy procurement.", "60 target accounts / 12 SQLs / 4 pilots"], ["Cloud marketplace co-sell", "Reduce procurement friction", "AWS/Azure/GCP marketplace listing shortens vendor onboarding.", "2 listings / 6 co-sell opportunities"], ["Systems integrator partners", "Access ERP/CRM projects", "SIs already own data transformation budgets.", "3 partners / 8 referred opportunities"], ["Product-led sandbox", "Expansion only", "Used after enterprise approval for team-level adoption.", "20 expansion teams inside signed customers"]];
+  return [["Founder-led government outbound", "Win design partners", "Matches procurement-heavy public-sector buying.", "60 target accounts / 12 SQLs / 4 pilots"], ["Cloud marketplace co-sell", "Reduce procurement friction", "AWS/Azure/GCP marketplace listing shortens vendor onboarding.", "2 listings / 6 co-sell opportunities"], ["Systems integrator partners", "Access agency modernization programs", "SIs already own data transformation budgets.", "3 partners / 8 referred opportunities"], ["Product-led sandbox", "Expansion only", "Used after central approval for agency-level adoption.", "20 expansion teams inside signed customers"]];
 }
 function phaseGateRows(internal: boolean): Cell[][] {
   if (internal) return [["0. Validation", "0-8 weeks", "Baseline reporting hours, data-quality defects and cost-of-delay quantified", "No named owners or no measurable ROI baseline"], ["1. MVP", "2-6 months", "Pilot domain migrated; data quality score improves by at least 20%", "Security controls fail or pilot users reject workflow"], ["2. Pilot", "6-12 months", "At least 60% active usage and at least 25% reporting-time reduction", "Adoption below 40% after training"], ["3. Scale", "12-24 months", "Benefits dashboard proves run-rate savings exceed OpEx", "Savings fail to cover incremental run cost"]];
-  return [["0. Validation", "0-8 weeks", "15 enterprise interviews, 3 LOIs, security requirements mapped", "Fewer than 2 LOIs or no validated ACV"], ["1. MVP", "2-6 months", "3 connectors live, SOC2 plan active, first paid pilot signed", "No paid pilot or severe integration blockers"], ["2. Pilot", "6-12 months", "3 paying pilots, NPS at least 35, churn intent at most 3%", "MRR below USD 50k or NPS below 20"], ["3. Scale", "12-24 months", "CAC payback below 18 months and 12+ enterprise customers", "Pipeline conversion below 15% or gross retention below 90%"]];
+  return [["0. Validation", "0-8 weeks", "15 enterprise interviews, 3 LOIs, security requirements mapped", "Fewer than 2 LOIs or no validated ACV"], ["1. MVP", "2-6 months", "3 connectors live, SOC2/FedRAMP plan active, first paid pilot signed", "No paid pilot or severe integration blockers"], ["2. Pilot", "6-12 months", "3 paying pilots, NPS at least 35, churn intent at most 3%", "MRR below USD 50k or NPS below 20"], ["3. Scale", "12-24 months", "CAC payback below 18 months and 12+ customers", "Pipeline conversion below 15% or gross retention below 90%"]];
 }
 function internalRoi(report: FeasibilityReport) {
   const users = 120, hours = 6, weeks = 52, rate = 85, recovery = 0.55;
@@ -255,42 +267,38 @@ function internalCashFlow(report: FeasibilityReport): Cell[][] {
   });
 }
 function diagramFmart(pdf: jsPDF, y: number, report: FeasibilityReport, title: string, reportId: string) {
-  y = need(pdf, y, 135, title, reportId);
-  y = sub(pdf, y, "FMART Score Visual", title, reportId);
+  y = need(pdf, y, 135, title, reportId, "FMART"); y = sub(pdf, y, "FMART Score Visual", title, reportId);
   const rows = [["Financial", report.scores.financial], ["Market", report.scores.market], ["Achievability", report.scores.achievability], ["Risk", report.scores.risk], ["Timing", report.scores.timing], ["Operational", report.scores.operational]] as const;
-  rows.forEach(([label, val], i) => {
-    const yy = y + i * 15;
-    tc(pdf, color.text); pdf.setFontSize(7.5); pdf.text(label, page.margin, yy);
-    dc(pdf, color.border); pdf.rect(page.margin + 85, yy - 7, 180, 7);
-    fc(pdf, color.teal); pdf.rect(page.margin + 85, yy - 7, 18 * val, 7, "F");
-    pdf.text(score(val), page.margin + 275, yy);
-  });
+  rows.forEach(([label, val], i) => { const yy = y + i * 15; tc(pdf, color.text); pdf.setFontSize(7.5); pdf.text(label, page.margin, yy); dc(pdf, color.border); pdf.rect(page.margin + 85, yy - 7, 180, 7); fc(pdf, color.teal); pdf.rect(page.margin + 85, yy - 7, 18 * val, 7, "F"); pdf.text(score(val), page.margin + 275, yy); });
   return y + rows.length * 15 + 16;
 }
 function diagramMarket(pdf: jsPDF, y: number, report: FeasibilityReport, title: string, reportId: string) {
-  y = need(pdf, y, 110, title, reportId);
-  y = sub(pdf, y, "Market Funnel Snapshot", title, reportId);
-  const vals = [["TAM", report.market.tamValue], ["SAM", report.market.samValue], ["SOM", report.market.somValue]];
-  vals.forEach(([label, value], i) => {
-    fc(pdf, i === 0 ? color.navy : i === 1 ? color.teal : color.amber);
-    const w = 260 - i * 55; pdf.roundedRect(page.margin + i * 27, y + i * 22, w, 16, 3, 3, "F");
-    tc(pdf, color.white); pdf.setFont("helvetica", "bold"); pdf.setFontSize(7.5); pdf.text(`${label}: ${clean(value)}`, page.margin + i * 27 + 8, y + i * 22 + 11);
-  });
-  return y + 88;
+  const m = correctedMarket(report);
+  y = need(pdf, y, 120, title, reportId, "Market"); y = sub(pdf, y, "TAM / SAM / SOM Funnel", title, reportId);
+  const vals = [["TAM", `$${m.tam.toFixed(1)}B`], ["SAM", `$${m.sam.toFixed(1)}B`], ["SOM", `$${(m.som * 1000).toFixed(0)}M`]];
+  vals.forEach(([label, value], i) => { fc(pdf, i === 0 ? color.navy : i === 1 ? color.teal : color.amber); const w = 280 - i * 60; pdf.roundedRect(page.margin + i * 30, y + i * 23, w, 17, 3, 3, "F"); tc(pdf, color.white); pdf.setFont("helvetica", "bold"); pdf.setFontSize(7.8); pdf.text(`${label}: ${value}`, page.margin + i * 30 + 8, y + i * 23 + 12); });
+  if (m.tamCorrected) { tc(pdf, color.muted); pdf.setFontSize(7); pdf.text("TAM adjusted above SAM to preserve market-sizing hierarchy.", page.margin, y + 78); }
+  return y + 96;
 }
 function diagramCash(pdf: jsPDF, y: number, report: FeasibilityReport, internal: boolean, title: string, reportId: string) {
-  y = need(pdf, y, 105, title, reportId);
-  y = sub(pdf, y, internal ? "ROI Bridge Direction" : "MRR Ramp Direction", title, reportId);
+  y = need(pdf, y, 105, title, reportId, "Financial"); y = sub(pdf, y, internal ? "ROI Bridge Direction" : "MRR Ramp Direction", title, reportId);
   const data = internal ? internalCashFlow(report).slice(0, 12).map((r) => Number(String(r[4]).replace(/[^0-9-]/g, "")) || 0) : enterpriseCashFlow(report).slice(0, 12).map((r) => Number(String(r[4]).replace(/[^0-9]/g, "")) || 0);
   const max = Math.max(...data.map(Math.abs), 1);
-  data.forEach((v, i) => {
-    const h = Math.max(2, Math.abs(v) / max * 46);
-    fc(pdf, v < 0 ? color.red : color.teal);
-    pdf.rect(page.margin + i * 18, y + 52 - h, 10, h, "F");
-  });
-  dc(pdf, color.border); pdf.line(page.margin, y + 54, page.margin + 220, y + 54);
-  tc(pdf, color.muted); pdf.setFontSize(7); pdf.text("M1", page.margin, y + 66); pdf.text("M12", page.margin + 198, y + 66);
-  return y + 80;
+  data.forEach((v, i) => { const h = Math.max(2, Math.abs(v) / max * 46); fc(pdf, v < 0 ? color.red : color.teal); pdf.rect(page.margin + i * 18, y + 52 - h, 10, h, "F"); });
+  dc(pdf, color.border); pdf.line(page.margin, y + 54, page.margin + 220, y + 54); tc(pdf, color.muted); pdf.setFontSize(7); pdf.text("M1", page.margin, y + 66); pdf.text("M12", page.margin + 198, y + 66); return y + 80;
+}
+function diagramRisk(pdf: jsPDF, y: number, report: FeasibilityReport, title: string, reportId: string) {
+  y = need(pdf, y, 120, title, reportId, "Risk"); y = sub(pdf, y, "Risk Exposure Ranking", title, reportId);
+  const rows = riskRows(report).slice(0, 5);
+  rows.forEach((r, i) => { const val = parseAmount(String(r[4]), 1000000); const w = Math.min(220, val / 2500000 * 180); const yy = y + i * 17; tc(pdf, color.text); pdf.setFontSize(7); pdf.text(String(r[0]).slice(0, 26), page.margin, yy); fc(pdf, i === 0 ? color.red : i < 3 ? color.amber : color.green); pdf.rect(page.margin + 150, yy - 8, w, 8, "F"); });
+  return y + rows.length * 17 + 18;
+}
+function diagramFunding(pdf: jsPDF, y: number, report: FeasibilityReport, title: string, reportId: string) {
+  y = need(pdf, y, 95, title, reportId, "Funding"); y = sub(pdf, y, "Funding Mix Snapshot", title, reportId);
+  const rows = report.fundingMix?.length ? report.fundingMix : [];
+  let x = page.margin;
+  rows.forEach((r, i) => { const share = Number(String(r.share).replace(/[^0-9]/g, "")) || 0; const w = share * 3; fc(pdf, i === 0 ? color.navy : i === 1 ? color.teal : color.amber); pdf.rect(x, y, w, 16, "F"); tc(pdf, color.text); pdf.setFontSize(7); pdf.text(`${r.source}: ${r.share}`, x, y + 31); x += w + 4; });
+  return y + 48;
 }
 function cleanCitations(report: FeasibilityReport) {
   return (report.research?.citations || []).filter((c) => !/hacker news|0 comments|job fair|moscone/i.test(`${c.source} ${c.title} ${c.takeaway}`)).slice(0, 8).map((c) => ({ ...c, title: clean(c.title).replace(/Ict/g, "ICT").replace(/Analyt\.$/i, "Analytics") }));
@@ -305,59 +313,65 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
   const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait", compress: true });
 
   cover(pdf, report, inputs, internal ? "Internal infrastructure ROI case" : "Enterprise contract SaaS investment case");
-  let y = addPage(pdf, title, reportId);
+  let y = addPage(pdf, title, reportId, "Governing Thesis");
 
   y = major(pdf, y, "1. Governing Thesis & Report Scope", internal ? "This is an internal ROI case, not a commercial SaaS valuation case" : "The investment case depends on enterprise ACV, churn control and proof of paid pilots", title, reportId);
   y = brief(pdf, y, internal ? "This case should be approved only if measured savings and risk reduction exceed TCO. Phase-gate funding is required because base-case run costs can outrun productivity benefits." : `This case uses one enterprise SaaS model: ACV-based revenue, enterprise logo acquisition, churn assumptions and investor return logic. Base-case success depends on 45 customers at ${money(report.financials.currency, acv(report))} ACV.`, title, reportId);
-  y = para(pdf, y, internal ? `${inputs.projectName} is an internal platform intended to reduce data silos, improve reporting speed and strengthen data governance.` : `${inputs.projectName} is an enterprise analytics platform for companies that need governed dashboards, faster data integration and business-user access without relying on multiple fragmented BI and warehouse tools. A typical target buyer is a $50M+ enterprise running Snowflake or Redshift for storage, Tableau or Power BI for dashboards, and separate operational systems; the product collapses this fragmented workflow into a governed analytics layer with predictable enterprise pricing.`, title, reportId);
-  y = tbl(pdf, sub(pdf, y, "SCR Argument Logic", title, reportId), title, reportId, [["Argument", "Evidence", "Implication"]], internal ? [["Need", "Manual reporting and siloed data slow decisions", "Measure current hours and defects before funding"], ["Economics", "ROI depends on recovered time exceeding OpEx", "Release budget by stage"], ["Risk", "Legacy integration and adoption dominate risk", "Name technical and change owners"]] : [["Market", "Enterprise cloud analytics has large TAM/SAM", "Target high-need regulated buyers"], ["Economics", "ACV and churn drive break-even", "Validate pricing through LOIs"], ["Execution", "Connector delivery and security review are key", "Gate scale funding after paid pilots"]], { first: 82, fs: 7.2 });
+  y = para(pdf, y, internal ? `${inputs.projectName} is an internal platform intended to reduce data silos, improve reporting speed and strengthen data governance.` : `${inputs.projectName} is a secure inter-agency data exchange layer for public-sector organisations that need governed sharing, auditability and rapid integration across siloed legacy systems. A target buyer may be a national agency coordinating health, justice and finance datasets with different schemas, legal constraints and security classifications; the platform creates one governed exchange layer rather than another dashboard-only tool.`, title, reportId);
+  y = tbl(pdf, sub(pdf, y, "SCR Argument Logic", title, reportId), title, reportId, [["Argument", "Evidence", "Implication"]], internal ? [["Need", "Manual reporting and siloed data slow decisions", "Measure current hours and defects before funding"], ["Economics", "ROI depends on recovered time exceeding OpEx", "Release budget by stage"], ["Risk", "Legacy integration and adoption dominate risk", "Name technical and change owners"]] : [["Market", "Government data exchange demand is rising", "Target high-need regulated buyers"], ["Economics", "ACV and churn drive break-even", "Validate pricing through LOIs"], ["Execution", "Certification, connectors and security review are key", "Gate scale funding after paid pilots"]], { first: 82, fs: 7.2 });
   y = diagramFmart(pdf, y, report, title, reportId);
-  y = tbl(pdf, sub(pdf, y, "FMART Scorecard", title, reportId), title, reportId, [["Dimension", "Score", "Key Finding"]], scoringRows(report), { first: 122, fs: 7.3, widths: { 1: 55 }, hiLast: true });
+  y = tbl(pdf, sub(pdf, y, "FMART Scorecard", title, reportId), title, reportId, [["Dimension", "Score", "Key Finding"]], scoringRows(report), { first: 122, fs: 7.3, widths: { 1: 70 }, hiLast: true });
   const method = methodologyRows(report); if (method.length) y = tbl(pdf, sub(pdf, y, "Scoring Methodology — Weights & Confidence", title, reportId), title, reportId, [["Dimension", "Weight", "Confidence", "Rationale"]], method, { first: 85, fs: 7.1 });
   y = takeaway(pdf, y, internal ? "Approve only if benefits tracking closes the TCO gap." : "Enterprise ACV, churn and paid pilots are the decision variables.", title, reportId);
 
-  y = major(pdf, y, "2. Situation: Market Context & Problem Definition", internal ? "External growth validates technology relevance; internal value capture decides funding" : "The real target is the reachable enterprise SOM, not the global market headline", title, reportId);
-  y = brief(pdf, y, internal ? "The market confirms that data integration demand is real, but internal adoption and run-cost control matter more than market size." : `The ${clean(report.market.tamValue)} TAM is attractive, but the practical target is the enterprise SOM: buyers with fragmented analytics stacks, cloud-cost pressure and urgent governance needs.`, title, reportId);
+  y = major(pdf, y, "2. Situation: Market Context & Problem Definition", internal ? "External growth validates technology relevance; internal value capture decides funding" : "Corrected market sizing keeps TAM above SAM and focuses on reachable SOM", title, reportId);
+  const m = correctedMarket(report);
+  y = brief(pdf, y, internal ? "The market confirms that data integration demand is real, but internal adoption and run-cost control matter more than market size." : `The corrected TAM is ${m.tam.toFixed(1)}B, the SAM is ${m.sam.toFixed(1)}B, and SOM remains a focused ${Math.round(m.som * 1000)}M target. This preserves the market hierarchy and avoids the prior SAM > TAM contradiction.`, title, reportId);
   y = fields(pdf, y, title, reportId, [["Project", clean(inputs.projectName)], ["Industry", clean(inputs.industry)], ["Location", clean(inputs.location)], ["Business Model", internal ? "Internal infrastructure / CapEx project" : "Enterprise SaaS / subscription software"], ["Value Model", internal ? "Efficiency ROI and risk reduction" : `Enterprise ACV of ${money(report.financials.currency, acv(report))}`], ["Budget Range", clean(inputs.budgetRange)], ["Timeline", clean(inputs.timeline)], ["Team Size", clean(inputs.teamSize)], ["Technology Readiness", clean(inputs.technologyReadiness)]]);
   y = diagramMarket(pdf, y, report, title, reportId);
   y = tbl(pdf, sub(pdf, y, "Market Sizing & Growth", title, reportId), title, reportId, [["Year", `TAM (${report.market.currency || "USD"}, billions)`, `SAM (${report.market.currency || "USD"}, billions)`]], marketRows(report), { first: 80, fs: 7.6 });
 
   y = major(pdf, y, "3. Team, Product & Architecture", "The product must explain what changes for the buyer before financial analysis starts", title, reportId);
-  y = brief(pdf, y, internal ? "The platform needs named accountability and a signed technical design before approval." : "The product promise is simple: reduce analytics stack fragmentation, give business users governed dashboards and keep cloud analytics cost predictable.", title, reportId);
+  y = brief(pdf, y, internal ? "The platform needs named accountability and a signed technical design before approval." : "The product promise is one governed exchange layer for agencies, with audit logs, security controls and connectors that reduce manual sharing and legacy integration friction.", title, reportId);
   y = tbl(pdf, sub(pdf, y, "Technology Architecture", title, reportId), title, reportId, [["Layer", "Recommended Choice", "Rationale"]], architectureRows(internal), { first: 90, fs: 7.1 });
 
   y = major(pdf, y, "4. Market Attractiveness & Competitive Positioning", "Each incumbent requires a distinct wedge tied to its specific friction", title, reportId);
-  y = brief(pdf, y, internal ? "SAP, Microsoft, Oracle and Snowflake compete on scale and ecosystem strength; the internal platform wins only if it shortens time-to-value and improves UAE-specific governance." : "The competitive wedge is not generic BI. It is predictable enterprise analytics with lower admin burden, stronger connector packaging and business-user usability.", title, reportId);
-  y = fields(pdf, y, title, reportId, [["Target Segment", internal ? "Internal enterprise departments" : "$50M+ revenue enterprises"], ["Customer Goal", clean(report.customer.goals)], ["Buying / Adoption Behavior", clean(report.customer.behavior)], ["Willingness to Pay / Fund", clean(report.customer.willingnessToPay)]]);
+  y = brief(pdf, y, internal ? "SAP, Microsoft, Oracle and Snowflake compete on scale and ecosystem strength; the internal platform wins only if it shortens time-to-value and improves governance." : "Microsoft/Oracle, IBM, Palantir and Tyler each require a different wedge: certification path, implementation speed, auditability and cross-department breadth.", title, reportId);
+  y = fields(pdf, y, title, reportId, [["Target Segment", internal ? "Internal enterprise departments" : "$50M+ public-sector and GovTech buyers"], ["Customer Goal", clean(report.customer.goals)], ["Buying / Adoption Behavior", clean(report.customer.behavior)], ["Willingness to Pay / Fund", clean(report.customer.willingnessToPay)]]);
   if (report.competitors?.length) y = tbl(pdf, y, title, reportId, [["Competitor", "Their Moat", "Weakness", "Our Wedge"]], report.competitors.map((comp) => [clean(comp.name), clean(comp.edge), clean(comp.weakness), wedgeFor(clean(comp.name), inputs)]), { first: 76, fs: 6.7 });
-  y = takeaway(pdf, y, "Each wedge now maps to the actual competitor in the table.", title, reportId);
+  y = takeaway(pdf, y, "The table now contains named, competitor-specific wedges instead of placeholders.", title, reportId);
 
   y = major(pdf, y, "5. Financial Model & Scenario Analysis", internal ? "Savings must exceed run cost before scale funding" : "Enterprise ACV, churn, customer success and cash burn drive the break-even path", title, reportId);
-  y = brief(pdf, y, internal ? "The base case must show monthly benefits exceeding monthly OpEx; if not, approval requires a mitigation plan." : `Base case assumes 45 enterprise customers at ${money(report.financials.currency, acv(report))} ACV and 2.5% monthly churn. Pessimistic churn at 6% pushes break-even materially later and must be validated before Series A.`, title, reportId);
+  y = brief(pdf, y, internal ? "The base case must show monthly benefits exceeding monthly OpEx; if not, approval requires a mitigation plan." : `Base case assumes 45 customers at ${money(report.financials.currency, acv(report))} ACV and 2.5% monthly churn. Pessimistic churn at 6% pushes break-even materially later and must be validated before Series A.`, title, reportId);
   y = fields(pdf, y, title, reportId, [["Investment Range", clean(report.financials.investmentRange)], ["Break-Even", internal ? clean(report.financials.breakEvenSummary) : "Month 22 target under Base Case enterprise-logo model"], ["LTV : CAC", internal ? "Not applicable — internal ROI project" : clean(report.financials.ltvCacRatio, "4.2:1")], ["CapEx Mid", money(report.financials.currency, report.financials.capExTotal.mid)]]);
   y = tbl(pdf, sub(pdf, y, "Operating Expenses", title, reportId), title, reportId, [["Category", "Monthly", "Annual"]], opexRows(report, internal), { first: 205, fs: 7.5 });
   if (internal) {
     const r = internalRoi(report);
-    y = tbl(pdf, sub(pdf, y, "Efficiency ROI Calculation", title, reportId), title, reportId, [["Driver", "Assumption", "Result"]], [["Population", `${r.users} analysts / data users`, "Named denominator"], ["Hours Saved", `${r.hours} hours per week`, "Manual reporting reduction"], ["Annual Gross Savings", money(report.financials.currency, r.annualSavings), `${r.users} x ${r.hours} x ${r.weeks} x ${money(report.financials.currency, r.rate)} x ${pct(r.recovery * 100)}`], ["Annual OpEx", money(report.financials.currency, r.annualOpex), "Run-rate cost"], ["Net Annual Benefit", money(report.financials.currency, r.net), "Savings less OpEx"]], { first: 115, fs: 7.1 });
+    y = tbl(pdf, sub(pdf, y, "Efficiency ROI Calculation", title, reportId), title, reportId, [["Driver", "Assumption", "Result"]], [["Population", `${r.users} analysts / data users`, "Named denominator"], ["Hours Saved", `${r.hours} hours per week", "Manual reporting reduction"], ["Annual Gross Savings", money(report.financials.currency, r.annualSavings), `${r.users} x ${r.hours} x ${r.weeks} x ${money(report.financials.currency, r.rate)} x ${pct(r.recovery * 100)}`], ["Annual OpEx", money(report.financials.currency, r.annualOpex), "Run-rate cost"], ["Net Annual Benefit", money(report.financials.currency, r.net), "Savings less OpEx"]], { first: 115, fs: 7.1 });
     y = diagramCash(pdf, y, report, internal, title, reportId);
     y = tbl(pdf, sub(pdf, y, "36-Month Internal ROI Cash-Flow Bridge", title, reportId), title, reportId, [["Month", "Adoption", "Gross Savings", "OpEx", "Net Cash Flow", "Cumulative Net vs CapEx"]], internalCashFlow(report), { first: 45, fs: 5.9 });
   } else {
     y = tbl(pdf, sub(pdf, y, "Revenue Scenarios", title, reportId), title, reportId, [["Scenario", "Probability", "Yr 1 Customers", "ARR", "Monthly Churn", "Break-Even"]], enterpriseScenarioRows(report), { first: 78, fs: 7.1 });
     y = diagramCash(pdf, y, report, internal, title, reportId);
     y = tbl(pdf, sub(pdf, y, "24-Month Enterprise MRR & Cash-Flow Bridge", title, reportId), title, reportId, [["Month", "New Logos", "Churn", "Active Accounts", "MRR", "Monthly OpEx", "Cash Position"]], enterpriseCashFlow(report), { first: 44, fs: 6.1 });
+    y = tbl(pdf, sub(pdf, y, "Static Sensitivity Snapshot", title, reportId), title, reportId, [["Driver", "Upside", "Base", "Downside", "Why It Matters"]], sensitivityRows(report), { first: 96, fs: 6.8 });
   }
 
   y = major(pdf, y, "6. Risk Register With Expected Value", "The risk table must show dollars, not only high/medium/low labels", title, reportId);
-  y = brief(pdf, y, "Risk exposure is now shown in the summary table with EV and named owners, so the reader does not need to jump pages to understand financial exposure.", title, reportId);
+  y = brief(pdf, y, "Risk exposure is shown with EV and named owners, so the reader does not need to jump pages to understand financial exposure.", title, reportId);
+  y = diagramRisk(pdf, y, report, title, reportId);
   y = tbl(pdf, y, title, reportId, [["Risk", "Probability", "Impact", "Level", "Expected Value", "Owner", "Mitigation"]], riskRows(report), { first: 78, fs: 6.2 });
 
   y = major(pdf, y, internal ? "7. Funding Structure & Internal ROI" : "7. Funding Structure & Investor Returns", internal ? "Funding should be staged against benefit realization" : "Investors need ACV-based ARR, retention and exit value clarity", title, reportId);
   y = brief(pdf, y, internal ? "Do not release full CapEx upfront; release it by validation, MVP, pilot and scale gates." : "The investment case must show what the investor owns in five years; ARR multiple logic provides the first-pass answer.", title, reportId);
-  if (!internal && report.fundingMix?.length) y = tbl(pdf, y, title, reportId, [["Source", "Share", "Amount", "Rationale"]], report.fundingMix.map((s) => [s.source, s.share, s.amount, s.rationale]), { first: 115, fs: 7.2 });
+  if (!internal && report.fundingMix?.length) {
+    y = diagramFunding(pdf, y, report, title, reportId);
+    y = tbl(pdf, y, title, reportId, [["Source", "Share", "Amount", "Rationale"]], report.fundingMix.map((s) => [s.source, s.share, s.amount, s.rationale]), { first: 115, fs: 7.2 });
+  }
   if (!internal) y = tbl(pdf, sub(pdf, y, "Five-Year Investor Return Model", title, reportId), title, reportId, [["Year", "Customers", "ARR", "Multiple", "Implied Valuation"]], investorRows(report), { first: 45, fs: 7.1 });
 
   y = major(pdf, y, internal ? "8. Internal Adoption Strategy" : "8. Go-to-Market Strategy", internal ? "Departmental rollout sequencing determines value realization" : "Enterprise-first GTM should replace SMB self-serve assumptions", title, reportId);
-  y = brief(pdf, y, internal ? "Adoption is the economic engine of the internal case." : "The primary motion is enterprise outbound, marketplace co-sell and SI partnerships; product-led sandbox is an expansion tactic only.", title, reportId);
+  y = brief(pdf, y, internal ? "Adoption is the economic engine of the internal case." : "The primary motion is government/enterprise outbound, marketplace co-sell and SI partnerships; product-led sandbox is an expansion tactic only.", title, reportId);
   if (internal) y = tbl(pdf, y, title, reportId, [["Workstream", "Owner", "Target", "Success Metric"]], [["Executive Mandate", "Executive Sponsor", "Participating departments", "Named data owners approved"], ["Training & Enablement", "Change Lead", "Analysts and power users", "75% active usage by Month 12"], ["Compliance", "CISO / Legal Counsel", "Security controls", "Audit logs validated"]], { first: 105, fs: 7.2 });
   else {
     y = tbl(pdf, y, title, reportId, [["Channel", "Role", "Rationale", "Year 1 Target"]], enterpriseGtmRows(), { first: 88, fs: 6.9 });
@@ -365,11 +379,11 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
   }
 
   y = major(pdf, y, "9. Implementation Roadmap", "Phase gates must define go/no-go thresholds, not just activities", title, reportId);
-  y = brief(pdf, y, "Each gate now gives quantified pass/fail logic, so funding can stop if evidence does not support scale.", title, reportId);
+  y = brief(pdf, y, "Each gate gives quantified pass/fail logic, so funding can stop if evidence does not support scale.", title, reportId);
   y = tbl(pdf, y, title, reportId, [["Phase", "Timeline", "Go Criteria", "No-Go Trigger"]], phaseGateRows(internal), { first: 68, fs: 6.8 });
 
-  y = major(pdf, y, "10. Strategic Recommendations", "Recommendations must be specific to the enterprise analytics wedge", title, reportId);
-  y = bullets(pdf, y, internal ? ["Start with one high-value data domain and measure reporting-hour reduction before scaling.", "Name accountable owners for data quality, platform architecture, change management and compliance.", "Use phase-gate funding releases tied to adoption, data-quality and savings thresholds."] : ["Position the product as an enterprise operational analytics layer, not a generic BI dashboard tool.", "Prioritize Redshift, Snowflake, Salesforce and ERP connectors because they map to enterprise buying pain.", "Lead with security and governance proof during sales, including SOC2, audit logs, SSO and data residency roadmap.", "Use enterprise outbound and cloud marketplace co-sell as the main GTM motion; keep PLG as expansion only."], title, reportId);
+  y = major(pdf, y, "10. Strategic Recommendations", "Recommendations must be specific to the inter-agency secure exchange wedge", title, reportId);
+  y = bullets(pdf, y, internal ? ["1. Start with one high-value data domain and measure reporting-hour reduction before scaling.", "2. Name accountable owners for data quality, platform architecture, change management and compliance.", "3. Use phase-gate funding releases tied to adoption, data-quality and savings thresholds."] : ["1. Lead with security-first positioning — make Zero Trust, FedRAMP path, audit logs and data residency the first sales proof points.", "2. Prioritize inter-agency workflows — start with justice-to-health or finance-to-benefits data flows where the pain is visible.", "3. Build connectors before dashboards — legacy integration is the core adoption barrier, not charting capability.", "4. Use SI and cloud marketplace channels — procurement-heavy agencies need buying paths they already trust.", "5. Create an oversight-ready audit model — differentiate against black-box competitors with explainable access and exchange logs."], title, reportId);
 
   y = major(pdf, y, "11. Appendix: Limitations, Assumptions & Primary Research", "The report is decision-useful but requires validation before final approval", title, reportId);
   y = fields(pdf, y, title, reportId, [["Assumptions", clean(inputs.assumptions)], ["Constraints", clean(inputs.constraints)], ["Success Factors", clean(inputs.successFactors)], ["Known Risks", clean(inputs.knownRisks)], ["Regulatory Considerations", clean(inputs.regulatoryConsiderations)], ["Dependencies", clean(inputs.dependencies)]]);
@@ -380,6 +394,7 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
     citations.forEach((c, i) => { y = para(pdf, y, `${i + 1}. ${clean(c.title)}. Source: ${clean(c.source)}. Key takeaway: ${clean(c.takeaway)}. URL: ${clean(c.url)}`, title, reportId); });
   }
 
+  (pdf as PdfWithAutoTable).putTotalPages?.(totalPagesPlaceholder);
   pdf.save(fileName);
   return { fileName, pages: pdf.getNumberOfPages() };
 }
