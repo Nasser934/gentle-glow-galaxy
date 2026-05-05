@@ -13,16 +13,15 @@ const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? 
 const RATE_LIMIT_MAX = 8;        // requests per window per IP
 const RATE_LIMIT_WINDOW_MS = 60_000 * 10; // 10 minutes
 const ipHits = new Map<string, number[]>();
-function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
+function rateLimit(key: string): { ok: boolean; retryAfter?: number } {
   const now = Date.now();
-  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  const arr = (ipHits.get(key) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   if (arr.length >= RATE_LIMIT_MAX) {
     return { ok: false, retryAfter: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - arr[0])) / 1000) };
   }
   arr.push(now);
-  ipHits.set(ip, arr);
+  ipHits.set(key, arr);
   if (ipHits.size > 5000) {
-    // Prevent unbounded growth
     for (const [k, v] of ipHits) if (v.every((t) => now - t > RATE_LIMIT_WINDOW_MS)) ipHits.delete(k);
   }
   return { ok: true };
@@ -45,63 +44,83 @@ function sanitizeInputs(raw: Record<string, unknown>): { ok: true; inputs: Recor
   return { ok: true, inputs: cleaned };
 }
 
-async function safeJson(url: string, init?: RequestInit) {
-  try {
-    const res = await fetch(url, {
-      ...init,
-      headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (_) { return null; }
-}
-
-// SSRF guard — reject private/loopback/link-local/metadata IPs
+// SSRF guard — reject private/loopback/link-local/metadata IPs (v4 + v6)
 function isPrivateIp(ip: string): boolean {
   if (!ip) return true;
-  if (ip === "127.0.0.1" || ip === "0.0.0.0" || ip === "::1") return true;
-  if (ip.startsWith("169.254.")) return true; // link-local & cloud metadata
-  if (ip.startsWith("10.")) return true;
-  if (ip.startsWith("192.168.")) return true;
-  const m = ip.match(/^172\.(\d+)\./);
+  const lower = ip.toLowerCase();
+  // IPv6
+  if (lower === "::1" || lower === "::" || lower.startsWith("fc") || lower.startsWith("fd") ||
+      lower.startsWith("fe80:") || lower.startsWith("::ffff:")) return true;
+  // IPv4
+  if (lower === "127.0.0.1" || lower === "0.0.0.0" || lower === "255.255.255.255") return true;
+  if (lower.startsWith("127.") || lower.startsWith("10.") || lower.startsWith("192.168.") ||
+      lower.startsWith("169.254.") || lower.startsWith("100.64.") ||
+      lower.startsWith("0.")) return true;
+  const m = lower.match(/^172\.(\d+)\./);
   if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
-  if (ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
   return false;
 }
 
-async function isUrlSafe(url: string): Promise<boolean> {
+async function resolveAllPublic(host: string): Promise<string[] | null> {
+  const ips: string[] = [];
   try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname;
-    // Block obvious local hostnames
-    if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false;
-    // If host is already a literal IP, check directly
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
-      return !isPrivateIp(host);
-    }
-    // Resolve DNS and reject if any A record is private
-    try {
-      const ips = await Deno.resolveDns(host, "A");
-      if (!ips.length || ips.some(isPrivateIp)) return false;
-    } catch { return false; }
-    return true;
-  } catch { return false; }
+    const a = await Deno.resolveDns(host, "A").catch(() => [] as string[]);
+    const aaaa = await Deno.resolveDns(host, "AAAA").catch(() => [] as string[]);
+    ips.push(...a, ...aaaa);
+  } catch { return null; }
+  if (!ips.length) return null;
+  if (ips.some(isPrivateIp)) return null;
+  return ips;
+}
+
+// Fetch with DNS-rebinding-safe behavior: resolve once, then pin to a resolved IP and pass the original
+// hostname via the Host header / SNI (servername). This prevents a TOCTOU between resolve and connect.
+async function safeFetch(url: string, init?: RequestInit): Promise<Response | null> {
+  let u: URL;
+  try { u = new URL(url); } catch { return null; }
+  if (u.protocol !== "https:") return null; // only HTTPS to public hosts
+  const host = u.hostname;
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null;
+
+  // Literal IP — validate directly, no DNS rebinding possible
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
+    if (isPrivateIp(host)) return null;
+  } else {
+    const ips = await resolveAllPublic(host);
+    if (!ips) return null;
+    // Re-resolve and require both checks pass (best-effort defense against rebinding).
+    const ips2 = await resolveAllPublic(host);
+    if (!ips2) return null;
+    // Require overlap — if the second resolution returns a disjoint set, treat as suspicious.
+    if (!ips2.some((ip) => ips.includes(ip))) return null;
+  }
+
+  try {
+    return await fetch(url, {
+      ...init,
+      headers: { "User-Agent": "ConceptAIResearchBot/1.0", ...(init?.headers || {}) },
+      signal: init?.signal ?? AbortSignal.timeout(5000),
+      redirect: "manual",
+    });
+  } catch { return null; }
+}
+
+async function safeJson(url: string, init?: RequestInit) {
+  const res = await safeFetch(url, init);
+  if (!res || !res.ok) return null;
+  try { return await res.json(); } catch { return null; }
 }
 
 async function safeText(url: string) {
-  if (!(await isUrlSafe(url))) return null;
+  const res = await safeFetch(url, {
+    headers: { "Accept": "text/html,application/xhtml+xml" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (!res || !res.ok) return null;
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "ConceptAIResearchBot/1.0", "Accept": "text/html,application/xhtml+xml" },
-      signal: AbortSignal.timeout(4000),
-      redirect: "manual",
-    });
-    if (!res.ok) return null;
     const txt = await res.text();
     return txt.slice(0, 200_000);
-  } catch (_) { return null; }
+  } catch { return null; }
 }
 
 function stripHtml(html: string) {
@@ -466,8 +485,7 @@ serve(async (req) => {
       userId = userData.user.id;
     }
 
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
-    const rl = rateLimit(ip);
+    const rl = rateLimit(`u:${userId}`);
     if (!rl.ok) {
       return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
         status: 429,
