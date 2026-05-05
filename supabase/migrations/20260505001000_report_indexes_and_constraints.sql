@@ -22,7 +22,7 @@ on public.report_comments (report_id, created_at asc);
 create index if not exists report_status_history_report_created_idx
 on public.report_status_history (report_id, created_at desc);
 
--- Defensive status constraint. Skip manually if this is already enforced by an enum.
+-- Defensive status constraint. Compatible with text or enum columns.
 do $$
 begin
   if not exists (
@@ -32,6 +32,6 @@ begin
   ) then
     alter table public.reports
     add constraint reports_status_allowed_chk
-    check (status in ('draft', 'in_review', 'approved', 'rejected'));
+    check (status::text in ('draft', 'in_review', 'approved', 'rejected'));
   end if;
 end $$;
