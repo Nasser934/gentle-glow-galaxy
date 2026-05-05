@@ -13,7 +13,7 @@ begin
     join pg_namespace ns on ns.oid = cls.relnamespace
     where ns.nspname = 'public'
       and cls.relname = 'report_status_history'
-      and 'a' = any(pol.polcmd::text[])
+      and pol.polcmd = 'a'
   loop
     execute format('drop policy if exists %I on public.report_status_history', policy_name);
   end loop;
@@ -25,7 +25,7 @@ drop policy if exists "report_status_history_insert_admin" on public.report_stat
 create policy "report_status_history_insert_admin"
 on public.report_status_history
 for insert
-with check (public.has_role(auth.uid(), 'admin'));
+with check (public.has_role(auth.uid(), 'admin'::text));
 
 -- 2) Restrict has_role to self-lookup to prevent role enumeration.
 -- This supports the common Lovable app_role enum.
