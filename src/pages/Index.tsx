@@ -82,7 +82,6 @@ const Index = () => {
         </div>
       </nav>
 
-      <main>
       {/* ---------- Hero ---------- */}
       <header className="relative overflow-hidden">
         <div className="hero-gradient pointer-events-none absolute inset-0" />
@@ -90,9 +89,9 @@ const Index = () => {
 
         <div className="container relative mx-auto px-6 pb-28 pt-24 text-center md:pt-32">
           <motion.div
-            initial={false}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0 }}
+            transition={{ duration: 0.6 }}
           >
             <div className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1 text-[12px] font-medium text-muted-foreground backdrop-blur">
               <span className="relative flex h-1.5 w-1.5">
