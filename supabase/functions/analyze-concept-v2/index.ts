@@ -28,6 +28,15 @@ function json(req: Request, body: unknown, status = 200) {
   });
 }
 
+function safePublicError(error: unknown) {
+  if (!(error instanceof Error)) return "Analysis failed. Please try again.";
+  if (error.message.startsWith("Invalid ")) return "The AI response did not match the expected report format. Please try again.";
+  if (error.message.includes("LOVABLE_API_KEY") || error.message.includes("SUPABASE") || error.message.includes("gateway")) {
+    return "Analysis service is temporarily unavailable. Please try again later.";
+  }
+  return "Analysis failed. Please try again.";
+}
+
 function getRecord(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid report field: ${field}`);
   return value as Record<string, unknown>;
@@ -161,7 +170,7 @@ serve(async (req) => {
     if (!sanitized.ok) return json(req, { error: sanitized.error }, sanitized.status);
 
     const key = Deno.env.get("LOVABLE_API_KEY");
-    if (!key) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!key) throw new Error("LOVABLE_API_KEY missing");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -179,14 +188,15 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
+      console.error("AI gateway failed", response.status);
       if (response.status === 429) return json(req, { error: "Rate limit exceeded. Try again shortly." }, 429);
       if (response.status === 402) return json(req, { error: "AI usage limit reached. Add credits to continue." }, 402);
-      throw new Error(`AI gateway ${response.status}`);
+      throw new Error("AI gateway unavailable");
     }
 
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) throw new Error("AI did not return structured report");
+    if (!args) throw new Error("Invalid AI report");
     const report = JSON.parse(args) as Report;
     report.reportId = typeof report.reportId === "string" ? report.reportId : `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     report.dateIssued = typeof report.dateIssued === "string" ? report.dateIssued : new Date().toISOString().slice(0, 10);
@@ -196,7 +206,7 @@ serve(async (req) => {
     validateReport(report);
     return json(req, report);
   } catch (error) {
-    console.error(error);
-    return json(req, { error: error instanceof Error ? error.message : "Internal server error" }, 500);
+    console.error("analyze-concept-v2 failed", error);
+    return json(req, { error: safePublicError(error) }, 500);
   }
 });
