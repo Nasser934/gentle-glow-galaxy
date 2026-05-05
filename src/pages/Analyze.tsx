@@ -24,6 +24,33 @@ type EssayField =
   | "assumptions" | "constraints" | "successFactors"
   | "knownRisks" | "regulatoryConsiderations" | "founderExperience";
 
+type FunctionContext = {
+  json?: () => Promise<{ error?: string }>;
+  text?: () => Promise<string>;
+};
+
+type FunctionErrorWithContext = Error & { context?: FunctionContext };
+
+const messageFromError = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+
+const getFunctionErrorDetail = async (error: unknown) => {
+  if (!(error instanceof Error)) return "Function request failed";
+  let detail = error.message;
+  const context = (error as FunctionErrorWithContext).context;
+  try {
+    if (context?.json) {
+      const body = await context.json();
+      if (body?.error) detail = body.error;
+    } else if (context?.text) {
+      const text = await context.text();
+      if (text) detail = text;
+    }
+  } catch {
+    // Keep original error message.
+  }
+  return detail;
+};
+
 const Analyze = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -51,8 +78,8 @@ const Analyze = () => {
       setInputs(data.draft);
       setShowBrief(false);
       toast.success("Draft generated. Review & edit before running analysis.");
-    } catch (e: any) {
-      toast.error(e?.message || "Could not generate draft.");
+    } catch (e: unknown) {
+      toast.error(messageFromError(e, "Could not generate draft."));
     } finally {
       setIsAutoFilling(false);
     }
@@ -68,8 +95,8 @@ const Analyze = () => {
       if (data?.error) throw new Error(data.error);
       if (data?.text) set(field, data.text);
       toast.success("Field completed by AI.");
-    } catch (e: any) {
-      toast.error(e?.message || "AI completion failed.");
+    } catch (e: unknown) {
+      toast.error(messageFromError(e, "AI completion failed."));
     } finally {
       setCompleting(null);
     }
@@ -95,21 +122,12 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
-      if (error) {
-        // FunctionsHttpError exposes the response body via .context
-        let detail = error.message;
-        try {
-          const ctx: any = (error as any).context;
-          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
-          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
-        } catch (_) { /* ignore */ }
-        throw new Error(detail);
-      }
+      const { data, error } = await supabase.functions.invoke("analyze-concept-v2", { body: { inputs } });
+      if (error) throw new Error(await getFunctionErrorDetail(error));
       if (data?.error) throw new Error(data.error);
       navigate("/results", { state: { report: data, inputs } });
-    } catch (e: any) {
-      toast.error(e?.message || "Analysis failed.");
+    } catch (e: unknown) {
+      toast.error(messageFromError(e, "Analysis failed."));
     } finally {
       setIsAnalyzing(false);
     }
@@ -144,7 +162,6 @@ const Analyze = () => {
       </nav>
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
-        {/* Brief auto-fill */}
         {showBrief && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -169,7 +186,6 @@ const Analyze = () => {
           </motion.div>
         )}
 
-        {/* Progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
             {STEPS.map((s, i) => (
