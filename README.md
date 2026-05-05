@@ -16,10 +16,10 @@ Concept AI turns a short concept brief into a structured feasibility report:
 - **FMART scoring** — Financial, Market, Achievability, Risk, Timing and Operational dimensions, each with a confidence score, rationale and configurable weights.
 - **Interactive dashboard** — radar chart, risk heatmap, market and CapEx visuals, methodology panel, evidence chips that link findings back to sources.
 - **Financial sensitivity** — driver sliders, tornado chart and a 2,000-iteration Monte Carlo simulation (P10 / P50 / P90 outcomes).
-- **Collaboration** — share via `/r/:slug`, threaded comments, status workflow (draft → in review → approved / rejected), in-app notifications.
+- **Private-first collaboration** — reports are saved private by default, then published only when the owner clicks Share. Owners can unshare links.
 - **Comparison mode** — pick any two saved reports and view them side by side.
 - **Multi-format export** — single PDF, executive PPTX deck, and a 7-sheet XLSX workbook with live formulas.
-- **Authentication** — email/password and Google sign-in. Reports are owner-only by default and shareable by slug.
+- **Authentication** — email/password and Google sign-in. Reports are owner-only by default and shareable by slug after publishing.
 
 ## Tech stack
 
@@ -36,10 +36,11 @@ src/pages
   Index            Landing
   Auth             Sign in / sign up (email + Google)
   Analyze          4-step concept brief
-  Results          Report + export dropdown
+  ResultsV2        Private-first report dashboard + export/share actions
+  Results          Legacy printable preview retained for reference
   Dashboard        My saved reports
   SharedReport     Public-by-slug view (/r/:slug)
-  Compare         Side-by-side comparison
+  Compare          Side-by-side comparison
 
 supabase/functions
   analyze-concept  Tavily + scraping + Gemini → FeasibilityReport
@@ -61,12 +62,13 @@ Requires Node.js 18+.
 
 ```bash
 npm install
-npm run dev          # start Vite at http://localhost:8080
-npm run lint         # run ESLint
-npm run typecheck    # run TypeScript checks
-npm test             # run Vitest unit tests
-npm run build        # production build
-npm run quality      # lint + typecheck + test + build
+npm run dev              # start Vite at http://localhost:8080
+npm run lint             # run ESLint
+npm run typecheck        # run TypeScript checks
+npm run typecheck:strict # strict TypeScript target for cleanup work
+npm test                 # run Vitest unit tests
+npm run build            # production build
+npm run quality          # lint + typecheck + test + build
 ```
 
 The `.env` file is generated and managed by Lovable Cloud — do not commit secrets. `.env.example` lists the required browser-safe variables:
