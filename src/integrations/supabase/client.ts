@@ -10,7 +10,11 @@ const missingEnvMessage =
 
 const createUnavailableClient = () =>
   new Proxy({} as ReturnType<typeof createClient<Database>>, {
-    get() {
+    get(target, prop) {
+      if (typeof prop === "symbol" || prop === "then" || prop === "toJSON") {
+        return Reflect.get(target, prop);
+      }
+
       throw new Error(missingEnvMessage);
     },
   });
