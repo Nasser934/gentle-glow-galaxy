@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const state = vi.hoisted(() => ({
   user: { id: "user-123" },
@@ -33,9 +34,12 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-describe("report helpers", async () => {
-  const { saveReport, publishReport, unpublishReport, deleteReport } = await import("./reports");
+const { saveReport, publishReport, unpublishReport, deleteReport } = await import("./reports");
 
+const minimalInputs = { projectName: "Alpha", industry: "Technology" } as unknown as ConceptInputs;
+const minimalReport = { reportId: "R1" } as unknown as FeasibilityReport;
+
+describe("report helpers", () => {
   beforeEach(() => {
     state.insertPayload = null;
     state.updatePayload = null;
@@ -44,7 +48,7 @@ describe("report helpers", async () => {
   });
 
   it("saves reports as private by default", async () => {
-    await saveReport({ projectName: "Alpha", industry: "Technology" } as any, { reportId: "R1" } as any);
+    await saveReport(minimalInputs, minimalReport);
 
     expect(state.insertPayload).toMatchObject({
       user_id: "user-123",
