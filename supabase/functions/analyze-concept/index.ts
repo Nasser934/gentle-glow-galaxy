@@ -13,7 +13,7 @@ const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? 
 const RATE_LIMIT_MAX = 8;        // requests per window per IP
 const RATE_LIMIT_WINDOW_MS = 60_000 * 10; // 10 minutes
 const ipHits = new Map<string, number[]>();
-function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
+function rateLimit(key: string): { ok: boolean; retryAfter?: number } {
   const now = Date.now();
   const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   if (arr.length >= RATE_LIMIT_MAX) {
