@@ -12,6 +12,11 @@ import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+type AuthMode = "signin" | "signup";
+type AuthLocationState = { from?: string };
+
+const isAuthMode = (value: string): value is AuthMode => value === "signin" || value === "signup";
+
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
     <path fill="#EA4335" d="M12 10.2v3.96h5.5c-.24 1.42-1.7 4.16-5.5 4.16-3.31 0-6-2.74-6-6.12s2.69-6.12 6-6.12c1.88 0 3.14.8 3.86 1.49l2.63-2.54C16.84 3.6 14.65 2.6 12 2.6 6.86 2.6 2.7 6.76 2.7 11.9s4.16 9.3 9.3 9.3c5.37 0 8.93-3.78 8.93-9.1 0-.61-.07-1.08-.16-1.55H12z"/>
@@ -22,13 +27,13 @@ const AuthPage = () => {
   const navigate = useNavigate();
   const loc = useLocation();
   const { user, loading: authLoading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const redirectTo = (loc.state as any)?.from || "/analyze";
+  const redirectTo = (loc.state as AuthLocationState | null)?.from || "/analyze";
 
   useEffect(() => {
     if (!authLoading && user) navigate(redirectTo, { replace: true });
@@ -52,8 +57,8 @@ const AuthPage = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Authentication failed");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Authentication failed");
     } finally {
       setBusy(false);
     }
@@ -64,8 +69,8 @@ const AuthPage = () => {
     try {
       const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
       if (result.error) throw result.error;
-    } catch (e: any) {
-      toast.error(e?.message || "Google sign-in failed");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Google sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -102,7 +107,7 @@ const AuthPage = () => {
             <div className="h-px flex-1 bg-border/60" /> or <div className="h-px flex-1 bg-border/60" />
           </div>
 
-          <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+          <Tabs value={mode} onValueChange={(v) => { if (isAuthMode(v)) setMode(v); }}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign in</TabsTrigger>
               <TabsTrigger value="signup">Sign up</TabsTrigger>
