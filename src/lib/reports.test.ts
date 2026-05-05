@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
+type MockUser = { id: string } | null;
+
 const state = vi.hoisted(() => ({
-  user: { id: "user-123" },
+  user: { id: "user-123" } as MockUser,
   insertPayload: null as unknown,
   updatePayload: null as unknown,
   eqCalls: [] as Array<[string, unknown]>,
+  orCalls: [] as string[],
   selectArg: "",
 }));
 
@@ -18,7 +21,7 @@ const makeBuilder = () => {
     eq: vi.fn((field: string, value: unknown) => { state.eqCalls.push([field, value]); return builder; }),
     order: vi.fn(() => builder),
     limit: vi.fn(() => builder),
-    or: vi.fn(() => builder),
+    or: vi.fn((filter: string) => { state.orCalls.push(filter); return builder; }),
     single: vi.fn(async () => ({ data: { id: "report-1", slug: "abc", is_public: false }, error: null })),
     maybeSingle: vi.fn(async () => ({ data: null, error: null })),
   };
@@ -34,16 +37,18 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-const { saveReport, publishReport, unpublishReport, deleteReport } = await import("./reports");
+const { saveReport, publishReport, unpublishReport, deleteReport, getReportBySlug } = await import("./reports");
 
 const minimalInputs = { projectName: "Alpha", industry: "Technology" } as unknown as ConceptInputs;
 const minimalReport = { reportId: "R1" } as unknown as FeasibilityReport;
 
 describe("report helpers", () => {
   beforeEach(() => {
+    state.user = { id: "user-123" };
     state.insertPayload = null;
     state.updatePayload = null;
     state.eqCalls = [];
+    state.orCalls = [];
     state.selectArg = "";
   });
 
@@ -80,5 +85,20 @@ describe("report helpers", () => {
 
     expect(state.eqCalls).toContainEqual(["id", "report-1"]);
     expect(state.eqCalls).toContainEqual(["user_id", "user-123"]);
+  });
+
+  it("allows signed-in owners to resolve their own private report slug", async () => {
+    await getReportBySlug("abc");
+
+    expect(state.eqCalls).toContainEqual(["slug", "abc"]);
+    expect(state.orCalls).toContain("is_public.eq.true,user_id.eq.user-123");
+  });
+
+  it("only resolves public report slugs for anonymous users", async () => {
+    state.user = null;
+    await getReportBySlug("abc");
+
+    expect(state.eqCalls).toContainEqual(["slug", "abc"]);
+    expect(state.orCalls).toContain("is_public.eq.true");
   });
 });
