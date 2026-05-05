@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, BarChart3, Check, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, ShieldCheck, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, Check, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, ShieldCheck, Undo2 } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -9,6 +11,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
 import { safeFileName } from "@/lib/fileName";
+import { validateTemplateIntegrity } from "@/lib/reportTemplates";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 type LocationState = { report?: FeasibilityReport; inputs?: ConceptInputs; slug?: string; reportId?: string; isPublic?: boolean };
@@ -29,6 +32,11 @@ const ResultsV2 = () => {
   const [hasShownPrivateToast, setHasShownPrivateToast] = useState(Boolean(state.reportId));
   const [busy, setBusy] = useState<"share" | "unshare" | "export" | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const templateValidation = useMemo(() => {
+    if (!report || !inputs) return null;
+    return validateTemplateIntegrity(inputs, report);
+  }, [report, inputs]);
 
   const baseFileName = useMemo(() => {
     if (!report || !inputs) return "concept-ai-report";
@@ -98,6 +106,10 @@ const ResultsV2 = () => {
 
   const exportPdf = async () => {
     if (!exportRootRef.current) return;
+    if (templateValidation?.hasBlockingIssues) {
+      toast.error("PDF export blocked: report type mismatch detected. Fix template leakage first.");
+      return;
+    }
     setBusy("export");
     const id = toast.loading("Generating PDF report…");
     try {
@@ -131,6 +143,8 @@ const ResultsV2 = () => {
     finally { setBusy(null); }
   };
 
+  const visibleVerdict = templateValidation?.recommendation ?? report.scores.verdict;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
@@ -163,16 +177,32 @@ const ResultsV2 = () => {
       <main className="container mx-auto px-4 py-8 sm:px-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20"><ShieldCheck className="h-3.5 w-3.5" /> {saving ? "Saving privately…" : saved?.is_public ? "Shared by link" : "Saved privately"}</div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20"><ShieldCheck className="h-3.5 w-3.5" /> {saving ? "Saving privately…" : saved?.is_public ? "Shared by link" : "Saved privately"}</span>
+              {templateValidation && <Badge variant="outline">{templateValidation.template.label}</Badge>}
+            </div>
             <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{inputs.projectName}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{inputs.industry || "Unspecified industry"}{inputs.location ? ` · ${inputs.location}` : ""} · Report {report.reportId}</p>
           </div>
           <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 text-sm">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Verdict</div>
-            <div className="mt-1 font-display text-lg font-semibold text-primary">{report.scores.verdict}</div>
+            <div className="mt-1 font-display text-lg font-semibold text-primary">{visibleVerdict}</div>
             <div className="text-xs text-muted-foreground">Overall {report.scores.overall.toFixed(1)} / 10</div>
           </div>
         </div>
+
+        {templateValidation && templateValidation.issues.length > 0 && (
+          <Alert className={`mb-6 ${templateValidation.hasBlockingIssues ? "border-destructive/50" : "border-warning/50"}`}>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{templateValidation.hasBlockingIssues ? "Export blocked: template mismatch detected" : "Template quality warning"}</AlertTitle>
+            <AlertDescription>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                {templateValidation.issues.slice(0, 5).map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message}</li>)}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div ref={exportRootRef}><InteractiveDashboard report={report} inputs={inputs} /></div>
       </main>
     </div>
