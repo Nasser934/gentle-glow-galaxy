@@ -36,11 +36,9 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       industry: inputs.industry || null,
       inputs: inputs as any,
       output: output as any,
-      // Current Results page copies /r/:slug immediately after save.
-      // Keep saved reports public-by-slug until the Results page is split and can call publishReport explicitly.
-      is_public: true,
+      is_public: false,
     })
-    .select("id, slug")
+    .select("id, slug, is_public")
     .single();
   if (error) throw error;
   return data;
@@ -53,7 +51,20 @@ export async function publishReport(id: string) {
     .update({ is_public: true })
     .eq("id", id)
     .eq("user_id", user.id)
-    .select("id, slug")
+    .select("id, slug, is_public")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function unpublishReport(id: string) {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("reports")
+    .update({ is_public: false })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id, slug, is_public")
     .single();
   if (error) throw error;
   return data;
