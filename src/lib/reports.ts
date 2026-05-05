@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface ReportRow {
   id: string;
@@ -26,6 +27,8 @@ async function getCurrentUserId() {
   return user?.id ?? null;
 }
 
+const toJson = <T,>(value: T) => value as unknown as Json;
+
 export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
   const user = await requireUser();
   const { data, error } = await supabase
@@ -34,8 +37,8 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       user_id: user.id,
       title: inputs.projectName || "Untitled analysis",
       industry: inputs.industry || null,
-      inputs: inputs as any,
-      output: output as any,
+      inputs: toJson(inputs),
+      output: toJson(output),
       is_public: false,
     })
     .select("id, slug, is_public")
