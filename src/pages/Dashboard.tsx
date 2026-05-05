@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BarChart3, Plus, ExternalLink, Trash2, Loader2 } from "lucide-react";
+import { BarChart3, Plus, ExternalLink, Trash2, Loader2, Lock, Globe2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -15,21 +15,33 @@ const statusColor: Record<string, string> = {
   rejected: "bg-rose-500/15 text-rose-600",
 };
 
+type DashboardReport = Awaited<ReturnType<typeof listMyReports>>[number];
+
+const messageFromError = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<DashboardReport[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
-    listMyReports().then(setRows).catch((e) => toast.error(e.message)).finally(() => setLoading(false));
+    listMyReports()
+      .then((data) => setRows(data as DashboardReport[]))
+      .catch((error: unknown) => toast.error(messageFromError(error, "Could not load reports.")))
+      .finally(() => setLoading(false));
   };
   useEffect(load, []);
 
   const onDelete = async (id: string) => {
     if (!confirm("Delete this analysis? This cannot be undone.")) return;
-    try { await deleteReport(id); toast.success("Deleted"); load(); }
-    catch (e: any) { toast.error(e.message); }
+    try {
+      await deleteReport(id);
+      toast.success("Deleted");
+      load();
+    } catch (error: unknown) {
+      toast.error(messageFromError(error, "Could not delete report."));
+    }
   };
 
   return (
@@ -73,6 +85,7 @@ const Dashboard = () => {
                   <th className="px-4 py-3 text-left">Project</th>
                   <th className="px-4 py-3 text-left">Industry</th>
                   <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Sharing</th>
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -86,6 +99,13 @@ const Dashboard = () => {
                     <td className="px-4 py-3 text-muted-foreground">{r.industry || "—"}</td>
                     <td className="px-4 py-3">
                       <Badge variant="secondary" className={statusColor[r.status]}>{r.status.replace("_", " ")}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.is_public ? (
+                        <Badge variant="secondary" className="gap-1 bg-blue-500/15 text-blue-600"><Globe2 className="h-3 w-3" /> Shared</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="gap-1 bg-muted text-muted-foreground"><Lock className="h-3 w-3" /> Private</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
