@@ -3,11 +3,31 @@ import { Moon, Sun } from "lucide-react";
 
 const STORAGE_KEY = "concept-ai-theme";
 
+function safeGetStoredTheme() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStoredTheme(theme: "dark" | "light") {
+  try {
+    localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // Storage can be unavailable in private/embedded browsers.
+  }
+}
+
 function getInitialTheme(): "dark" | "light" {
   if (typeof window === "undefined") return "dark";
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = safeGetStoredTheme();
   if (stored === "dark" || stored === "light") return stored;
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  try {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
 }
 
 export function applyInitialTheme() {
@@ -21,7 +41,7 @@ export const ThemeToggle = () => {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem(STORAGE_KEY, theme);
+    safeSetStoredTheme(theme);
   }, [theme]);
 
   return (
