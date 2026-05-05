@@ -30,6 +30,7 @@ type FunctionContext = {
 };
 
 type FunctionErrorWithContext = Error & { context?: FunctionContext };
+type AnalysisFunctionName = "analyze-concept-v2" | "analyze-concept";
 
 const messageFromError = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 
@@ -49,6 +50,13 @@ const getFunctionErrorDetail = async (error: unknown) => {
     // Keep original error message.
   }
   return detail;
+};
+
+const invokeAnalysisFunction = async (functionName: AnalysisFunctionName, inputs: ConceptInputs) => {
+  const { data, error } = await supabase.functions.invoke(functionName, { body: { inputs } });
+  if (error) throw new Error(await getFunctionErrorDetail(error));
+  if (data?.error) throw new Error(data.error);
+  return data;
 };
 
 const Analyze = () => {
@@ -122,12 +130,17 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept-v2", { body: { inputs } });
-      if (error) throw new Error(await getFunctionErrorDetail(error));
-      if (data?.error) throw new Error(data.error);
+      let data;
+      try {
+        data = await invokeAnalysisFunction("analyze-concept-v2", inputs);
+      } catch (primaryError: unknown) {
+        console.warn("analyze-concept-v2 failed, retrying legacy analyze-concept", primaryError);
+        toast.info("Retrying analysis using the available function…");
+        data = await invokeAnalysisFunction("analyze-concept", inputs);
+      }
       navigate("/results", { state: { report: data, inputs } });
     } catch (e: unknown) {
-      toast.error(messageFromError(e, "Analysis failed."));
+      toast.error(messageFromError(e, "Analysis failed. Please try again or check Edge Function deployment."));
     } finally {
       setIsAnalyzing(false);
     }
@@ -161,7 +174,7 @@ const Analyze = () => {
         </div>
       </nav>
 
-      <div className="container mx-auto max-w-2xl px-6 py-10">
+      <main id="main-content" className="container mx-auto max-w-2xl px-6 py-10">
         {showBrief && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -363,7 +376,7 @@ const Analyze = () => {
             </Button>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 };
