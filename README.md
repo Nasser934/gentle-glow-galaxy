@@ -61,12 +61,15 @@ Requires Node.js 18+.
 
 ```bash
 npm install
-npm run dev      # start Vite at http://localhost:5173
-npm test         # run Vitest unit tests
-npm run build    # production build
+npm run dev          # start Vite at http://localhost:8080
+npm run lint         # run ESLint
+npm run typecheck    # run TypeScript checks
+npm test             # run Vitest unit tests
+npm run build        # production build
+npm run quality      # lint + typecheck + test + build
 ```
 
-The `.env` file is generated and managed by Lovable Cloud — do not edit it manually. It exposes:
+The `.env` file is generated and managed by Lovable Cloud — do not commit secrets. `.env.example` lists the required browser-safe variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
@@ -76,6 +79,12 @@ Server-side secrets live in Lovable Cloud and are injected into Edge Functions:
 
 - `LOVABLE_API_KEY` — AI Gateway access
 - `TAVILY_API_KEY` — web search
+
+## Quality and security
+
+- See `QUALITY.md` for the hardening checklist, CI details, strict TypeScript path, and refactor plan.
+- See `SECURITY.md` for the security policy and Supabase RLS requirements.
+- Review `supabase/migrations/20260505000000_harden_report_rls.sql` before applying it to a live Supabase project.
 
 ## Deployment
 
