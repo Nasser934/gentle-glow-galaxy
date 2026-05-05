@@ -1,10 +1,18 @@
 -- Harden report visibility and ownership rules.
--- Review existing policies before applying this migration in Supabase.
--- If policy names already exist, drop or rename the existing policies first.
+-- Safe to re-run: existing policies with these names are dropped before recreation.
 
 alter table public.reports enable row level security;
 alter table public.report_comments enable row level security;
 alter table public.report_status_history enable row level security;
+
+drop policy if exists "reports_select_owner_or_public" on public.reports;
+drop policy if exists "reports_insert_own" on public.reports;
+drop policy if exists "reports_update_own" on public.reports;
+drop policy if exists "reports_delete_own" on public.reports;
+drop policy if exists "report_comments_select_when_report_visible" on public.report_comments;
+drop policy if exists "report_comments_insert_self_when_report_visible" on public.report_comments;
+drop policy if exists "report_status_history_select_owner" on public.report_status_history;
+drop policy if exists "report_status_history_insert_owner" on public.report_status_history;
 
 -- Reports: owners can read their reports. Public reports can be read by anyone with the slug.
 create policy "reports_select_owner_or_public"
@@ -21,7 +29,7 @@ on public.reports
 for insert
 with check (auth.uid() = user_id);
 
--- Reports: owners can update only their reports.
+-- Reports: owners can update only their reports. This covers publish/unpublish and status changes.
 create policy "reports_update_own"
 on public.reports
 for update
