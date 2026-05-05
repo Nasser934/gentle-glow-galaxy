@@ -2,12 +2,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-type SafeStorage = {
-  getItem: (key: string) => string | null | Promise<string | null>;
-  setItem: (key: string, value: string) => void | Promise<void>;
-  removeItem: (key: string) => void | Promise<void>;
-};
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
@@ -17,46 +11,26 @@ if (!isSupabaseConfigured) {
   console.error('Missing Supabase environment variables. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
 }
 
-const memoryStorage = new Map<string, string>();
-
-const safeStorage: SafeStorage = {
+const safeStorage = {
   getItem: (key: string) => {
-    try {
-      return localStorage.getItem(key) ?? memoryStorage.get(key) ?? null;
-    } catch {
-      return memoryStorage.get(key) ?? null;
-    }
+    try { return window.localStorage.getItem(key); } catch { return null; }
   },
   setItem: (key: string, value: string) => {
-    memoryStorage.set(key, value);
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // Storage can be unavailable in private or embedded browsers.
-    }
+    try { window.localStorage.setItem(key, value); } catch { /* noop */ }
   },
   removeItem: (key: string) => {
-    memoryStorage.delete(key);
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // Storage can be unavailable in private or embedded browsers.
-    }
+    try { window.localStorage.removeItem(key); } catch { /* noop */ }
   },
 };
 
-// Keep the app renderable even if Lovable/Supabase env vars are missing.
-// Auth and data calls are disabled by isSupabaseConfigured checks in providers/pages.
-const safeSupabaseUrl = SUPABASE_URL || 'https://placeholder.supabase.co';
-const safeSupabaseKey = SUPABASE_PUBLISHABLE_KEY || 'placeholder-key';
-
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Fallback values keep the JavaScript bundle from crashing before React renders.
+const safeSupabaseUrl = SUPABASE_URL || 'https://example.supabase.co';
+const safeSupabaseKey = SUPABASE_PUBLISHABLE_KEY || 'missing-publishable-key';
 
 export const supabase = createClient<Database>(safeSupabaseUrl, safeSupabaseKey, {
   auth: {
     storage: safeStorage,
     persistSession: true,
-    autoRefreshToken: true,
+    autoRefreshToken: isSupabaseConfigured,
   }
 });
