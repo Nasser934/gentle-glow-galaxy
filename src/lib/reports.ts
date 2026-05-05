@@ -21,6 +21,11 @@ async function requireUser() {
   return user;
 }
 
+async function getCurrentUserId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
 export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
   const user = await requireUser();
   const { data, error } = await supabase
@@ -53,11 +58,16 @@ export async function publishReport(id: string) {
 }
 
 export async function getReportBySlug(slug: string) {
+  const userId = await getCurrentUserId();
+  const visibilityFilter = userId
+    ? `is_public.eq.true,user_id.eq.${userId}`
+    : "is_public.eq.true";
+
   const { data, error } = await supabase
     .from("reports")
     .select("*")
     .eq("slug", slug)
-    .or("is_public.eq.true,user_id.eq.auth.uid()")
+    .or(visibilityFilter)
     .maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
