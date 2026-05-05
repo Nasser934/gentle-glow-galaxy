@@ -16,6 +16,7 @@ type AuthMode = "signin" | "signup";
 type AuthLocationState = { from?: string };
 
 const isAuthMode = (value: string): value is AuthMode => value === "signin" || value === "signup";
+const toSafeRedirectPath = (value: string | undefined) => value?.startsWith("/") && !value.startsWith("//") ? value : "/analyze";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -33,7 +34,7 @@ const AuthPage = () => {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const redirectTo = (loc.state as AuthLocationState | null)?.from || "/analyze";
+  const redirectTo = toSafeRedirectPath((loc.state as AuthLocationState | null)?.from);
 
   useEffect(() => {
     if (!authLoading && user) navigate(redirectTo, { replace: true });
