@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
+const ANALYSIS_FUNCTION = "analyze-concept-v2" as const;
 
 type EssayField =
   | "description" | "strategicObjectives" | "dependencies"
@@ -30,7 +31,6 @@ type FunctionContext = {
 };
 
 type FunctionErrorWithContext = Error & { context?: FunctionContext };
-type AnalysisFunctionName = "analyze-concept-v2" | "analyze-concept";
 
 const messageFromError = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 
@@ -52,8 +52,8 @@ const getFunctionErrorDetail = async (error: unknown) => {
   return detail;
 };
 
-const invokeAnalysisFunction = async (functionName: AnalysisFunctionName, inputs: ConceptInputs) => {
-  const { data, error } = await supabase.functions.invoke(functionName, { body: { inputs } });
+const invokeAnalysisFunction = async (inputs: ConceptInputs) => {
+  const { data, error } = await supabase.functions.invoke(ANALYSIS_FUNCTION, { body: { inputs } });
   if (error) throw new Error(await getFunctionErrorDetail(error));
   if (data?.error) throw new Error(data.error);
   return data;
@@ -130,17 +130,10 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      let data;
-      try {
-        data = await invokeAnalysisFunction("analyze-concept-v2", inputs);
-      } catch (primaryError: unknown) {
-        console.warn("analyze-concept-v2 failed, retrying legacy analyze-concept", primaryError);
-        toast.info("Retrying analysis using the available function…");
-        data = await invokeAnalysisFunction("analyze-concept", inputs);
-      }
+      const data = await invokeAnalysisFunction(inputs);
       navigate("/results", { state: { report: data, inputs } });
     } catch (e: unknown) {
-      toast.error(messageFromError(e, "Analysis failed. Please try again or check Edge Function deployment."));
+      toast.error(messageFromError(e, "Analysis failed. Please confirm analyze-concept-v2 is deployed and configured."));
     } finally {
       setIsAnalyzing(false);
     }
