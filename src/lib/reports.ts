@@ -15,9 +15,14 @@ export interface ReportRow {
   updated_at: string;
 }
 
+async function requireUser() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) throw new Error("Not signed in");
+  return user;
+}
+
 export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in");
+  const user = await requireUser();
   const { data, error } = await supabase
     .from("reports")
     .insert({
@@ -26,7 +31,21 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       industry: inputs.industry || null,
       inputs: inputs as any,
       output: output as any,
+      is_public: false,
     })
+    .select("id, slug")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function publishReport(id: string) {
+  const user = await requireUser();
+  const { data, error } = await supabase
+    .from("reports")
+    .update({ is_public: true })
+    .eq("id", id)
+    .eq("user_id", user.id)
     .select("id, slug")
     .single();
   if (error) throw error;
@@ -38,6 +57,7 @@ export async function getReportBySlug(slug: string) {
     .from("reports")
     .select("*")
     .eq("slug", slug)
+    .or("is_public.eq.true,user_id.eq.auth.uid()")
     .maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
@@ -46,7 +66,7 @@ export async function getReportBySlug(slug: string) {
 export async function listMyReports() {
   const { data, error } = await supabase
     .from("reports")
-    .select("id, slug, title, industry, status, created_at, updated_at")
+    .select("id, slug, title, industry, status, created_at, updated_at, is_public")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -54,16 +74,27 @@ export async function listMyReports() {
 }
 
 export async function deleteReport(id: string) {
-  const { error } = await supabase.from("reports").delete().eq("id", id);
+  const user = await requireUser();
+  const { error } = await supabase.from("reports").delete().eq("id", id).eq("user_id", user.id);
   if (error) throw error;
 }
 
 export async function updateReportStatus(id: string, status: ReportRow["status"], note?: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in");
-  const { data: prev } = await supabase.from("reports").select("status").eq("id", id).single();
-  const { error } = await supabase.from("reports").update({ status }).eq("id", id);
+  const user = await requireUser();
+  const { data: prev } = await supabase
+    .from("reports")
+    .select("status")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+
+  const { error } = await supabase
+    .from("reports")
+    .update({ status })
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
+
   await supabase.from("report_status_history").insert({
     report_id: id, changed_by: user.id, from_status: prev?.status ?? null, to_status: status, note: note ?? null,
   });
