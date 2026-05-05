@@ -20,12 +20,18 @@ Or run all checks:
 npm run quality
 ```
 
+Use the strict target during cleanup work:
+
+```bash
+npm run typecheck:strict
+```
+
 GitHub Actions runs the same quality gate on pushes and pull requests to `main`.
 
 ## Completed hardening
 
 - Added CI workflow for lint, typecheck, tests, and build.
-- Added `typecheck`, `quality`, `lint:fix`, and `test:coverage` scripts.
+- Added `typecheck`, `typecheck:strict`, `quality`, `lint:fix`, and `test:coverage` scripts.
 - Added Supabase environment validation at startup.
 - Added auth session error handling so loading does not get stuck.
 - Added reusable page loading fallback for lazy routes.
@@ -33,8 +39,10 @@ GitHub Actions runs the same quality gate on pushes and pull requests to `main`.
 - Restored Vite dev error overlay.
 - Updated app metadata from Lovable placeholders to Concept AI branding.
 - Added safe filename helper and unit tests.
+- Added private-by-default report saving with explicit publish/unpublish helpers.
 - Added owner-scoped report delete and status update filters.
 - Added RLS hardening migration template for reports, comments, and status history.
+- Removed unsafe casts from the Auth page.
 
 ## Required Supabase review before production
 
@@ -44,12 +52,24 @@ Check these points in Supabase:
 
 - Existing policy names do not conflict with the new policies.
 - `reports.slug` is unique and hard to guess.
-- `reports.is_public` matches the intended sharing model.
+- `reports.is_public` follows the intended sharing model: reports are private until explicitly published.
 - Comments are readable only when the parent report is visible.
 - Status history is visible only to report owners.
-- Only owners can update, delete, or change status for reports.
+- Only owners can update, delete, publish, unpublish, or change status for reports.
 
-## Next refactor work
+## Report sharing model
+
+Target behavior:
+
+1. Save generated reports as private by default.
+2. Show the report to the owner immediately.
+3. Publish only when the user clicks Share.
+4. Copy `/r/:slug` only after publishing succeeds.
+5. Let owners unpublish later.
+
+The report helper now supports this model through `saveReport`, `publishReport`, and `unpublishReport`.
+
+## Results page refactor
 
 The next safe step is to split `src/pages/Results.tsx` into smaller components. It is too large and owns too many responsibilities:
 
@@ -80,11 +100,12 @@ src/features/reports/
 
 Strict TypeScript is the target, but it should be enabled in phases:
 
-1. Turn on `strictNullChecks`.
+1. Run `npm run typecheck:strict` and record errors.
 2. Remove `any` from report and Supabase helpers.
 3. Add Zod schemas for `ConceptInputs` and `FeasibilityReport`.
-4. Turn on `noImplicitAny`.
-5. Turn on full `strict`.
+4. Turn on `strictNullChecks` in the active app config.
+5. Turn on `noImplicitAny`.
+6. Turn on full `strict`.
 
 Do not enable all strict flags at once unless the full app is tested after each fix.
 
