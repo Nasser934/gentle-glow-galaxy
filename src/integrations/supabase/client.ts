@@ -22,10 +22,18 @@ const createUnavailableClient = () =>
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+const hasBrowserStorage = () => {
+  try {
+    return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  } catch {
+    return false;
+  }
+};
+
 export const supabase = SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
-        storage: localStorage,
+        ...(hasBrowserStorage() ? { storage: localStorage } : {}),
         persistSession: true,
         autoRefreshToken: true,
       },
