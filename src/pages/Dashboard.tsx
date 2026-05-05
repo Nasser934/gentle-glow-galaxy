@@ -61,7 +61,7 @@ const Dashboard = () => {
         </div>
       </nav>
 
-      <div className="container mx-auto px-6 py-10">
+      <main id="main-content" className="container mx-auto px-6 py-10">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="font-display text-2xl font-medium tracking-tight">My Analyses</h1>
@@ -120,7 +120,7 @@ const Dashboard = () => {
             </table>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };
