@@ -14,11 +14,13 @@ import {
   ConceptInputs, INDUSTRIES, BUDGET_RANGES, TIMELINES, TEAM_SIZES, TECHNOLOGY_READINESS,
   BUSINESS_MODELS, REVENUE_MODELS, initialInputs,
 } from "@/types/analysis";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 const ANALYSIS_FUNCTION = "analyze-concept-v2" as const;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 type EssayField =
   | "description" | "strategicObjectives" | "dependencies"
@@ -52,11 +54,48 @@ const getFunctionErrorDetail = async (error: unknown) => {
   return detail;
 };
 
+const invokeAnalysisViaRest = async (inputs: ConceptInputs) => {
+  if (!isSupabaseConfigured || !SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Supabase environment variables are missing in the deployed app.");
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error("Please sign in again before running analysis.");
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/${ANALYSIS_FUNCTION}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ inputs }),
+  });
+
+  let body: { error?: string } | unknown = null;
+  try { body = await response.json(); } catch { /* keep null */ }
+  if (!response.ok) {
+    const errorMessage = body && typeof body === "object" && "error" in body
+      ? String((body as { error?: string }).error)
+      : `Edge Function HTTP ${response.status}`;
+    throw new Error(errorMessage);
+  }
+  return body;
+};
+
 const invokeAnalysisFunction = async (inputs: ConceptInputs) => {
   const { data, error } = await supabase.functions.invoke(ANALYSIS_FUNCTION, { body: { inputs } });
-  if (error) throw new Error(await getFunctionErrorDetail(error));
-  if (data?.error) throw new Error(data.error);
-  return data;
+  if (!error && !data?.error) return data;
+
+  const sdkError = error ? await getFunctionErrorDetail(error) : String(data?.error ?? "Unknown function error");
+  try {
+    const restData = await invokeAnalysisViaRest(inputs);
+    if (restData && typeof restData === "object" && "error" in restData) throw new Error(String((restData as { error?: string }).error));
+    return restData;
+  } catch (restError: unknown) {
+    throw new Error(`analyze-concept-v2 failed. SDK: ${sdkError}. REST: ${messageFromError(restError, "failed")}`);
+  }
 };
 
 const Analyze = () => {
@@ -133,6 +172,7 @@ const Analyze = () => {
       const data = await invokeAnalysisFunction(inputs);
       navigate("/results", { state: { report: data, inputs } });
     } catch (e: unknown) {
+      console.error(e);
       toast.error(messageFromError(e, "Analysis failed. Please confirm analyze-concept-v2 is deployed and configured."));
     } finally {
       setIsAnalyzing(false);
