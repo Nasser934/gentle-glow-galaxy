@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { exportReportToPdf } from "@/lib/exportPdf";
+import { exportReportToPdfV2 } from "@/lib/exportPdfV2";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
@@ -96,7 +96,7 @@ const ResultsV2 = () => {
     setBusy("export");
     const id = toast.loading("Generating PDF report…");
     try {
-      const result = await exportReportToPdf(exportRootRef.current, `${baseFileName}.pdf`, { report, inputs });
+      const result = await exportReportToPdfV2(exportRootRef.current, `${baseFileName}.pdf`, { report, inputs });
       toast.success(`PDF download started: ${result.fileName}`, { id });
     } catch (error: unknown) {
       toast.error(messageFromError(error, "PDF export failed."), { id });
