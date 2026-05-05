@@ -36,7 +36,9 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       industry: inputs.industry || null,
       inputs: inputs as any,
       output: output as any,
-      is_public: false,
+      // Current Results page copies /r/:slug immediately after save.
+      // Keep saved reports public-by-slug until the Results page is split and can call publishReport explicitly.
+      is_public: true,
     })
     .select("id, slug")
     .single();
