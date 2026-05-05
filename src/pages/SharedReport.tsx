@@ -33,14 +33,14 @@ const SharedReport = () => {
   }
   if (notFound || !row) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-center">
+      <main id="main-content" className="flex min-h-screen items-center justify-center bg-background text-center">
         <div>
           <Lock className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <h2 className="font-display text-xl font-medium">Report not found</h2>
           <p className="mt-1 text-sm text-muted-foreground">It may have been deleted or the link is wrong.</p>
           <Button onClick={() => navigate("/")} className="mt-4">Go home</Button>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -76,7 +76,7 @@ const SharedReport = () => {
         </div>
       </nav>
 
-      <div className="container mx-auto px-6 py-8">
+      <main id="main-content" className="container mx-auto px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis</div>
@@ -94,7 +94,7 @@ const SharedReport = () => {
           </h2>
           <CommentsPanel reportId={row.id} />
         </div>
-      </div>
+      </main>
     </div>
   );
 };
