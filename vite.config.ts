@@ -17,5 +17,20 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: "es2020",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) return "vendor-react";
+          if (id.includes("@supabase") || id.includes("@lovable.dev")) return "vendor-supabase";
+          if (id.includes("recharts")) return "vendor-charts";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("jspdf") || id.includes("pptxgenjs") || id.includes("exceljs") || id.includes("html2canvas")) return "vendor-exports";
+          if (id.includes("@radix-ui")) return "vendor-ui";
+          return "vendor";
+        },
+      },
+    },
   },
 }));
