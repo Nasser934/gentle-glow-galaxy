@@ -465,8 +465,7 @@ serve(async (req) => {
       userId = userData.user.id;
     }
 
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
-    const rl = rateLimit(ip);
+    const rl = rateLimit(`u:${userId}`);
     if (!rl.ok) {
       return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
         status: 429,
