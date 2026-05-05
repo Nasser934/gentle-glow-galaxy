@@ -11,12 +11,27 @@ type Dimension = typeof dimensions[number];
 type Inputs = Record<string, string>;
 type Report = Record<string, unknown>;
 
+function isAllowedOrigin(origin: string) {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return true;
+    if (url.hostname === "gentle-glow-galaxy.lovable.app") return true;
+    if (url.hostname.endsWith(".lovable.app")) return true;
+    if (url.hostname.endsWith(".lovableproject.com")) return true;
+    return allowedOrigins.includes(origin);
+  } catch {
+    return false;
+  }
+}
+
 function corsHeaders(req: Request) {
   const origin = req.headers.get("Origin") ?? "";
-  const allowed = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const allowed = isAllowedOrigin(origin) ? origin : allowedOrigins[0] ?? "*";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Vary": "Origin",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   };
 }
