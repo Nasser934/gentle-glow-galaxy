@@ -19,6 +19,7 @@ Required rules:
 
 - Users can create reports only for themselves.
 - Users can update/delete only their own reports.
+- Users can publish/unpublish only their own reports.
 - Public report links can read only reports where `is_public = true`.
 - Comments can be read only when the parent report is visible.
 - Status history can be read and written only by the report owner.
@@ -27,14 +28,16 @@ See `supabase/migrations/20260505000000_harden_report_rls.sql`.
 
 ## Sharing model
 
-Current behavior keeps saved reports public by slug because the current `Results` page copies `/r/:slug` immediately after save.
+Current model:
 
-Target model:
+1. Reports are saved as private by default with `is_public = false`.
+2. The owner can publish a report by clicking Share.
+3. The app copies `/r/:slug` only after publishing succeeds.
+4. The owner can unpublish the report to disable public-by-link access.
 
-1. Save reports as private by default.
-2. Add an explicit publish/share action.
-3. Add revoke/unpublish support.
-4. Prefer a separate `report_shares` table with expiring tokens for higher security.
+Future hardening option:
+
+- Add a separate `report_shares` table with expiring, revocable tokens instead of using permanent report slugs.
 
 ## Edge Functions
 
