@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
     "quality": "npm run lint && npm run typecheck && npm test && npm run build",
+    "quality:strict": "npm run lint && npm run typecheck:strict && npm test && npm run build",
+    "audit": "npm audit --audit-level=high",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
