@@ -7,9 +7,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { exportReportToPdfV2 } from "@/lib/exportPdfV2";
-import { exportReportToPptx } from "@/lib/exportPptx";
-import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
 import { safeFileName } from "@/lib/fileName";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -29,6 +26,7 @@ const ResultsV2 = () => {
 
   const [saved, setSaved] = useState<SavedReportRef | null>(() => state.reportId && state.slug ? { id: state.reportId, slug: state.slug, is_public: Boolean(state.isPublic) } : null);
   const [saving, setSaving] = useState(false);
+  const [hasShownPrivateToast, setHasShownPrivateToast] = useState(Boolean(state.reportId));
   const [busy, setBusy] = useState<"share" | "unshare" | "export" | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -42,11 +40,18 @@ const ResultsV2 = () => {
     let cancelled = false;
     setSaving(true);
     saveReport(inputs, report)
-      .then((data) => { if (!cancelled) setSaved({ id: data.id, slug: data.slug, is_public: data.is_public }); })
+      .then((data) => {
+        if (cancelled) return;
+        setSaved({ id: data.id, slug: data.slug, is_public: data.is_public });
+        if (!data.is_public && !hasShownPrivateToast) {
+          toast.success("Report saved privately. Click Share to publish a link.");
+          setHasShownPrivateToast(true);
+        }
+      })
       .catch((error: unknown) => { if (!cancelled) toast.error(messageFromError(error, "Could not save this report.")); })
       .finally(() => { if (!cancelled) setSaving(false); });
     return () => { cancelled = true; };
-  }, [inputs, report, saved, saving]);
+  }, [inputs, report, saved, saving, hasShownPrivateToast]);
 
   if (!report || !inputs) {
     return (
@@ -83,7 +88,7 @@ const ResultsV2 = () => {
     try {
       const unpublished = await unpublishReport(saved.id);
       setSaved({ id: unpublished.id, slug: unpublished.slug, is_public: unpublished.is_public });
-      toast.success("Share link disabled.");
+      toast.success("Share link disabled. Report is private again.");
     } catch (error: unknown) {
       toast.error(messageFromError(error, "Could not disable share link."));
     } finally {
@@ -96,6 +101,7 @@ const ResultsV2 = () => {
     setBusy("export");
     const id = toast.loading("Generating PDF report…");
     try {
+      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV2");
       const result = await exportReportToPdfV2(exportRootRef.current, `${baseFileName}.pdf`, { report, inputs });
       toast.success(`PDF download started: ${result.fileName}`, { id });
     } catch (error: unknown) {
@@ -106,16 +112,22 @@ const ResultsV2 = () => {
   const exportPptx = async () => {
     setBusy("export");
     const id = toast.loading("Generating PowerPoint deck…");
-    try { await exportReportToPptx(report, inputs, `${baseFileName}.pptx`); toast.success("PowerPoint deck downloaded.", { id }); }
-    catch (error: unknown) { toast.error(messageFromError(error, "PPTX export failed."), { id }); }
+    try {
+      const { exportReportToPptx } = await import("@/lib/exportPptx");
+      await exportReportToPptx(report, inputs, `${baseFileName}.pptx`);
+      toast.success("PowerPoint deck downloaded.", { id });
+    } catch (error: unknown) { toast.error(messageFromError(error, "PPTX export failed."), { id }); }
     finally { setBusy(null); }
   };
 
   const exportXlsx = async () => {
     setBusy("export");
     const id = toast.loading("Generating Excel workbook…");
-    try { await exportReportToXlsx(report, inputs, `${baseFileName}.xlsx`); toast.success("Excel workbook downloaded.", { id }); }
-    catch (error: unknown) { toast.error(messageFromError(error, "XLSX export failed."), { id }); }
+    try {
+      const { exportReportToXlsx } = await import("@/lib/exportXlsx");
+      await exportReportToXlsx(report, inputs, `${baseFileName}.xlsx`);
+      toast.success("Excel workbook downloaded.", { id });
+    } catch (error: unknown) { toast.error(messageFromError(error, "XLSX export failed."), { id }); }
     finally { setBusy(null); }
   };
 
@@ -151,7 +163,7 @@ const ResultsV2 = () => {
       <main className="container mx-auto px-4 py-8 sm:px-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20"><ShieldCheck className="h-3.5 w-3.5" /> {saved?.is_public ? "Shared by link" : "Private report"}</div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20"><ShieldCheck className="h-3.5 w-3.5" /> {saving ? "Saving privately…" : saved?.is_public ? "Shared by link" : "Saved privately"}</div>
             <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{inputs.projectName}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{inputs.industry || "Unspecified industry"}{inputs.location ? ` · ${inputs.location}` : ""} · Report {report.reportId}</p>
           </div>
