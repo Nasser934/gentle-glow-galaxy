@@ -91,7 +91,7 @@ const AuthPage = () => {
         </div>
       </nav>
 
-      <div className="container mx-auto flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-6 py-10">
+      <main id="main-content" className="container mx-auto flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-6 py-10">
         <motion.div
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
           className="w-full max-w-sm rounded-xl border border-border/70 bg-card/60 p-6 shadow-2xl shadow-primary/5 backdrop-blur"
@@ -134,7 +134,7 @@ const AuthPage = () => {
             By continuing you agree to a single-tenant, AI-generated feasibility tool. Not financial advice.
           </p>
         </motion.div>
-      </div>
+      </main>
     </div>
   );
 };
