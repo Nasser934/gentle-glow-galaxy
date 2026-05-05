@@ -22,11 +22,11 @@ const FIELD_GUIDE: Record<string, { label: string; hint: string; max: number }> 
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000 * 10;
 const ipHits = new Map<string, number[]>();
-function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
+function rateLimit(key: string): { ok: boolean; retryAfter?: number } {
   const now = Date.now();
-  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  const arr = (ipHits.get(key) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   if (arr.length >= RATE_LIMIT_MAX) return { ok: false, retryAfter: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - arr[0])) / 1000) };
-  arr.push(now); ipHits.set(ip, arr);
+  arr.push(now); ipHits.set(key, arr);
   return { ok: true };
 }
 const MAX_CTX_FIELD = 1500;
