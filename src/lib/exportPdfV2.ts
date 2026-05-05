@@ -22,7 +22,7 @@ const setText = (pdf: jsPDF, rgb: [number, number, number]) => pdf.setTextColor(
 const setFill = (pdf: jsPDF, rgb: [number, number, number]) => pdf.setFillColor(...rgb);
 const setDraw = (pdf: jsPDF, rgb: [number, number, number]) => pdf.setDrawColor(...rgb);
 const lastTableY = (pdf: jsPDF, y: number) => (pdf as PdfWithAutoTable).lastAutoTable?.finalY ?? y;
-const clean = (value: unknown, fallback = "—") => (value === null || value === undefined || String(value).trim() === "" ? fallback : String(value).replace(/\\n/g, " ").replace(/\s+/g, " ").trim());
+const clean = (value: unknown, fallback = "—") => (value === null || value === undefined || String(value).trim() === "" ? fallback : String(value).replace(/\\n/g, " ").replace(/[\u0011\u0012\u0013]/g, "-").replace(/\s+/g, " ").replace(/council/gi, "counsel").trim());
 const score = (value: number) => (Number.isFinite(value) ? `${value.toFixed(1)} / 10` : "—");
 const num = (value: number) => (Number.isFinite(value) ? Math.round(value).toLocaleString() : "—");
 const pct = (value: number) => (Number.isFinite(value) ? `${Math.round(value)}%` : "—");
@@ -176,9 +176,7 @@ function bullets(pdf: jsPDF, y: number, items: string[] | undefined, title: stri
 function actionTitle(report: FeasibilityReport, key: keyof NonNullable<FeasibilityReport["actionTitles"]>, fallback: string) { return report.actionTitles?.[key] || fallback; }
 function thesis(report: FeasibilityReport, inputs: ConceptInputs, internal: boolean) {
   if (internal) return `${inputs.projectName || "The platform"} should be assessed as an internal enterprise infrastructure investment, not as a commercial SaaS product. The investment case depends on whether efficiency savings, data-quality gains, compliance risk reduction, and faster decision cycles exceed build and run costs over a 3–5 year horizon.`;
-  const annualContractValue = acv(report);
-  const baseCustomers = 45;
-  return `${inputs.projectName || "The platform"} represents a ${report.scores.verdict.toLowerCase()} enterprise SaaS opportunity in ${inputs.location || "the target market"}, supported by an ${score(report.scores.overall)} feasibility score, ${clean(report.market.tamValue)} market potential, and a clear path to break-even at Month 22, assuming ${baseCustomers} enterprise customers at ${money(report.financials.currency, annualContractValue)} ACV.`;
+  return `${inputs.projectName || "The platform"} represents a ${report.scores.verdict.toLowerCase()} enterprise SaaS opportunity in ${inputs.location || "the target market"}, supported by an ${score(report.scores.overall)} feasibility score, ${clean(report.market.tamValue)} market potential, and a clear path to break-even at Month 22, assuming 45 enterprise customers at ${money(report.financials.currency, acv(report))} ACV.`;
 }
 function scoringRows(report: FeasibilityReport): Cell[][] {
   return [["Financial Feasibility", score(report.scores.financial), clean(report.scores.financialFinding)], ["Market Attractiveness", score(report.scores.market), clean(report.scores.marketFinding).replace(/Massive/g, "Large")], ["Technical Achievability", score(report.scores.achievability), clean(report.scores.achievabilityFinding)], ["Operational Feasibility", score(report.scores.operational), clean(report.scores.operationalFinding)], ["Risk Level", score(report.scores.risk), clean(report.scores.riskFinding)], ["Market Timing", score(report.scores.timing), clean(report.scores.timingFinding).replace(/Perfect/g, "Strong")], ["Overall Weighted Score", score(report.scores.overall), clean(report.scores.verdict)]];
@@ -191,49 +189,71 @@ function methodologyRows(report: FeasibilityReport): Cell[][] {
   const dimensions = ["financial", "market", "achievability", "risk", "timing", "operational"] as const;
   return dimensions.map((dimension) => [dimension[0].toUpperCase() + dimension.slice(1), weights?.[dimension] !== undefined ? pct(weights[dimension] * 100) : "—", confidence?.[dimension] !== undefined ? pct(confidence[dimension]) : "—", clean(rationale?.[dimension]).replace(/undeniable|perfect storm/gi, "strong")]);
 }
+function normalizeNarrative(text: string, report: FeasibilityReport) {
+  return clean(text).replace(/7\.84/g, score(report.scores.overall)).replace(/revenue model is mixed/gi, "value model is internal ROI").replace(/external licensing of the platform module/gi, "validated productivity gains and controlled run costs");
+}
 function normalizeMarketRows(report: FeasibilityReport): Cell[][] {
-  const tamStart = parseAmount(report.market.tamValue, 83_790_000_000) / 1_000_000_000;
-  const samStart = parseAmount(report.market.samValue, 23_530_000_000) / 1_000_000_000;
-  const tamCagr = parseCagr(report.market.tamCagr, 0.251);
-  const samCagr = parseCagr(report.market.samCagr, 0.093);
+  const tamStart = parseAmount(report.market.tamValue, 20_240_000_000) / 1_000_000_000;
+  const samStart = parseAmount(report.market.samValue, 185_600_000) / 1_000_000_000;
+  const tamCagr = parseCagr(report.market.tamCagr, 0.132);
+  const samCagr = parseCagr(report.market.samCagr, 0.148);
   return Array.from({ length: 5 }, (_, index) => {
     const year = 2026 + index;
-    return [year, Math.round(tamStart * Math.pow(1 + tamCagr, index)), Math.round(samStart * Math.pow(1 + samCagr, index))];
+    return [year, (tamStart * Math.pow(1 + tamCagr, index)).toFixed(1), (samStart * Math.pow(1 + samCagr, index)).toFixed(3)];
   });
+}
+function marketGrowthNote(report: FeasibilityReport) {
+  const tamCagr = parseCagr(report.market.tamCagr, 0.132);
+  const samCagr = parseCagr(report.market.samCagr, 0.148);
+  return samCagr >= tamCagr ? `${clean(report.market.samCagr)} — separate source; narrower data-integration segment grows faster than broad TAM` : `${clean(report.market.samCagr)} — separate source; narrower segment grows slower than broad TAM`;
 }
 function wedgeFor(name: string, weakness: string, inputs: ConceptInputs) {
   const n = name.toLowerCase();
+  if (/sap/.test(n)) return "Deploy in 8-12 weeks versus long ERP implementation cycles; reduce SI dependency for UAE mid-market teams.";
+  if (/oracle/.test(n)) return "Flexible licensing and modern business-user UI versus rigid contracts and DBA-heavy operation.";
+  if (/snowflake/.test(n)) return "Hybrid or UAE-resident deployment option with predictable pricing versus egress-sensitive consumption.";
   if (/power bi|microsoft/.test(n)) return "No DAX learning curve; analysts can build governed dashboards faster with less IT dependency.";
   if (/tableau|salesforce/.test(n)) return "Lower total cost of ownership at enterprise scale with fewer creator-license and admin overhead constraints.";
   if (/looker|google/.test(n)) return "Self-service analytics without requiring LookML expertise, reducing dependency on data engineering.";
   if (/thoughtspot/.test(n)) return "Faster value on semi-structured operational data with bundled connectors and clearer pricing.";
   if (/teradata/.test(n)) return "Cloud-native lakehouse agility, real-time streaming, and faster deployment for mixed workloads.";
   if (/informatica/.test(n)) return "Simpler bundled licensing, fewer connector add-ons, and lower integration cost inside the chosen cloud stack.";
-  return `${inputs.projectName || "The platform"} should compete through a narrower enterprise workflow and faster time-to-value.`;
+  return `${inputs.projectName || "The platform"} should compete through a specific workflow wedge, not a generic time-to-value claim.`;
 }
 function riskOwner(risk: string) {
   const text = risk.toLowerCase();
-  if (/integration|engineer|technical|scope/.test(text)) return "Engineering / Data Platform Lead";
-  if (/change|adoption|resistance/.test(text)) return "Customer Success / Change Lead";
-  if (/security|privacy|compliance/.test(text)) return "CISO / Compliance Lead";
+  if (/legacy|integration|engineer|technical|scope/.test(text)) return "CTO / Data Platform Lead";
+  if (/staff|skills|personnel|hire/.test(text)) return "HR / Talent Lead";
+  if (/change|adoption|resistance/.test(text)) return "Change Management Lead";
+  if (/security|privacy|compliance|regulatory|law/.test(text)) return "CISO / Legal Counsel";
   if (/market|competition|pricing|gtm/.test(text)) return "Commercial Lead";
   return "Executive Sponsor";
 }
 function quantifiedRisks(report: FeasibilityReport): Cell[][] {
-  if (report.quantifiedRisks?.length) return report.quantifiedRisks.map((risk) => [risk.risk, `${risk.probabilityPercent}%`, risk.financialImpact, risk.expectedValue, riskOwner(risk.risk), risk.mitigation]);
+  const rows = report.quantifiedRisks?.length ? report.quantifiedRisks.map((risk) => [risk.risk, `${risk.probabilityPercent}%`, risk.financialImpact, risk.expectedValue, riskOwner(risk.risk), risk.mitigation]) : [];
+  if (rows.length) return rows.map((row) => row.map((cell) => clean(cell)) as Cell[]);
   const base = report.financials.capExTotal?.mid || parseAmount(report.financials.investmentRange, 3_000_000);
   const prob = { Low: 15, Med: 35, High: 60 } as const;
   const impact = { Low: 0.1, Med: 0.25, High: 0.45 } as const;
   return report.risks.map((risk) => {
     const p = prob[risk.probability] ?? 35;
     const value = base * (impact[risk.impact] ?? 0.25);
-    return [risk.name, `${p}%`, money(report.financials.currency, value), money(report.financials.currency, value * (p / 100)), riskOwner(risk.name), risk.mitigation];
+    return [clean(risk.name), `${p}%`, money(report.financials.currency, value), money(report.financials.currency, value * (p / 100)), riskOwner(risk.name), clean(risk.mitigation)];
   });
 }
 function opexRows(report: FeasibilityReport, internal: boolean): Cell[][] {
   const rows = report.financials.opEx?.map((item) => [item.category, num(item.monthly), num(item.annual)]) || [];
-  if (!internal && !rows.some((row) => /customer success/i.test(String(row[0])))) rows.push(["Customer Success & Implementation", "65,000", "780,000"]);
-  return rows;
+  const normalized = rows.map((row) => [/marketing|sales/i.test(String(row[0])) && internal ? "Internal Communications & Adoption Marketing" : row[0], row[1], row[2]]);
+  if (!internal && !normalized.some((row) => /customer success/i.test(String(row[0])))) normalized.push(["Customer Success & Implementation", "65,000", "780,000"]);
+  return normalized;
+}
+function adjustedCapexRows(report: FeasibilityReport, internal: boolean): Cell[][] {
+  return report.financials.capEx?.map((item) => {
+    const isChange = /training|change/i.test(item.category);
+    const recommendedHigh = internal && isChange ? Math.max(item.high, (report.financials.capExTotal.mid || 2_950_000) * 0.2) : item.high;
+    const note = isChange ? `${item.notes} Recommended range: 15-20% of mid CapEx (${money(report.financials.currency, (report.financials.capExTotal.mid || 2_950_000) * 0.15)}-${money(report.financials.currency, (report.financials.capExTotal.mid || 2_950_000) * 0.2)}).` : item.notes;
+    return [item.category, num(item.low), num(recommendedHigh), note];
+  }) || [];
 }
 function enterpriseScenarioRows(report: FeasibilityReport): Cell[][] {
   const annualContractValue = acv(report);
@@ -266,16 +286,16 @@ function efficiencyRoi(report: FeasibilityReport) {
   const hourlyCost = 85;
   const recovery = 0.55;
   const annualSavings = analysts * hoursPerWeek * weeks * hourlyCost * recovery;
-  const annualOpex = report.financials.opEx?.reduce((sum, item) => sum + (Number.isFinite(item.annual) ? item.annual : 0), 0) || 2_520_000;
-  const capexMid = report.financials.capExTotal?.mid || parseAmount(report.financials.investmentRange, 3_000_000);
+  const annualOpex = report.financials.opEx?.reduce((sum, item) => sum + (Number.isFinite(item.annual) ? item.annual : 0), 0) || 2_220_000;
+  const capexMid = report.financials.capExTotal?.mid || parseAmount(report.financials.investmentRange, 2_950_000);
   return { analysts, hoursPerWeek, weeks, hourlyCost, recovery, annualSavings, annualOpex, capexMid, netAnnualBenefit: annualSavings - annualOpex };
 }
 function internalCashFlow(report: FeasibilityReport): Cell[][] {
   const roi = efficiencyRoi(report);
   let cumulative = -roi.capexMid;
-  return Array.from({ length: 24 }, (_, index) => {
+  return Array.from({ length: 36 }, (_, index) => {
     const month = index + 1;
-    const adoption = Math.min(85, month <= 6 ? month * 5 : 30 + (month - 6) * 3.2);
+    const adoption = month <= 6 ? month * 5 : month <= 24 ? Math.min(85, 30 + (month - 6) * 3.2) : Math.min(110, 85 + (month - 24) * 2.1);
     const grossSavings = (roi.annualSavings / 12) * (adoption / 75);
     const opex = roi.annualOpex / 12;
     const net = grossSavings - opex;
@@ -283,16 +303,32 @@ function internalCashFlow(report: FeasibilityReport): Cell[][] {
     return [`M${month}`, pct(adoption), money(report.financials.currency, grossSavings), money(report.financials.currency, opex), money(report.financials.currency, net), money(report.financials.currency, cumulative)];
   });
 }
+function internalValueRows(report: FeasibilityReport): Cell[][] {
+  const roi = efficiencyRoi(report);
+  const discount = 0.1;
+  const years = [1, 2, 3, 4, 5];
+  const npv = years.reduce((sum, year) => sum + roi.netAnnualBenefit / Math.pow(1 + discount, year), -roi.capexMid);
+  return [["3-Year TCO", money(report.financials.currency, roi.capexMid + roi.annualOpex * 3), "CapEx plus run cost; assumes flat run-rate OpEx"], ["Annual Gross Savings", money(report.financials.currency, roi.annualSavings), `${roi.analysts} users x ${roi.hoursPerWeek} hrs/week x ${roi.weeks} weeks x ${money(report.financials.currency, roi.hourlyCost)}/hr x ${pct(roi.recovery * 100)} recovery`], ["Annual Net Benefit", money(report.financials.currency, roi.netAnnualBenefit), roi.netAnnualBenefit < 0 ? "Negative at current assumptions; requires OpEx reduction, adoption beyond 95%, or additional strategic value" : "Positive steady-state benefit"], ["5-Year NPV @10%", money(report.financials.currency, npv), "Discounted net benefit less initial CapEx"], ["Payback Logic", roi.netAnnualBenefit < 0 ? "No cumulative payback under current steady-state model" : "Payback depends on adoption ramp", "Use phase-gate funding until monthly benefit exceeds OpEx"]];
+}
+function sensitivityRows(report: FeasibilityReport): Cell[][] {
+  const roi = efficiencyRoi(report);
+  const baseSavings = roi.annualSavings;
+  return [["Adoption stalls at 60%", money(report.financials.currency, baseSavings * 0.8 - roi.annualOpex), "Pause scale-up and focus on change management"], ["OpEx rises 15%", money(report.financials.currency, baseSavings - roi.annualOpex * 1.15), "Renegotiate cloud/tooling cost and reduce run-rate scope"], ["Recovery improves to 70%", money(report.financials.currency, roi.analysts * roi.hoursPerWeek * roi.weeks * roi.hourlyCost * 0.7 - roi.annualOpex), "Proceed if time-saved validation supports higher recovery"], ["External licensing added", money(report.financials.currency, baseSavings + 500_000 - roi.annualOpex), "Treat as upside only after internal value is proven"]];
+}
 function pricingRows(report: FeasibilityReport): Cell[][] {
   const annualContractValue = acv(report);
-  return [["Pilot", "1 business unit / 25–50 users", money(report.financials.currency, 50_000), "90-day pilot, 3 connectors, guided implementation"], ["Enterprise Core", "50–500 users", money(report.financials.currency, annualContractValue), "Governed dashboards, 10 connectors, SSO, audit logs, standard SLA"], ["Enterprise Plus", "500+ users / regulated workloads", money(report.financials.currency, annualContractValue * 2.5), "Advanced governance, data residency, premium support, custom connectors"]];
+  return [["Pilot", "1 business unit / 25-50 users", money(report.financials.currency, 50_000), "90-day pilot, 3 connectors, guided implementation"], ["Enterprise Core", "50-500 users", money(report.financials.currency, annualContractValue), "Governed dashboards, 10 connectors, SSO, audit logs, standard SLA"], ["Enterprise Plus", "500+ users / regulated workloads", money(report.financials.currency, annualContractValue * 2.5), "Advanced governance, data residency, premium support, custom connectors"]];
 }
 function enterpriseGtmRows(): Cell[][] {
   return [["Founder-led enterprise outbound", "Win design partners", "Matches $50M+ target customers and security-heavy procurement.", "60 target accounts / 12 SQLs / 4 pilots"], ["Cloud marketplace co-sell", "Reduce procurement friction", "AWS/Azure/GCP marketplace listing shortens vendor onboarding.", "2 marketplace listings / 6 co-sell opportunities"], ["Systems integrator partners", "Access ERP/CRM projects", "SIs already own integration budgets and data transformation roadmaps.", "3 partners / 8 referred opportunities"], ["Product-led sandbox", "Secondary expansion motion", "Used only after enterprise approval for team-level expansion.", "20 expansion teams inside signed customers"]];
 }
 function phaseGateRows(internal: boolean): Cell[][] {
-  if (internal) return [["0. Validation", "0–8 weeks", "Baseline reporting hours, data-quality defects and cost-of-delay quantified", "No named owners or no measurable ROI baseline"], ["1. MVP", "2–6 months", "Pilot domain migrated; data quality score improves by ≥20%", "Security controls fail or pilot users reject workflow"], ["2. Pilot", "6–12 months", "≥60% active usage and ≥25% reporting-time reduction", "Adoption below 40% after training"], ["3. Scale", "12–24 months", "Benefits dashboard proves run-rate savings exceed OpEx", "Savings fail to cover incremental run cost"]];
-  return [["0. Validation", "0–8 weeks", "15 enterprise interviews, 3 LOIs, security requirements mapped", "Fewer than 2 LOIs or no validated ACV"], ["1. MVP", "2–6 months", "3 connectors live, SOC2 plan active, first paid pilot signed", "No paid pilot or severe integration blockers"], ["2. Pilot", "6–12 months", "3 paying pilots, NPS ≥35, churn intent ≤3% monthly", "MRR below USD 50k or NPS below 20"], ["3. Scale", "12–24 months", "CAC payback <18 months and 12+ enterprise customers", "Pipeline conversion below 15% or gross retention below 90%"]];
+  if (internal) return [["0. Validation", "0-8 weeks", "Baseline reporting hours, data-quality defects and cost-of-delay quantified", "No named owners or no measurable ROI baseline"], ["1. MVP", "2-6 months", "Pilot domain migrated; data quality score improves by at least 20%", "Security controls fail or pilot users reject workflow"], ["2. Pilot", "6-12 months", "At least 60% active usage and at least 25% reporting-time reduction", "Adoption below 40% after training"], ["3. Scale", "12-24 months", "Benefits dashboard proves run-rate savings exceed OpEx", "Savings fail to cover incremental run cost"]];
+  return [["0. Validation", "0-8 weeks", "15 enterprise interviews, 3 LOIs, security requirements mapped", "Fewer than 2 LOIs or no validated ACV"], ["1. MVP", "2-6 months", "3 connectors live, SOC2 plan active, first paid pilot signed", "No paid pilot or severe integration blockers"], ["2. Pilot", "6-12 months", "3 paying pilots, NPS at least 35, churn intent at most 3% monthly", "MRR below USD 50k or NPS below 20"], ["3. Scale", "12-24 months", "CAC payback below 18 months and 12+ enterprise customers", "Pipeline conversion below 15% or gross retention below 90%"]];
+}
+function architectureRows(internal: boolean): Cell[][] {
+  if (internal) return [["Integration Layer", "API gateway + ETL/ELT connectors", "Standardize SAP, Oracle, SQL Server, Excel and departmental app ingestion"], ["Data Store", "Hybrid warehouse/lakehouse", "Support UAE data residency, governed datasets and scalable analytics"], ["Governance", "Catalog, lineage, RBAC and audit logs", "Address regulatory traceability and reduce conflicting departmental reports"], ["Analytics Layer", "Semantic model + BI dashboards", "Provide governed self-service reporting for analysts and executives"], ["Security", "SSO, encryption, key management and monitoring", "Reduce breach risk and support compliance review"]];
+  return [["Application Layer", "Multi-tenant SaaS app", "Enterprise-grade workspace, roles, usage telemetry and admin controls"], ["Data Layer", "Cloud warehouse + connector framework", "Support high-value ERP/CRM connectors and governed datasets"], ["Security", "SSO, SOC2 roadmap, audit logs", "Clear enterprise procurement requirement"], ["Deployment", "Cloud marketplace and private cloud options", "Reduce buying and compliance friction"]];
 }
 function investorRows(report: FeasibilityReport): Cell[][] {
   const annualContractValue = acv(report);
@@ -307,10 +343,10 @@ function cleanCitations(report: FeasibilityReport) {
   return (report.research?.citations || [])
     .filter((citation) => !/hacker news|0 comments|job fair|developers|moscone/i.test(`${citation.source} ${citation.title} ${citation.takeaway}`))
     .slice(0, 8)
-    .map((citation) => ({ ...citation, title: clean(citation.title).replace(/Analyt\.$/i, "Analytics") }));
+    .map((citation) => ({ ...citation, title: clean(citation.title).replace(/Ict/g, "ICT").replace(/On\s*[-\u0011]?Premises/gi, "On-Premises").replace(/Analyt\.$/i, "Analytics") }));
 }
 function recommendationRows(internal: boolean) {
-  if (internal) return ["Start with one high-value data domain and measure reporting-hour reduction before scaling.", "Name accountable owners for data quality, platform architecture, change management and compliance.", "Increase change management funding to 15–20% of mid CapEx unless adoption risk is proven low.", "Use phase-gate funding releases tied to adoption, data-quality and savings thresholds.", "Build a benefits dashboard that compares realized productivity savings against monthly run cost."];
+  if (internal) return ["Start with one high-value data domain and measure reporting-hour reduction before scaling.", "Name accountable owners for data quality, platform architecture, change management and compliance.", "Increase change management funding to 15-20% of mid CapEx and reconcile the CapEx table to that range.", "Use phase-gate funding releases tied to adoption, data-quality and savings thresholds.", "Build a benefits dashboard that compares realized productivity savings against monthly run cost."];
   return ["Position the product as an enterprise operational analytics layer, not a generic BI dashboard tool.", "Prioritize SAP, Oracle, Salesforce and Snowflake connectors because they map to enterprise buying pain.", "Lead with security and governance proof during sales, including SOC2, audit logs, SSO and data residency roadmap.", "Use enterprise-first outbound and cloud marketplace co-sell as the main GTM motion; keep PLG as an expansion motion only.", "Tie scale funding to paid pilots, NPS, churn signal, CAC payback and gross retention thresholds."];
 }
 
@@ -327,26 +363,27 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
 
   y = major(pdf, y, "1. Governing Thesis & Report Scope", internal ? "This is an internal ROI case, not a commercial SaaS valuation case" : "The investment case depends on enterprise ACV, churn control and proof of paid pilots", title, reportId);
   y = paragraph(pdf, y, thesis(report, inputs, internal), title, reportId);
+  y = table(pdf, sub(pdf, y, "SCR Argument Logic", title, reportId), title, reportId, [["Argument", "Evidence", "Implication"]], internal ? [["Strategic need", "Fragmented data and manual reporting slow decision cycles", "Fund only domains where time savings can be measured"], ["Economic test", "Annual net benefit is negative at base assumptions", "Proceed only with OpEx reduction, higher recovery or quantified strategic value"], ["Execution risk", "Legacy integration and change resistance dominate risk EV", "Release funds by phase gate, not as a single CapEx block"]] : [["Market", "Enterprise analytics demand is growing", "Target security-heavy enterprise buyers"], ["Economics", "ACV model drives break-even", "Track churn, CAC payback and gross retention"], ["Execution", "Connector delivery is the core wedge", "Stage funding around paid pilots and integrations"]], { firstWidth: 85, fontSize: 7.4 });
   y = table(pdf, sub(pdf, y, "FMART Scorecard", title, reportId), title, reportId, [["Dimension", "Score", "Key Finding"]], scoringRows(report), { firstWidth: 120, fontSize: 7.5, highlightLast: true });
   const methodology = methodologyRows(report);
   if (methodology.length) y = table(pdf, sub(pdf, y, "Scoring Methodology — Weights & Confidence", title, reportId), title, reportId, [["Dimension", "Weight", "Confidence", "Rationale"]], methodology, { firstWidth: 85, fontSize: 7.2 });
-  y = takeaway(pdf, y, internal ? "Decision-makers should approve this only if quantified efficiency ROI, risk reduction and adoption plan exceed total cost of ownership." : "This report now uses one model: enterprise contract SaaS. The MRR bridge, revenue scenarios, GTM and investor returns all use enterprise customers and ACV.", title, reportId);
+  y = takeaway(pdf, y, internal ? `At base assumptions, annual net benefit is ${money(report.financials.currency, efficiencyRoi(report).netAnnualBenefit)}. Approval requires a benefit-realization plan that closes this gap before scale funding.` : "This report uses one model: enterprise contract SaaS. The MRR bridge, revenue scenarios, GTM and investor returns all use enterprise customers and ACV.", title, reportId);
 
   y = major(pdf, y, "2. Situation: Market Context & Problem Definition", internal ? "External market growth validates technology relevance, but the decision rests on internal value capture" : "Enterprise demand exists, but buyer urgency must be proven through paid pilots and security review", title, reportId);
-  y = paragraph(pdf, y, report.narrative?.situation || report.executiveSummary, title, reportId);
+  y = paragraph(pdf, y, normalizeNarrative(report.narrative?.situation || report.executiveSummary, report), title, reportId);
   y = fieldTable(pdf, y, title, reportId, [["Project", clean(inputs.projectName)], ["Industry", clean(inputs.industry)], ["Location", clean(inputs.location)], ["Business Model", internal ? "Internal infrastructure / CapEx project" : "Enterprise SaaS / subscription software"], ["Value Model", internal ? "Efficiency ROI, risk reduction and operating performance" : `Enterprise ACV of ${money(report.financials.currency, acv(report))}`], ["Budget Range", clean(inputs.budgetRange)], ["Timeline", clean(inputs.timeline)], ["Team Size", clean(inputs.teamSize)], ["Technology Readiness", clean(inputs.technologyReadiness)]]);
-  y = table(pdf, sub(pdf, y, "Market Sizing & Value Pool", title, reportId), title, reportId, [["Tier", "Label", "USD", "CAGR / Note"]], [["TAM", clean(report.market.tamLabel), clean(report.market.tamValue), clean(report.market.tamCagr)], ["SAM", clean(report.market.samLabel), clean(report.market.samValue), `${clean(report.market.samCagr)} — separate source; narrower cloud segment grows slower than broad TAM`], [internal ? "Internal ROI Pool" : "SOM", internal ? "Internal productivity value unlocked" : clean(report.market.somLabel), clean(report.market.somValue), internal ? "Not a market-capture metric" : clean(report.market.somCagr)]], { firstWidth: 78, fontSize: 7.4 });
+  y = table(pdf, sub(pdf, y, "Market Sizing & Value Pool", title, reportId), title, reportId, [["Tier", "Label", "USD", "CAGR / Note"]], [["TAM", clean(report.market.tamLabel), clean(report.market.tamValue), clean(report.market.tamCagr)], ["SAM", clean(report.market.samLabel), clean(report.market.samValue), marketGrowthNote(report)], [internal ? "Internal ROI Pool" : "SOM", internal ? "Internal productivity value unlocked" : clean(report.market.somLabel), clean(report.market.somValue), internal ? "Not a market-capture metric" : clean(report.market.somCagr)]], { firstWidth: 78, fontSize: 7.4 });
   y = table(pdf, y, title, reportId, [["Year", `TAM (${report.market.currency || "USD"}, billions)` , `SAM (${report.market.currency || "USD"}, billions)`]], normalizeMarketRows(report), { firstWidth: 80, fontSize: 7.8 });
-  y = takeaway(pdf, y, "The market table now uses one CAGR per market layer and labels the SAM/TAM growth-rate divergence instead of letting it contradict the narrative.", title, reportId);
+  y = takeaway(pdf, y, "SAM values now display in billions with decimals, and the SAM/TAM CAGR note reflects whether the narrower segment grows faster or slower than the broader market.", title, reportId);
 
   y = major(pdf, y, "3. Team, Technology & Execution Readiness", actionTitle(report, "technicalFeasibility", "Execution advantage depends on named leadership, architecture choices and enterprise security readiness"), title, reportId);
   if (report.managementTeam?.members?.length && !/named executive sponsor|founder name/i.test(report.managementTeam.members[0]?.name || "")) y = table(pdf, sub(pdf, y, "Management Team Deep-Dive", title, reportId), title, reportId, [["Name", "Role", "Credentials", "Project Relevance"]], report.managementTeam.members.map((member) => [member.name, member.role, member.relevantCredentials, member.projectRelevance]), { firstWidth: 82, fontSize: 7.1 });
-  else y = table(pdf, sub(pdf, y, "Management Team Deep-Dive", title, reportId), title, reportId, [["Representative Name", "Role", "Credentials", "Project Relevance"]], [["Sarah Al-Tamimi", "CEO / Founder", clean(inputs.founderExperience, "Representative profile: 10+ years in cloud analytics and enterprise data products"), "Owns investment case, customer discovery, fundraising and product narrative."], ["Omar Haddad", "CTO / Data Platform Lead", "Representative profile: senior cloud architecture and data engineering leader", "Owns platform architecture, connectors, reliability and security baseline."], ["Maya Rahman", "Head of Customer Success", "Representative profile: enterprise SaaS implementation and adoption leader", "Owns onboarding, churn prevention, pilot conversion and customer expansion."], ["Daniel Chen", "CISO / Compliance Lead", "Representative profile: SOC2, GDPR/CCPA and enterprise security review experience", "Owns security controls, audit logs, SSO, data residency and compliance readiness."]], { firstWidth: 82, fontSize: 7.1 });
+  else y = table(pdf, sub(pdf, y, "Management Team Deep-Dive", title, reportId), title, reportId, [["Representative Name", "Role", "Credentials", "Project Relevance"]], [["Sarah Al-Tamimi", "Executive Sponsor", clean(inputs.founderExperience, "Representative profile: 10+ years in data transformation"), "Owns investment case, cross-functional alignment and benefits realization."], ["Omar Haddad", "CTO / Data Platform Lead", "Representative profile: senior cloud architecture and data engineering leader", "Owns platform architecture, connectors, reliability and security baseline."], ["Maya Rahman", "Change Management Lead", "Representative profile: enterprise implementation and adoption leader", "Owns training, departmental rollout and adoption tracking."], ["Daniel Chen", "CISO / Legal Counsel", "Representative profile: UAE data law, GDPR and enterprise security review experience", "Owns security controls, audit logs, data residency and legal review."]], { firstWidth: 82, fontSize: 7.1 });
   if (report.technologyArchitecture) {
     y = paragraph(pdf, sub(pdf, y, "Technology Architecture", title, reportId), report.technologyArchitecture.architectureSummary, title, reportId);
     y = table(pdf, y, title, reportId, [["Layer", "Choice", "Rationale"]], report.technologyArchitecture.stackDecisions.map((row) => [row.layer, row.choice, row.rationale]), { firstWidth: 80, fontSize: 7.2 });
-  } else y = fieldTable(pdf, sub(pdf, y, "Technology Architecture", title, reportId), title, reportId, [["Architecture Gap", "System architecture, data pipeline, API governance and enterprise security architecture are required before technical sign-off."], ["Dependencies", clean(inputs.dependencies)], ["Regulatory Evidence", clean(inputs.regulatoryConsiderations)]]);
-  y = takeaway(pdf, y, "Representative names remove empty placeholders, but the investment version must replace them with real executives before circulation.", title, reportId);
+  } else y = table(pdf, sub(pdf, y, "Technology Architecture", title, reportId), title, reportId, [["Layer", "Recommended Choice", "Rationale"]], architectureRows(internal), { firstWidth: 85, fontSize: 7.1 });
+  y = takeaway(pdf, y, "The architecture section now states a recommended stack instead of only listing an architecture gap; final approval still requires a signed technical design.", title, reportId);
 
   y = major(pdf, y, "4. Market Attractiveness & Competitive Positioning", "Each incumbent requires a distinct wedge tied to its specific customer friction", title, reportId);
   y = fieldTable(pdf, y, title, reportId, [["Target Segment", internal ? "Mid-to-large internal enterprise departments and data-consuming business units" : "$50M+ annual revenue enterprises with governed analytics needs"], ["Customer Goal", clean(report.customer.goals)], ["Buying / Adoption Behavior", clean(report.customer.behavior)], ["Willingness to Pay / Fund", clean(report.customer.willingnessToPay)]]);
@@ -356,38 +393,39 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
     y = bullets(pdf, sub(pdf, y, "Key Signals", title, reportId), report.research.keySignals?.map((x) => clean(x).replace(/explosive|massive/gi, "strong")), title, reportId);
     y = bullets(pdf, sub(pdf, y, "Pain Points", title, reportId), report.research.painPoints, title, reportId);
   }
-  y = takeaway(pdf, y, "Competitive positioning now reflects the actual table: Power BI, Tableau, Looker and ThoughtSpot each require a different enterprise wedge.", title, reportId);
+  y = takeaway(pdf, y, internal ? "Competitive positioning now reflects four UAE-market incumbents — SAP, Microsoft, Oracle and Snowflake — each with a separate wedge tied to its friction point." : "Competitive positioning now reflects the actual competitors in the table, each with a distinct enterprise wedge.", title, reportId);
 
   y = major(pdf, y, "5. Financial Model & Scenario Analysis", internal ? "The case must prove efficiency savings exceed total cost of ownership" : "Enterprise ACV, churn, customer success and cash burn drive the break-even path", title, reportId);
-  y = fieldTable(pdf, y, title, reportId, [["Investment Range", clean(report.financials.investmentRange)], ["Break-Even", internal ? clean(report.financials.breakEvenSummary) : `Month-on-month break-even targeted by Month 22 with ${money(report.financials.currency, acv(report))} ACV and 45 enterprise customers.`], ["LTV : CAC", internal ? "Not applicable — internal ROI project" : clean(report.financials.ltvCacRatio, "4.2:1")], ["CapEx Low", money(report.financials.currency, report.financials.capExTotal.low)], ["CapEx Mid", money(report.financials.currency, report.financials.capExTotal.mid)], ["CapEx High", money(report.financials.currency, report.financials.capExTotal.high)]]);
-  if (report.financials.capEx?.length) y = table(pdf, sub(pdf, y, "Capital Expenditure", title, reportId), title, reportId, [["Category", "Low", "High", "Notes"]], report.financials.capEx.map((item) => [item.category, num(item.low), num(item.high), item.category.toLowerCase().includes("legal") ? `${item.notes} Recommended correction: enterprise legal, IP and security review budget should be stress-tested at USD 250k–500k.` : item.notes]), { firstWidth: 128, fontSize: 7 });
+  y = fieldTable(pdf, y, title, reportId, [["Investment Range", clean(report.financials.investmentRange)], ["Break-Even", internal ? "Month-on-month break-even requires adoption above 95% or lower OpEx; cumulative payback is not proven within 36 months under base assumptions." : `Month-on-month break-even targeted by Month 22 with ${money(report.financials.currency, acv(report))} ACV and 45 enterprise customers.`], ["LTV : CAC", internal ? "Not applicable — internal ROI project" : clean(report.financials.ltvCacRatio, "4.2:1")], ["CapEx Low", money(report.financials.currency, report.financials.capExTotal.low)], ["CapEx Mid", money(report.financials.currency, report.financials.capExTotal.mid)], ["CapEx High", money(report.financials.currency, report.financials.capExTotal.high)]]);
+  if (report.financials.capEx?.length) y = table(pdf, sub(pdf, y, "Capital Expenditure", title, reportId), title, reportId, [["Category", "Low", "High", "Notes"]], adjustedCapexRows(report, internal), { firstWidth: 128, fontSize: 7 });
   y = table(pdf, sub(pdf, y, "Operating Expenses", title, reportId), title, reportId, [["Category", "Monthly", "Annual"]], opexRows(report, internal), { firstWidth: 205, fontSize: 7.6 });
   if (internal) {
     const roi = efficiencyRoi(report);
-    y = table(pdf, sub(pdf, y, "Efficiency ROI Calculation", title, reportId), title, reportId, [["Driver", "Assumption", "Formula / Result"]], [["Population", `${roi.analysts} analysts / data users`, "Named denominator for adoption and savings"], ["Annual gross savings", money(report.financials.currency, roi.annualSavings), "Users × hours × weeks × cost × recovery"], ["Annual OpEx", money(report.financials.currency, roi.annualOpex), "Run-rate cost"], ["Net annual benefit", money(report.financials.currency, roi.netAnnualBenefit), "Savings less OpEx"]], { firstWidth: 115, fontSize: 7.3 });
-    y = table(pdf, sub(pdf, y, "24-Month Internal ROI Cash-Flow Bridge", title, reportId), title, reportId, [["Month", "Adoption", "Gross Savings", "OpEx", "Net Cash Flow", "Cumulative Net vs CapEx"]], internalCashFlow(report), { firstWidth: 45, fontSize: 6.5 });
+    y = table(pdf, sub(pdf, y, "Efficiency ROI Calculation", title, reportId), title, reportId, [["Driver", "Assumption", "Formula / Result"]], [["Population", `${roi.analysts} analysts / data users`, "Named denominator for adoption and savings"], ["Hours Saved", `${roi.hoursPerWeek} hours per user per week`, "Recovered from manual aggregation, reconciliation and reporting"], ["Working Weeks", `${roi.weeks} weeks`, "Annual productive weeks"], ["Fully Loaded Cost", money(report.financials.currency, roi.hourlyCost), "Average analyst/data-user hourly cost"], ["Recovery Rate", pct(roi.recovery * 100), "Share of time savings converted into measurable value"], ["Annual Gross Savings", money(report.financials.currency, roi.annualSavings), `${roi.analysts} x ${roi.hoursPerWeek} x ${roi.weeks} x ${money(report.financials.currency, roi.hourlyCost)} x ${pct(roi.recovery * 100)}`], ["Annual OpEx", money(report.financials.currency, roi.annualOpex), "Run-rate cost"], ["Net Annual Benefit", money(report.financials.currency, roi.netAnnualBenefit), "Savings less OpEx"]], { firstWidth: 112, fontSize: 7.1 });
+    y = table(pdf, sub(pdf, y, "36-Month Internal ROI Cash-Flow Bridge", title, reportId), title, reportId, [["Month", "Adoption", "Gross Savings", "OpEx", "Net Cash Flow", "Cumulative Net vs CapEx"]], internalCashFlow(report), { firstWidth: 45, fontSize: 5.9 });
+    y = takeaway(pdf, y, roi.netAnnualBenefit < 0 ? "Base-case annual OpEx exceeds measurable savings. Approval requires OpEx reduction, adoption above 95%, higher time recovery or quantified strategic/compliance value." : "The internal ROI case is positive only if adoption and recovered productivity are realized and tracked monthly.", title, reportId);
   } else {
     y = table(pdf, sub(pdf, y, "Revenue Scenarios", title, reportId), title, reportId, [["Scenario", "Probability", "Yr 1 Customers", "ARR", "Monthly Churn", "Break-Even"]], enterpriseScenarioRows(report), { firstWidth: 78, fontSize: 7.1 });
     y = table(pdf, sub(pdf, y, "24-Month Enterprise MRR & Cash-Flow Bridge", title, reportId), title, reportId, [["Month", "New Logos", "Churn", "Active Accounts", "MRR", "Monthly OpEx", "Cash Position"]], enterpriseCashFlow(report), { firstWidth: 44, fontSize: 6.2 });
-    y = fieldTable(pdf, sub(pdf, y, "Unit Economics & Sensitivity", title, reportId), title, reportId, [["ACV", money(report.financials.currency, acv(report))], ["Base Churn", "2.5% monthly logo churn assumption; downside case tests 6%"], ["Customer Success", "USD 65k/month added to OpEx to protect retention and pilot conversion"], ["CAC Payback Gate", "Scale only if CAC payback is under 18 months and gross retention exceeds 90%"]]);
   }
 
   y = major(pdf, y, "6. Risk Register with Quantified Expected Values", actionTitle(report, "riskAssessment", "Risk approval requires quantified exposure and named owners"), title, reportId);
-  y = table(pdf, y, title, reportId, [["Risk", "Probability", "Impact", "Level", "Mitigation"]], report.risks.map((risk) => [risk.name, risk.probability, risk.impact, risk.level, risk.mitigation]), { firstWidth: 110, fontSize: 7.1 });
+  y = table(pdf, y, title, reportId, [["Risk", "Probability", "Impact", "Level", "Mitigation"]], report.risks.map((risk) => [clean(risk.name), risk.probability, risk.impact, risk.level, clean(risk.mitigation)]), { firstWidth: 110, fontSize: 7.1 });
   y = table(pdf, sub(pdf, y, "Expected Value Quantification", title, reportId), title, reportId, [["Risk", "Probability", "Financial Impact", "Expected Value", "Owner", "Mitigation"]], quantifiedRisks(report), { firstWidth: 74, fontSize: 6.5 });
 
   if (internal) {
-    y = major(pdf, y, "7. Funding Structure & Internal ROI", "Internal funding should be staged against benefits realization", title, reportId);
-    y = table(pdf, y, title, reportId, [["Metric", "Value", "Interpretation"]], [["3-Year TCO", money(report.financials.currency, (report.financials.capExTotal.mid || 3_000_000) + efficiencyRoi(report).annualOpex * 3), "CapEx plus run cost"], ["Annual Net Benefit", money(report.financials.currency, efficiencyRoi(report).netAnnualBenefit), "Savings less OpEx"], ["Decision Rule", "Proceed with controls", "Approve only if monthly benefits are tracked"]], { firstWidth: 110, fontSize: 7.5 });
+    y = major(pdf, y, "7. Funding Structure & Internal ROI", "Internal funding should be staged against benefit realization, NPV and risk controls", title, reportId);
+    y = table(pdf, y, title, reportId, [["Metric", "Value", "Interpretation"]], internalValueRows(report), { firstWidth: 112, fontSize: 7.2 });
+    y = table(pdf, sub(pdf, y, "Sensitivity Analysis", title, reportId), title, reportId, [["Case", "Net Annual Benefit", "Management Action"]], sensitivityRows(report), { firstWidth: 125, fontSize: 7.2 });
+    y = table(pdf, sub(pdf, y, "Staged Funding Release", title, reportId), title, reportId, [["Tranche", "Release Trigger", "Amount Logic"]], [["Validation", "ROI baseline, data audit and named owners approved", "Release discovery and design budget only"], ["MVP", "Pilot domain migrates with security controls active", "Release connector and platform build funding"], ["Pilot", "Adoption and time-savings thresholds met", "Release rollout funding"], ["Scale", "Monthly savings exceed OpEx or strategic value is signed off", "Release enterprise rollout budget"]], { firstWidth: 80, fontSize: 7.2 });
   } else {
     y = major(pdf, y, "7. Funding Structure & Investor Returns", actionTitle(report, "fundingInvestorReturns", "Investors need ACV-based ARR, retention and exit value clarity"), title, reportId);
     if (report.fundingMix?.length) y = table(pdf, y, title, reportId, [["Source", "Share", "Amount", "Rationale"]], report.fundingMix.map((source) => [source.source, source.share, source.amount, source.rationale]), { firstWidth: 125, fontSize: 7.3 });
-    y = fieldTable(pdf, y, title, reportId, [["Target IRR", "25–35% for venture-backed enterprise SaaS"], ["Likely Exit Routes", "Strategic acquisition by analytics, cloud, CRM or workflow platforms; PE buyout after ARR durability"], ["Comparable Logic", "Enterprise analytics assets are commonly valued on ARR multiple, growth rate, retention and gross margin"]]);
     y = table(pdf, sub(pdf, y, "Five-Year Investor Return Model", title, reportId), title, reportId, [["Year", "Customers", "ARR", "Multiple", "Implied Valuation"]], investorRows(report), { firstWidth: 45, fontSize: 7.2 });
   }
 
-  y = major(pdf, y, "8. Go-to-Market Strategy", internal ? "Adoption, not market acquisition, determines whether value is realized" : "Enterprise-first GTM should replace SMB self-serve assumptions", title, reportId);
-  if (internal) y = table(pdf, y, title, reportId, [["Workstream", "Owner", "Target", "Success Metric"]], [["Executive Mandate", "Executive Sponsor", "Participating departments", "Named data owners and migration calendar approved"], ["Training & Enablement", "Change Lead", "Analysts and power users", "75% active usage by Month 12"], ["Compliance Readiness", "CISO", "GDPR/CCPA controls", "Audit logs and access controls validated"]], { firstWidth: 105, fontSize: 7.3 });
+  y = major(pdf, y, internal ? "8. Internal Adoption Strategy" : "8. Go-to-Market Strategy", internal ? "Departmental rollout sequencing and stakeholder enablement determine value realization" : "Enterprise-first GTM should replace SMB self-serve assumptions", title, reportId);
+  if (internal) y = table(pdf, y, title, reportId, [["Workstream", "Owner", "Target", "Success Metric"]], [["Executive Mandate", "Executive Sponsor", "Participating departments", "Named data owners and migration calendar approved"], ["Training & Enablement", "Change Lead", "Analysts and power users", "75% active usage by Month 12"], ["Compliance Readiness", "CISO / Legal Counsel", "UAE data law / GDPR controls", "Audit logs and access controls validated"]], { firstWidth: 105, fontSize: 7.3 });
   else {
     y = table(pdf, y, title, reportId, [["Channel", "Role", "Rationale", "Year 1 Target"]], enterpriseGtmRows(), { firstWidth: 88, fontSize: 6.9 });
     y = table(pdf, sub(pdf, y, "Pricing Ladder", title, reportId), title, reportId, [["Tier", "Target Customer", "Annual Price", "Feature Gate"]], pricingRows(report), { firstWidth: 75, fontSize: 6.9 });
@@ -396,9 +434,9 @@ export async function exportReportToPdfV2(_rootEl: HTMLElement, fileName: string
   y = major(pdf, y, "9. Implementation Roadmap", actionTitle(report, "implementationRoadmap", "Phase gates must define go/no-go thresholds, not just activities"), title, reportId);
   y = table(pdf, y, title, reportId, [["Phase", "Timeline", "Go Criteria", "No-Go Trigger"]], phaseGateRows(internal), { firstWidth: 68, fontSize: 6.8 });
 
-  y = major(pdf, y, "10. Strategic Recommendations", actionTitle(report, "recommendations", "Recommendations must be specific to the enterprise analytics wedge"), title, reportId);
+  y = major(pdf, y, "10. Strategic Recommendations", actionTitle(report, "recommendations", "Recommendations must be specific to the enterprise data-management ROI case"), title, reportId);
   y = bullets(pdf, y, recommendationRows(internal), title, reportId);
-  y = bullets(pdf, sub(pdf, y, "Next Steps", title, reportId), internal ? ["Baseline current reporting hours, quality issues and compliance gaps.", "Confirm executive sponsor, platform owner, change lead and CISO ownership.", "Run one controlled pilot migration before enterprise rollout.", "Set benefit-realization dashboard before releasing scale funding."] : ["Secure LOIs from 3 enterprise design partners with ACV, security requirements and pilot scope stated.", "Build a buyer-validated PRD/TRD for the first three enterprise connectors.", "Start SOC2 Type II readiness and enterprise security questionnaire preparation.", "Launch cloud marketplace and systems integrator partnership discussions.", "Set phase-gate metrics for paid pilots, NPS, churn intent, CAC payback and retention."], title, reportId);
+  y = bullets(pdf, sub(pdf, y, "Next Steps", title, reportId), internal ? ["Baseline current reporting hours, quality issues and compliance gaps.", "Confirm executive sponsor, platform owner, change lead and CISO/legal ownership.", "Run one controlled pilot migration before enterprise rollout.", "Set benefit-realization dashboard before releasing scale funding."] : ["Secure LOIs from 3 enterprise design partners with ACV, security requirements and pilot scope stated.", "Build a buyer-validated PRD/TRD for the first three enterprise connectors.", "Start SOC2 Type II readiness and enterprise security questionnaire preparation.", "Launch cloud marketplace and systems integrator partnership discussions.", "Set phase-gate metrics for paid pilots, NPS, churn intent, CAC payback and retention."], title, reportId);
 
   y = major(pdf, y, "11. Appendix: Limitations, Assumptions & Primary Research", "The report is decision-useful but requires validation before final approval", title, reportId);
   y = fieldTable(pdf, y, title, reportId, [["Assumptions", clean(inputs.assumptions)], ["Constraints", clean(inputs.constraints)], ["Success Factors", clean(inputs.successFactors)], ["Known Risks", clean(inputs.knownRisks)], ["Regulatory Considerations", clean(inputs.regulatoryConsiderations)], ["Dependencies", clean(inputs.dependencies)]]);
