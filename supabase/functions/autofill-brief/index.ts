@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,8 +122,7 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
                 },
                 required: [
                   "projectName","industry","location","description","strategicObjectives",
-                  "businessModel","revenueModel","founderExperience",
-                  "budgetRange","timeline","teamSize","dependencies","assumptions",
+                  "businessModel","revenueModel","founderExperience","budgetRange","timeline","teamSize","dependencies","assumptions",
                   "constraints","successFactors","knownRisks","regulatoryConsiderations","technologyReadiness",
                   "competitorUrls"
                 ],
