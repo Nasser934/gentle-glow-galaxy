@@ -41,8 +41,8 @@ serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const rl = rateLimit(ip);
+    const userId = (claimsData.claims as { sub?: string }).sub || "unknown";
+    const rl = rateLimit(`u:${userId}`);
     if (!rl.ok) {
       return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.retryAfter ?? 60) },
