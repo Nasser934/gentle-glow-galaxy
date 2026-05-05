@@ -10,9 +10,9 @@ export interface ConceptInputs {
   description: string;
   strategicObjectives: string;
   // Business model (Phase 2)
-  businessModel: string;        // e.g. SaaS, Marketplace, Hardware, Services
-  revenueModel: string;         // e.g. Subscription, Transaction fee, License
-  founderExperience: string;    // years/domain experience summary
+  businessModel: string;
+  revenueModel: string;
+  founderExperience: string;
   // Scope & Resources
   budgetRange: string;
   timeline: string;
@@ -56,13 +56,13 @@ export const initialInputs: ConceptInputs = {
 // FMART scoring
 // ============================================================
 export interface FMARTScores {
-  financial: number;       // 0-10
-  market: number;          // 0-10
-  achievability: number;   // 0-10  (technical)
-  risk: number;            // 0-10  (inverse — higher = lower risk)
-  timing: number;          // 0-10
-  operational: number;     // 0-10
-  overall: number;         // 0-10
+  financial: number;
+  market: number;
+  achievability: number;
+  risk: number;
+  timing: number;
+  operational: number;
+  overall: number;
   verdict: "PROCEED" | "PROCEED WITH CAUTION" | "REVISE" | "DO NOT PROCEED";
   financialFinding: string;
   marketFinding: string;
@@ -70,7 +70,6 @@ export interface FMARTScores {
   riskFinding: string;
   timingFinding: string;
   operationalFinding: string;
-  // Phase 4 — methodology transparency
   weights?: {
     financial: number; market: number; achievability: number;
     risk: number; timing: number; operational: number;
@@ -83,6 +82,177 @@ export interface FMARTScores {
     financial: string; market: string; achievability: string;
     risk: string; timing: string; operational: string;
   };
+}
+
+// ============================================================
+// McKinsey-style narrative architecture
+// ============================================================
+export interface NarrativeArchitecture {
+  governingThesis: string;
+  keyArguments: Array<{
+    argument: string;
+    evidence: string;
+    implication: string;
+  }>;
+  situation: string;
+  complication: string;
+  resolution: string;
+  limitations: string[];
+}
+
+export interface ActionTitles {
+  executiveSummary: string;
+  marketAnalysis: string;
+  technicalFeasibility: string;
+  financialAnalysis: string;
+  riskAssessment: string;
+  fundingInvestorReturns: string;
+  goToMarket: string;
+  implementationRoadmap: string;
+  recommendations: string;
+}
+
+export interface ManagementTeamDeepDive {
+  members: Array<{
+    name: string;
+    role: string;
+    relevantCredentials: string;
+    projectRelevance: string;
+  }>;
+  skillsGapAnalysis: Array<{
+    gap: string;
+    impact: string;
+    hiringAction: string;
+    targetTiming: string;
+    estimatedCost: string;
+  }>;
+  operatingModel: string;
+}
+
+export interface GoToMarketStrategy {
+  channelStrategy: Array<{
+    channel: string;
+    role: string;
+    rationale: string;
+    year1Target: string;
+  }>;
+  pricingLadder: Array<{
+    tier: string;
+    targetCustomer: string;
+    pricePoint: string;
+    featureGate: string;
+  }>;
+  acquisitionPlaybook: Array<{
+    segment: string;
+    whyFirst: string;
+    message: string;
+    expectedSalesCycle: string;
+    cacEstimate: string;
+  }>;
+  pipelineTargets: Array<{
+    segment: string;
+    leads: string;
+    opportunities: string;
+    expectedCustomers: string;
+  }>;
+}
+
+export interface TechnologyArchitecture {
+  architectureSummary: string;
+  stackDecisions: Array<{
+    layer: string;
+    choice: string;
+    rationale: string;
+  }>;
+  dataPipelineDesign: string;
+  securityArchitecture: string;
+  apiGovernance: string;
+  scalabilityModel: string;
+  architectureDiagram: Array<{
+    component: string;
+    responsibility: string;
+    interfaces: string;
+  }>;
+}
+
+export interface FinancialStressTesting {
+  monthlyCashFlow: Array<{
+    month: string;
+    revenue: number;
+    opex: number;
+    capex: number;
+    netCashFlow: number;
+    closingCash: number;
+  }>;
+  sensitivity: Array<{
+    variable: string;
+    baseCase: string;
+    downsideCase: string;
+    impactOnBreakEven: string;
+    mitigation: string;
+  }>;
+  unitEconomics: {
+    arpu: string;
+    churnRate: string;
+    grossMargin: string;
+    paybackPeriod: string;
+    cac: string;
+  };
+  valuationMetrics: Array<{
+    scenario: string;
+    npv: string;
+    irr: string;
+    payback: string;
+  }>;
+}
+
+export interface InvestorReturns {
+  targetIrr: string;
+  exitScenarios: Array<{
+    route: string;
+    likelyAcquirers: string;
+    valuationLogic: string;
+    timing: string;
+  }>;
+  comparableExits: Array<{
+    company: string;
+    geography: string;
+    exitType: string;
+    relevance: string;
+  }>;
+  fiveYearValuation: Array<{
+    year: string;
+    revenue: string;
+    multiple: string;
+    impliedValuation: string;
+  }>;
+}
+
+export interface PrimaryResearchPlan {
+  interviewTargets: string;
+  questions: string[];
+  validationNeeded: string[];
+  currentEvidenceGap: string;
+  sampleQuotes?: string[];
+}
+
+export interface QuantifiedRiskRow {
+  risk: string;
+  probabilityPercent: number;
+  financialImpact: string;
+  expectedValue: string;
+  owner: string;
+  mitigation: string;
+}
+
+export interface ImplementationRoadmap {
+  phases: Array<{
+    phase: string;
+    timeline: string;
+    keyActivities: string;
+    decisionGate: string;
+    successMetric: string;
+  }>;
 }
 
 // ============================================================
@@ -154,10 +324,10 @@ export interface OpExItem {
 
 export interface RevenueScenario {
   scenario: "Optimistic" | "Base Case" | "Pessimistic";
-  probability: string;       // "30%"
-  subscribersYr1: string;    // "1,500" — generic units allowed
-  annualRevenue: string;     // "SAR 18.9M"
-  breakEven: string;         // "Month 3"
+  probability: string;
+  subscribersYr1: string;
+  annualRevenue: string;
+  breakEven: string;
 }
 
 export interface Financials {
@@ -166,9 +336,9 @@ export interface Financials {
   capEx: CapExItem[];
   opEx: OpExItem[];
   scenarios: RevenueScenario[];
-  investmentRange: string;        // "380–620k SAR"
-  breakEvenSummary: string;       // "Month 4–6"
-  ltvCacRatio?: string;           // "28x–32x"
+  investmentRange: string;
+  breakEvenSummary: string;
+  ltvCacRatio?: string;
 }
 
 // ============================================================
@@ -187,8 +357,8 @@ export interface RiskRow {
 // ============================================================
 export interface FundingSource {
   source: string;
-  share: string;          // "40%"
-  amount: string;         // "~200,000"
+  share: string;
+  amount: string;
   rationale: string;
 }
 
@@ -202,7 +372,18 @@ export interface FeasibilityReport {
   preparedBy: string;
   methodology: string;
 
-  executiveSummary: string;     // markdown
+  narrative?: NarrativeArchitecture;
+  actionTitles?: ActionTitles;
+  managementTeam?: ManagementTeamDeepDive;
+  goToMarket?: GoToMarketStrategy;
+  technologyArchitecture?: TechnologyArchitecture;
+  financialStressTesting?: FinancialStressTesting;
+  investorReturns?: InvestorReturns;
+  primaryResearch?: PrimaryResearchPlan;
+  quantifiedRisks?: QuantifiedRiskRow[];
+  implementationRoadmap?: ImplementationRoadmap;
+
+  executiveSummary: string;
   scores: FMARTScores;
 
   market: MarketSizing;
@@ -217,7 +398,7 @@ export interface FeasibilityReport {
   fundingMix: FundingSource[];
   fundingAdvisory: string;
 
-  recommendations: string[];     // strategic recommendations bullets
+  recommendations: string[];
   nextSteps: string[];
 }
 
