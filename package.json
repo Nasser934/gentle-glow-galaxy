@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
     "quality": "npm run lint && npm run typecheck && npm test && npm run build",
     "preview": "vite preview",
     "test": "vitest run",
