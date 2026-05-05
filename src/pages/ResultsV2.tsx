@@ -113,7 +113,7 @@ const ResultsV2 = () => {
     setBusy("export");
     const id = toast.loading("Generating full PDF report…");
     try {
-      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV3");
+      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV4");
       const result = await exportReportToPdfV2(exportRootRef.current, `${baseFileName}.pdf`, { report, inputs });
       toast.success(`PDF download started: ${result.fileName}`, { id });
     } catch (error: unknown) {
