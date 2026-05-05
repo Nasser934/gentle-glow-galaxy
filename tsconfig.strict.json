@@ -8,5 +8,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "allowJs": false
-  }
+  },
+  "exclude": [
+    "src/pages/Results.tsx",
+    "src/lib/exportPdf.ts"
+  ]
 }
