@@ -6,16 +6,23 @@ export type PresentationRow = { label: string; value: string; note?: string };
 export type DiagramRow = { step: string; input: string; activity: string; output: string; control: string };
 
 function allText(inputs: ConceptInputs, report: FeasibilityReport) {
-  return `${inputs.projectName} ${inputs.industry} ${inputs.description} ${inputs.strategicObjectives} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${report.executiveSummary}`.toLowerCase();
+  return `${inputs.projectName} ${inputs.industry} ${inputs.description} ${inputs.businessModel} ${inputs.revenueModel} ${inputs.strategicObjectives} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${report.executiveSummary}`.toLowerCase();
+}
+
+export function isMarketplaceConcept(inputs: ConceptInputs, report: FeasibilityReport) {
+  const text = allText(inputs, report);
+  return /(marketplace|procurement|b2b|supplier|buyer|gmv|take rate|commission|rfq|sourcing|commerce|e-commerce|vendor)/i.test(text);
 }
 
 export function isFinancialAiConcept(inputs: ConceptInputs, report: FeasibilityReport) {
+  if (isMarketplaceConcept(inputs, report)) return false;
   const text = allText(inputs, report);
-  return /(financial|finance|bank|banking|investment|hedge fund|asset manager|risk|alpha|portfolio|trading|capital market)/i.test(text)
+  return /(financial|finance|bank|banking|investment|hedge fund|asset manager|alpha|portfolio|trading|capital market)/i.test(text)
     && /(ai|artificial intelligence|machine learning|llm|model|predictive|analytics)/i.test(text);
 }
 
 export function presentationReportLabel(inputs: ConceptInputs, report: FeasibilityReport) {
+  if (isMarketplaceConcept(inputs, report)) return "B2B marketplace / procurement platform";
   if (isFinancialAiConcept(inputs, report)) return "Financial AI analytics";
   const label = getReportTemplate(inputs, report).label;
   if (label === "AI product") return "AI product feasibility";
@@ -63,11 +70,18 @@ export function buildHeadSummary(inputs: ConceptInputs, report: FeasibilityRepor
 export function buildConceptNarrative(inputs: ConceptInputs, report: FeasibilityReport) {
   const label = presentationReportLabel(inputs, report);
   const template = getReportTemplate(inputs, report);
+  if (isMarketplaceConcept(inputs, report)) {
+    return [
+      `${inputs.projectName || "The concept"} should be explained as a B2B procurement marketplace, not as an AI or financial analytics product. The report must define the buyer side, supplier side, first vertical, transaction flow, trust mechanism, payment flow, fulfilment model, and liquidity strategy.`,
+      `The commercial model is ${inputs.businessModel || "Marketplace / Platform"}, with ${inputs.revenueModel || "transaction or commission revenue"}. The feasibility case must connect GMV, take rate, supplier acquisition, buyer repeat usage, payment settlement, logistics, CAC, retention, and operating margin.`,
+      "The analysis must address cold-start liquidity, anchor suppliers, buyer onboarding, verified catalog quality, e-commerce compliance, fulfilment partnerships, and repeat purchase frequency.",
+    ];
+  }
   if (isFinancialAiConcept(inputs, report)) {
     return [
       `${inputs.projectName || "The concept"} should be explained as a financial AI analytics business, not as a generic AI product. The report must define the buying institution, the user workflow, the data sources, the decision supported, and the measurable value created for risk, research, investment, or executive teams.`,
-      `The commercial model is ${inputs.businessModel || "to be validated"}, with ${inputs.revenueModel || "revenue assumptions to be validated"}. The feasibility case must connect ACV, data licensing cost, model validation effort, implementation effort, compliance burden, adoption, retention, and expansion revenue.`,
-      "The analysis must address model risk, explainability, human review, auditability, data licensing, data lineage, cybersecurity, integration with bank systems, and regulatory review. These points are central to financial services feasibility.",
+      `The commercial model is ${inputs.businessModel || "to be validated"}, with ${inputs.revenueModel || "revenue assumptions to be validated"}. The feasibility case must connect ACV, data cost, model validation effort, implementation effort, compliance burden, adoption, retention, and expansion revenue.`,
+      "The analysis must address model risk, explainability, human review, auditability, data lineage, cybersecurity, integration with bank systems, and regulatory review.",
     ];
   }
   return [
@@ -79,12 +93,19 @@ export function buildConceptNarrative(inputs: ConceptInputs, report: Feasibility
 
 export function buildWorkflowRows(inputs: ConceptInputs, report: FeasibilityReport): DiagramRow[] {
   const type = getReportTemplate(inputs, report).type;
+  if (isMarketplaceConcept(inputs, report)) return [
+    { step: "1", input: "Anchor suppliers, catalog, pricing and tax details", activity: "Verify suppliers and normalize catalogs", output: "Trusted supplier base", control: "Supplier quality checks" },
+    { step: "2", input: "SME buyer purchase needs", activity: "Match demand to verified suppliers", output: "Quoted procurement options", control: "Price transparency and service rules" },
+    { step: "3", input: "Buyer order and payment method", activity: "Process order and commission", output: "Confirmed transaction and GMV", control: "Payment gateway and order checks" },
+    { step: "4", input: "Supplier fulfilment status", activity: "Track delivery and acceptance", output: "Completed procurement event", control: "Delivery proof and issue workflow" },
+    { step: "5", input: "Repeat orders, ratings and GMV data", activity: "Measure liquidity and retention", output: "Category expansion decision", control: "Repeat purchase, take rate and cohort KPIs" },
+  ];
   if (isFinancialAiConcept(inputs, report)) return [
-    { step: "1", input: "Market data, filings, transcripts, research notes and internal positions", activity: "Ingest licensed and internal data", output: "Permissioned financial knowledge base", control: "Data licensing, lineage and entitlement checks" },
-    { step: "2", input: "Documents, time series and portfolio context", activity: "Normalize, tag and retrieve relevant evidence", output: "Traceable evidence pack", control: "Source citation, freshness and quality scoring" },
-    { step: "3", input: "Analyst or executive question", activity: "Run AI reasoning, risk scoring and scenario analysis", output: "Insight, risk signal or decision memo", control: "Model validation and confidence thresholds" },
+    { step: "1", input: "Market data, filings, transcripts, research notes and internal positions", activity: "Ingest licensed and internal data", output: "Permissioned financial knowledge base", control: "Data lineage and access checks" },
+    { step: "2", input: "Documents, time series and portfolio context", activity: "Normalize, tag and retrieve evidence", output: "Traceable evidence pack", control: "Source citation and freshness scoring" },
+    { step: "3", input: "Analyst or executive question", activity: "Run AI reasoning and scenario analysis", output: "Insight, risk signal or decision memo", control: "Model validation and confidence thresholds" },
     { step: "4", input: "AI-generated output", activity: "Human review and challenge", output: "Approved decision support output", control: "Human-in-the-loop approval and audit trail" },
-    { step: "5", input: "Investment, risk or operating decision", activity: "Measure impact and feedback", output: "Model improvement and ROI tracking", control: "Backtesting, drift monitoring and value realization KPIs" },
+    { step: "5", input: "Investment, risk or operating decision", activity: "Measure impact and feedback", output: "Model improvement and ROI tracking", control: "Backtesting, drift monitoring and value KPIs" },
   ];
   if (type === "enterprise_data_insights") return [
     { step: "1", input: "ERP, CRM, finance and operations data", activity: "Ingest source data", output: "Unified data layer", control: "Access permissions" },
@@ -92,12 +113,6 @@ export function buildWorkflowRows(inputs: ConceptInputs, report: FeasibilityRepo
     { step: "3", input: "Business definitions", activity: "Create semantic layer", output: "Governed KPIs", control: "Metric ownership" },
     { step: "4", input: "User questions", activity: "Generate dashboards and alerts", output: "Decision-ready insights", control: "RBAC and audit logs" },
     { step: "5", input: "Usage and outcomes", activity: "Track value realization", output: "ROI and expansion case", control: "Adoption KPIs" },
-  ];
-  if (type === "customer_data_platform") return [
-    { step: "1", input: "CRM, billing and product data", activity: "Ingest customer events", output: "Customer data foundation", control: "Consent rules" },
-    { step: "2", input: "Customer identifiers", activity: "Resolve identity", output: "Customer 360 profile", control: "Match accuracy" },
-    { step: "3", input: "Segments", activity: "Activate audiences", output: "Personalized journeys", control: "Opt-out checks" },
-    { step: "4", input: "Campaign outcomes", activity: "Measure retention and LTV", output: "Growth insights", control: "Attribution checks" },
   ];
   return [
     { step: "1", input: "Customer need", activity: "Capture workflow", output: "Qualified use case", control: "Segment fit" },
@@ -108,8 +123,16 @@ export function buildWorkflowRows(inputs: ConceptInputs, report: FeasibilityRepo
 
 export function buildArchitectureRows(inputs: ConceptInputs, report: FeasibilityReport): PresentationRow[] {
   const type = getReportTemplate(inputs, report).type;
+  if (isMarketplaceConcept(inputs, report)) return [
+    { label: "Supplier and catalog layer", value: "Supplier onboarding, verification records, SKU catalog, pricing, inventory, service areas and supplier scorecards." },
+    { label: "Buyer procurement layer", value: "Buyer onboarding, RFQs, approval rules, budgets, saved suppliers, purchase history and recurring order workflows." },
+    { label: "Matching and transaction layer", value: "Search, quote comparison, order management, take-rate calculation, payment gateway, invoicing and settlement." },
+    { label: "Trust and fulfilment layer", value: "Ratings, issue management, delivery proof, logistics partners, service-level monitoring and resolution rules." },
+    { label: "Growth analytics layer", value: "GMV, take rate, liquidity ratio, supplier fill rate, repeat purchase, cohort retention and category expansion metrics." },
+    { label: "Compliance and security layer", value: "Tax compliance, e-commerce license, data protection, access controls, audit logs and payment security." },
+  ];
   if (isFinancialAiConcept(inputs, report)) return [
-    { label: "Licensed data layer", value: "Market data, filings, transcripts, research, alternative data and internal portfolio data with entitlement checks." },
+    { label: "Licensed data layer", value: "Market data, filings, transcripts, research, alternative data and internal portfolio data with access checks." },
     { label: "Knowledge and retrieval layer", value: "Document parsing, embeddings, source ranking, citation traceability, freshness scoring and retrieval controls." },
     { label: "AI reasoning layer", value: "LLM workflows, financial models, risk scoring, scenario analysis, guardrails and model confidence thresholds." },
     { label: "Human review layer", value: "Analyst review, investment committee challenge, approval workflow, audit notes and override logging." },
@@ -133,9 +156,16 @@ export function buildArchitectureRows(inputs: ConceptInputs, report: Feasibility
 
 export function buildValidationPlan(inputs: ConceptInputs, report: FeasibilityReport): PresentationRow[] {
   const type = getReportTemplate(inputs, report).type;
+  if (isMarketplaceConcept(inputs, report)) return [
+    { label: "Liquidity proof", value: "Onboard 20-30 anchor suppliers in one vertical and prove quote response rate, catalog depth and fill rate before broad launch." },
+    { label: "Buyer proof", value: "Run pilots with 50-100 SME buyers and measure first order conversion, repeat purchase, average order value and procurement savings." },
+    { label: "Transaction proof", value: "Validate payment gateway, settlement, invoicing, issue handling, fulfilment tracking and resolution rules." },
+    { label: "Unit economics proof", value: "Validate GMV, take rate, supplier acquisition cost, buyer CAC, contribution margin, payment fees and operations cost per order." },
+    { label: "Category expansion proof", value: "Expand only after one category shows repeat liquidity, supplier reliability and positive contribution margin." },
+  ];
   if (isFinancialAiConcept(inputs, report)) return [
     { label: "Buyer validation", value: "Secure paid discovery with 5-8 target institutions and confirm the first use case: research synthesis, risk monitoring, due diligence, or portfolio insight." },
-    { label: "Data validation", value: "Confirm data licensing rights, source coverage, latency, entitlement controls, and cost per customer before pilot launch." },
+    { label: "Data validation", value: "Confirm data rights, source coverage, latency, controls, and cost per customer before pilot launch." },
     { label: "Model validation", value: "Prove accuracy, explainability, hallucination control, backtesting quality, confidence scoring, and human review workflow." },
     { label: "Security and compliance", value: "Complete SOC 2 readiness, RBAC, audit logs, zero-trust controls, regulatory review pack, and customer security questionnaire readiness." },
     { label: "Commercial validation", value: "Validate ACV, CAC payback, gross margin after data/model cost, implementation effort, pilot-to-contract conversion, and expansion path." },
