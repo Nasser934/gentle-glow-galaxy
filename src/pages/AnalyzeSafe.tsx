@@ -12,6 +12,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { consumerValidationNote } from "@/lib/consumerSafety";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 import { generateLocalReport } from "@/lib/localReport";
+import { enrichReportResearch } from "@/lib/researchEnrichment";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ConceptInputs } from "@/types/analysis";
@@ -125,10 +126,11 @@ export default function AnalyzeSafe() {
     setBusy(true);
     try {
       const report = await invokeAnalysis(inputs);
-      navigate("/results", { state: { report, inputs } });
+      const enrichedReport = await enrichReportResearch(inputs, report);
+      navigate("/results", { state: { report: enrichedReport, inputs } });
     } catch (error) {
       console.error("Analysis service returned a recoverable issue", messageFromError(error, "unknown"));
-      const report = generateLocalReport(inputs);
+      const report = await enrichReportResearch(inputs, generateLocalReport(inputs));
       toast.warning(`The report is ready with validation assumptions. ${consumerValidationNote}`);
       navigate("/results", { state: { report, inputs } });
     } finally {
