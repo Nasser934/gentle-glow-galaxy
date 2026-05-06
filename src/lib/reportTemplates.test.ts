@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectReportType, validateTemplateIntegrity } from "./reportTemplates";
 import { generateLocalReport } from "./localReport";
-import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import type { ConceptInputs } from "@/types/analysis";
 
 const baseInputs = (projectName: string, industry: string): ConceptInputs => ({
   projectName,
@@ -25,55 +25,35 @@ const baseInputs = (projectName: string, industry: string): ConceptInputs => ({
   competitorUrls: "",
 });
 
-const baseReport = (summary: string): FeasibilityReport => ({
-  reportId: "FSB-TEST",
-  dateIssued: "2026-05-05",
-  classification: "Confidential",
-  preparedBy: "Concept AI",
-  methodology: "FMART",
-  executiveSummary: summary,
-  scores: {
-    financial: 7.2,
-    market: 8.1,
-    achievability: 7.5,
-    risk: 6.5,
-    timing: 8,
-    operational: 7,
-    overall: 7.4,
-    verdict: "PROCEED WITH CAUTION",
-    financialFinding: "Financial evidence needs validation.",
-    marketFinding: "Market evidence needs validation.",
-    achievabilityFinding: "Execution evidence needs validation.",
-    riskFinding: "Risk evidence needs validation.",
-    timingFinding: "Timing evidence needs validation.",
-    operationalFinding: "Operational evidence needs validation.",
-  },
-  market: {
-    tamLabel: "TAM",
-    tamValue: "$1B",
-    tamCagr: "10%",
-    samLabel: "SAM",
-    samValue: "$300M",
-    samCagr: "10%",
-    somLabel: "SOM",
-    somValue: "$30M",
-    somCagr: "10%",
-    growthChart: [],
-    currency: "USD",
-  },
-  customer: { ageLocation: "", income: "", goals: "", willingnessToPay: "", behavior: "" },
-  competitors: [],
-  financials: { currency: "USD", capExTotal: { low: 1, high: 2, mid: 1.5 }, capEx: [], opEx: [], scenarios: [], investmentRange: "$1M – $5M", breakEvenSummary: "Month 24" },
-  risks: [],
-  fundingMix: [],
-  fundingAdvisory: "",
-  recommendations: [],
-  nextSteps: [],
-});
-
 const allText = (value: unknown) => JSON.stringify(value).toLowerCase();
 
 describe("report template integrity", () => {
+  it("uses customer data platform template for Unified Customer Profile Platform", () => {
+    const inputs = {
+      ...baseInputs("Unified Customer Profile Platform", "Information Technology"),
+      description: "A customer data platform CDP for unified customer profile, customer 360, identity resolution, first-party data, segmentation, activation, consent management, CRM, email platform, support platform, billing system, retention, churn, LTV and personalization.",
+    };
+    const report = generateLocalReport(inputs);
+    const result = validateTemplateIntegrity(inputs, report);
+    const text = allText(report);
+
+    expect(detectReportType(inputs, report)).toBe("customer_data_platform");
+    expect(result.reportType).toBe("customer_data_platform");
+    expect(result.hasBlockingIssues).toBe(false);
+    expect(text).toContain("twilio segment");
+    expect(text).toContain("salesforce data cloud");
+    expect(text).toContain("adobe real-time cdp");
+    expect(text).toContain("identity resolution");
+    expect(text).toContain("consent");
+    expect(text).not.toContain("cloud collaboration saas");
+    expect(text).not.toContain("microsoft teams");
+    expect(text).not.toContain("slack");
+    expect(text).not.toContain("notion");
+    expect(text).not.toContain("asana");
+    expect(text).not.toContain("remote patient monitoring");
+    expect(text).not.toContain("inter-agency");
+  });
+
   it("uses enterprise data insights template for BI analytics reports", () => {
     const inputs = {
       ...baseInputs("Enterprise Data Insights Platform", "Information Technology"),
@@ -101,33 +81,50 @@ describe("report template integrity", () => {
   });
 
   it("uses cloud collaboration / generic SaaS when title says Secure Cloud Collaboration Platform", () => {
-    const inputs = baseInputs("Secure Cloud Collaboration Platform", "SaaS / Cloud Collaboration");
-    const report = baseReport("Team workspace and collaboration SaaS for remote teams.");
+    const inputs = {
+      ...baseInputs("Secure Cloud Collaboration Platform", "SaaS / Cloud Collaboration"),
+      description: "Team workspace and collaboration SaaS for remote teams, workflow, shared knowledge and productivity.",
+    };
+    const report = generateLocalReport(inputs);
     expect(detectReportType(inputs, report)).toBe("generic_saas");
   });
 
   it("uses healthcare RPM when title and industry are RPM", () => {
-    const inputs = baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences");
-    const report = baseReport("HIPAA-compliant RPM platform with EHR integration and reimbursement workflow.");
+    const inputs = {
+      ...baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences"),
+      description: "HIPAA-compliant RPM platform with remote patient monitoring, EHR integration, device data, reimbursement and clinician workflow.",
+    };
+    const report = generateLocalReport(inputs);
     expect(detectReportType(inputs, report)).toBe("healthcare_rpm");
   });
 
   it("uses public-sector data exchange for inter-agency report", () => {
-    const inputs = baseInputs("Inter-Agency Secure Data Exchange Platform", "Government & Public Sector");
-    const report = baseReport("FedRAMP-ready agency data-sharing platform.");
+    const inputs = {
+      ...baseInputs("Inter-Agency Secure Data Exchange Platform", "Government & Public Sector"),
+      description: "FedRAMP-ready public-sector agency data-sharing platform for inter-agency secure data exchange, procurement and auditability.",
+    };
+    const report = generateLocalReport(inputs);
     expect(detectReportType(inputs, report)).toBe("public_sector_data_exchange");
   });
 
   it("blocks healthcare terms inside cloud collaboration reports", () => {
-    const inputs = { ...baseInputs("Secure Cloud Collaboration Platform", "SaaS / Cloud Collaboration"), assumptions: "HIPAA reimbursement and patient adherence" };
-    const result = validateTemplateIntegrity(inputs, baseReport("Collaboration SaaS."));
+    const inputs = {
+      ...baseInputs("Secure Cloud Collaboration Platform", "SaaS / Cloud Collaboration"),
+      description: "Team workspace and collaboration SaaS for remote teams.",
+      assumptions: "HIPAA reimbursement and patient adherence",
+    };
+    const result = validateTemplateIntegrity(inputs, generateLocalReport(inputs));
     expect(result.reportType).toBe("generic_saas");
     expect(result.hasBlockingIssues).toBe(true);
   });
 
   it("blocks public-sector terms inside RPM reports", () => {
-    const inputs = { ...baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences"), assumptions: "inter-agency data exchange and justice-to-health workflow" };
-    const result = validateTemplateIntegrity(inputs, baseReport("HIPAA RPM platform."));
+    const inputs = {
+      ...baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences"),
+      description: "HIPAA RPM platform with EHR integration.",
+      assumptions: "inter-agency data exchange and justice-to-health workflow",
+    };
+    const result = validateTemplateIntegrity(inputs, generateLocalReport(inputs));
     expect(result.reportType).toBe("healthcare_rpm");
     expect(result.hasBlockingIssues).toBe(true);
   });
@@ -138,19 +135,31 @@ describe("report template integrity", () => {
       description: "A business intelligence analytics platform with semantic layer and governed KPIs.",
       assumptions: "cloud collaboration SaaS with Slack and Notion style team workspace",
     };
-    const report = baseReport("Business intelligence platform for governed KPIs and real-time insights.");
-    const result = validateTemplateIntegrity(inputs, report);
+    const result = validateTemplateIntegrity(inputs, generateLocalReport(inputs));
     expect(result.reportType).toBe("enterprise_data_insights");
     expect(result.hasBlockingIssues).toBe(true);
   });
 
-  it("allows clean RPM report", () => {
-    const inputs = { ...baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences"), assumptions: "HIPAA, EHR integration, device data reliability and reimbursement validation" };
-    const report = baseReport("HIPAA-compliant remote patient monitoring platform with EHR integration.");
-    report.competitors = [{ name: "Medtronic", model: "RPM", weakness: "device lock-in", edge: "vendor-neutral workflow" }];
-    report.research = { overview: "RPM", confidence: "High", sentiment: "Positive", keySignals: [], painPoints: [], competitorMentions: [], redditSignals: [], webSignals: [], citations: [{ source: "CMS", title: "RPM reimbursement", url: "https://cms.gov", takeaway: "RPM billing guidance" }] };
+  it("blocks cloud collaboration terms inside CDP reports", () => {
+    const inputs = {
+      ...baseInputs("Unified Customer Profile Platform", "Information Technology"),
+      description: "A customer data platform for unified customer profile, CDP, customer 360, identity resolution, segmentation and activation.",
+      assumptions: "cloud collaboration SaaS with Microsoft Teams and Slack",
+    };
+    const result = validateTemplateIntegrity(inputs, generateLocalReport(inputs));
+    expect(result.reportType).toBe("customer_data_platform");
+    expect(result.hasBlockingIssues).toBe(true);
+  });
+
+  it("blocks export when Source Notes are empty", () => {
+    const inputs = {
+      ...baseInputs("Unified Customer Profile Platform", "Information Technology"),
+      description: "A customer data platform for unified customer profile, CDP, customer 360, identity resolution, segmentation and activation.",
+    };
+    const report = generateLocalReport(inputs);
+    report.research = { ...report.research!, citations: [] };
     const result = validateTemplateIntegrity(inputs, report);
-    expect(result.reportType).toBe("healthcare_rpm");
-    expect(result.hasBlockingIssues).toBe(false);
+    expect(result.hasBlockingIssues).toBe(true);
+    expect(result.issues.some((issue) => issue.field === "sources")).toBe(true);
   });
 });
