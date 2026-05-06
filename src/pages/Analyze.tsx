@@ -16,6 +16,7 @@ import {
 } from "@/types/analysis";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
+import { generateLocalReport } from "@/lib/localReport";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 const ANALYSIS_FUNCTION = "analyze-concept-v2" as const;
@@ -173,7 +174,9 @@ const Analyze = () => {
       navigate("/results", { state: { report: data, inputs } });
     } catch (e: unknown) {
       console.error(e);
-      toast.error(messageFromError(e, "Analysis failed. Please confirm analyze-concept-v2 is deployed and configured."));
+      const fallbackReport = generateLocalReport(inputs);
+      toast.warning("Live AI analysis failed. Showing a local fallback report so you can continue.");
+      navigate("/results", { state: { report: fallbackReport, inputs } });
     } finally {
       setIsAnalyzing(false);
     }
