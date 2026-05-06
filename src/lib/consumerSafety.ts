@@ -23,6 +23,7 @@ const REPLACEMENTS: Array<[RegExp, string]> = [
   [/Treat market figures as directional until live research is restored\.?/gi, consumerValidationNote],
   [/Generated locally/gi, "Prepared by Concept AI"],
   [/local fallback/gi, "validation assumption"],
+  [/fallback content used/gi, "validation assumptions applied"],
   [/fallback mode/gi, "validation mode"],
   [/Live research unavailable in validation mode\.?/gi, consumerValidationNote],
   [/Live research unavailable/gi, "Primary research recommended"],
@@ -52,6 +53,17 @@ export function sanitizeConsumerText(value: unknown, fallback = "—") {
 export function sanitizeConsumerItems(items: unknown, max = 10) {
   if (!Array.isArray(items)) return [];
   return items.slice(0, max).map((item) => sanitizeConsumerText(item)).filter(Boolean);
+}
+
+export function sanitizeConsumerObject<T>(value: T): T {
+  if (typeof value === "string") return sanitizeConsumerText(value) as T;
+  if (Array.isArray(value)) return value.map((item) => sanitizeConsumerObject(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, sanitizeConsumerObject(item)])
+    ) as T;
+  }
+  return value;
 }
 
 export function containsBlockedConsumerLanguage(value: unknown) {
