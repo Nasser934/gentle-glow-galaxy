@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { sourceQuality, validateTemplateIntegrity } from "@/lib/reportTemplates";
 import { consumerSafeEvidenceNote, consumerValidationNote, sanitizeConsumerItems, sanitizeConsumerText } from "@/lib/consumerSafety";
+import { buildArchitectureRows, buildConceptNarrative, buildHeadSummary, buildValidationPlan, buildWorkflowRows, effectiveAnalysisConfidence, evidenceRows } from "@/lib/reportPresentation";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const verdictTone = (value: string) => {
@@ -36,13 +37,22 @@ const Kpi = ({ label, value, sub }: { label: string; value: string; sub?: string
 );
 
 const ScoreRow = ({ label, score, finding }: { label: string; score: number; finding: string }) => (
-  <div className="rounded-lg border border-border p-3">
+  <div className="rounded-lg border border-border p-4">
     <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="font-medium text-foreground">{label}</span>
+      <span className="font-semibold text-foreground">{label}</span>
       <span className="font-bold text-primary">{Number(score || 0).toFixed(1)} / 10</span>
     </div>
     <Progress value={Number(score || 0) * 10} className="mt-2 h-2" />
     <p className="mt-2 text-xs leading-5 text-muted-foreground">{sanitizeConsumerText(finding)}</p>
+  </div>
+);
+
+const SimpleTable = ({ head, rows }: { head: string[]; rows: string[][] }) => (
+  <div className="overflow-x-auto rounded-lg border border-border">
+    <table className="w-full text-sm">
+      <thead><tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">{head.map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr></thead>
+      <tbody>{rows.map((row, i) => <tr key={i} className="border-b last:border-0">{row.map((cell, j) => <td key={`${i}-${j}`} className="px-3 py-3 align-top leading-6">{sanitizeConsumerText(cell)}</td>)}</tr>)}</tbody>
+    </table>
   </div>
 );
 
@@ -51,8 +61,15 @@ export function ConsumerReportDashboard({ report, inputs }: { report: Feasibilit
   const recommendation = sanitizeConsumerText(validation.recommendation);
   const templateLabel = sanitizeConsumerText(validation.template.label);
   const citations = report.research?.citations ?? [];
-  const evidenceNote = consumerSafeEvidenceNote(citations.length, report.research?.confidence);
+  const confidence = effectiveAnalysisConfidence(report);
+  const evidenceNote = consumerSafeEvidenceNote(citations.length, confidence.label);
   const scores = report.scores;
+  const headSummary = buildHeadSummary(inputs, report);
+  const conceptNarrative = buildConceptNarrative(inputs, report);
+  const workflowRows = buildWorkflowRows(inputs, report);
+  const architectureRows = buildArchitectureRows(inputs, report);
+  const validationPlan = buildValidationPlan(inputs, report);
+  const evidence = evidenceRows(report);
 
   const scoreRows = [
     ["Financial", scores.financial, scores.financialFinding],
@@ -81,13 +98,16 @@ export function ConsumerReportDashboard({ report, inputs }: { report: Feasibilit
       </div>
 
       <Card className="border-primary/20">
-        <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4 text-primary" /> Executive Decision Summary</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4 text-primary" /> Board-Level Executive Brief</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
             <Kpi label="Feasibility Score" value={`${Number(scores.overall || 0).toFixed(1)} / 10`} sub="FMART weighted" />
             <Kpi label="Recommendation" value={recommendation} sub={templateLabel} />
-            <Kpi label="Analysis Confidence" value={report.research?.confidence ?? "Medium"} sub={`${citations.length || "Selected"} evidence items`} />
+            <Kpi label="Analysis Confidence" value={confidence.label} sub={confidence.sub} />
             <Kpi label="Next Decision" value={recommendation === "Proceed" ? "Approve controlled scale plan" : "Approve validation gates"} />
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {headSummary.map((row) => <div key={row.label} className="rounded-lg border border-border p-4"><div className="text-xs font-bold uppercase tracking-wider text-primary">{row.label}</div><p className="mt-2 text-sm leading-6 text-foreground">{sanitizeConsumerText(row.value)}</p></div>)}
           </div>
           <p className="text-sm leading-7 text-foreground">{sanitizeConsumerText(report.executiveSummary)}</p>
           <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{evidenceNote}</div>
@@ -120,13 +140,15 @@ export function ConsumerReportDashboard({ report, inputs }: { report: Feasibilit
         </TabsContent>
 
         <TabsContent value="product" className="space-y-4">
-          <Card><CardHeader><CardTitle className="text-base">Concept Explanation</CardTitle></CardHeader><CardContent><p className="text-sm leading-7 text-foreground">{sanitizeConsumerText(inputs.description || report.narrative?.governingThesis || report.executiveSummary)}</p></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Detailed Concept Explanation</CardTitle></CardHeader><CardContent className="space-y-3">{conceptNarrative.map((p) => <p key={p} className="text-sm leading-7 text-foreground">{sanitizeConsumerText(p)}</p>)}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Product Workflow</CardTitle></CardHeader><CardContent><SimpleTable head={["Step", "Input", "Activity", "Output", "Control"]} rows={workflowRows.map((r) => [r.step, r.input, r.activity, r.output, r.control])} /></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Architecture View</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{architectureRows.map((r) => <div key={r.label} className="rounded-lg border border-border p-3"><div className="font-semibold text-foreground">{r.label}</div><p className="mt-1 text-sm leading-6 text-muted-foreground">{sanitizeConsumerText(r.value)}</p></div>)}</CardContent></Card>
           <Card><CardHeader><CardTitle className="text-base">Value Map</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2"><Kpi label="Target customer" value={report.customer.ageLocation} /><Kpi label="Buyer need" value={report.customer.goals} /><Kpi label="Willingness to pay" value={report.customer.willingnessToPay} /><Kpi label="Adoption behavior" value={report.customer.behavior} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="financial" className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3"><Kpi label="Investment range" value={report.financials.investmentRange} sub={report.financials.currency} /><Kpi label="Break-even" value={report.financials.breakEvenSummary} /><Kpi label="LTV:CAC" value={report.financials.ltvCacRatio ?? "Requires validation"} /></div>
-          <Card><CardHeader><CardTitle className="text-base">Revenue Scenarios</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 pr-3">Scenario</th><th className="py-2 pr-3">Probability</th><th className="py-2 pr-3">Customers</th><th className="py-2 pr-3">Revenue</th><th className="py-2">Break-even</th></tr></thead><tbody>{report.financials.scenarios.map((s) => <tr key={s.scenario} className="border-b"><td className="py-2 pr-3 font-medium">{sanitizeConsumerText(s.scenario)}</td><td className="py-2 pr-3">{sanitizeConsumerText(s.probability)}</td><td className="py-2 pr-3">{sanitizeConsumerText(s.subscribersYr1)}</td><td className="py-2 pr-3">{sanitizeConsumerText(s.annualRevenue)}</td><td className="py-2">{sanitizeConsumerText(s.breakEven)}</td></tr>)}</tbody></table></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Revenue Scenarios</CardTitle></CardHeader><CardContent><SimpleTable head={["Scenario", "Probability", "Customers", "Revenue", "Break-even"]} rows={report.financials.scenarios.map((s) => [s.scenario, s.probability, s.subscribersYr1, s.annualRevenue, s.breakEven])} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="risk" className="space-y-4">
@@ -134,8 +156,8 @@ export function ConsumerReportDashboard({ report, inputs }: { report: Feasibilit
         </TabsContent>
 
         <TabsContent value="research" className="space-y-4">
-          <Card><CardHeader><CardTitle className="text-base">Evidence and Validation</CardTitle></CardHeader><CardContent><p className="text-sm leading-7 text-foreground">{sanitizeConsumerText(report.research?.overview || evidenceNote)}</p><p className="mt-3 rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{consumerValidationNote}</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-base">Sources</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{citations.slice(0, 10).map((c) => { const quality = sourceQuality(c.source, c.title); return <a key={`${c.source}-${c.title}`} href={c.url || "#"} target="_blank" rel="noreferrer" className="rounded-lg border border-border p-3 transition-colors hover:bg-accent"><div className="flex items-center justify-between gap-2"><div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sanitizeConsumerText(c.source)}</div><Badge variant="outline" className={qualityTone(quality)}>{quality}</Badge></div><div className="mt-1 font-medium text-foreground">{sanitizeConsumerText(c.title)}</div><p className="mt-1 text-xs text-muted-foreground">{sanitizeConsumerText(c.takeaway || "Supports report context.")}</p></a>; })}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Evidence and Validation</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm leading-7 text-foreground">{sanitizeConsumerText(report.research?.overview || evidenceNote)}</p><p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{consumerValidationNote}</p><div className="grid gap-3 md:grid-cols-2">{evidence.map((r) => <div key={`${r.label}-${r.value}`} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between gap-2"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sanitizeConsumerText(r.label)}</div><Badge variant="outline" className={qualityTone(r.label)}>{r.label}</Badge></div><p className="mt-2 text-sm font-medium text-foreground">{sanitizeConsumerText(r.value)}</p>{r.note && <p className="mt-1 text-xs leading-5 text-muted-foreground">{sanitizeConsumerText(r.note)}</p>}</div>)}</div></CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-base">Validation Plan</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{validationPlan.map((r) => <div key={r.label} className="rounded-lg border border-border p-3"><div className="font-semibold text-foreground">{r.label}</div><p className="mt-1 text-sm leading-6 text-muted-foreground">{sanitizeConsumerText(r.value)}</p></div>)}</CardContent></Card>
         </TabsContent>
 
         <TabsContent value="roadmap" className="space-y-4">
