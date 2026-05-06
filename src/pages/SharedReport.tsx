@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { getReportBySlug, type ReportRow } from "@/lib/reports";
-import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
+import { ConsumerReportDashboard } from "@/components/report/ConsumerReportDashboard";
 import { CommentsPanel } from "@/components/report/CommentsPanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
@@ -76,7 +76,7 @@ const SharedReport = () => {
         </div>
       </nav>
 
-      <main id="main-content" className="container mx-auto px-6 py-8">
+      <main id="main-content" className="container mx-auto max-w-7xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis</div>
@@ -86,7 +86,7 @@ const SharedReport = () => {
           {isOwner && <StatusControl report={row} onChanged={(s) => setRow({ ...row, status: s })} />}
         </div>
 
-        <InteractiveDashboard report={row.output} inputs={row.inputs} />
+        <ConsumerReportDashboard report={row.output} inputs={row.inputs} />
 
         <div className="mt-10 border-t border-border pt-6">
           <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-medium tracking-tight">
