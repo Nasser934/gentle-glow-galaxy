@@ -9,6 +9,7 @@ import { ConsumerReportDashboard } from "@/components/report/ConsumerReportDashb
 import { generateLocalReport } from "@/lib/localReport";
 import { validateTemplateIntegrity } from "@/lib/reportTemplates";
 import { consumerSafeEvidenceNote, sanitizeConsumerObject, sanitizeConsumerText } from "@/lib/consumerSafety";
+import { effectiveAnalysisConfidence, normalizeReportForDisplay } from "@/lib/reportPresentation";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -39,7 +40,7 @@ export default function ResultsRecovery() {
   const report = useMemo(() => {
     if (!inputs) return null;
     const generated = valid(state.report) ? state.report : generateLocalReport(inputs);
-    return sanitizeConsumerObject(generated);
+    return normalizeReportForDisplay(sanitizeConsumerObject(generated));
   }, [inputs, state.report]);
   const [savedId, setSavedId] = useState(state.reportId ?? "");
   const [slug, setSlug] = useState(state.slug ?? "");
@@ -49,7 +50,8 @@ export default function ResultsRecovery() {
   if (!inputs || !report) return <Navigate to="/analyze" replace />;
 
   const validation = validateTemplateIntegrity(inputs, report);
-  const evidenceNote = consumerSafeEvidenceNote(report.research?.citations?.length ?? 0, report.research?.confidence);
+  const confidence = effectiveAnalysisConfidence(report);
+  const evidenceNote = consumerSafeEvidenceNote(report.research?.citations?.length ?? 0, confidence.label);
 
   const exportPdf = async () => {
     try {
