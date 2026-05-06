@@ -9,116 +9,50 @@ const allowedOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "https://gentle-glow-
 type Inputs = Record<string, string>;
 type Report = Record<string, unknown>;
 type Citation = { title: string; url: string; source: string; takeaway: string };
-type Template = {
-  type: string;
-  label: string;
-  coreTerms: string[];
-  bannedTerms: string[];
-  competitors: string[];
-  compliance: string[];
-  risks: string[];
-  gtmChannels: string[];
-  recommendationRule: string;
-  searchQueries: string[];
+type ProfileRow = { label: string; value: string };
+type WorkflowRow = { step: string; input: string; activity: string; output: string; control: string };
+type UseCaseProfile = {
+  reportTypeLabel: string;
+  businessArchetype: string;
+  useCase: string;
+  buyer: string;
+  users: string;
+  jobToBeDone: string;
+  workflowReplaced: string;
+  monetizationLogic: string;
+  marketFrame: string;
+  complianceFrame: string;
+  riskFrame: string;
+  competitorFrame: string;
+  gtmMotion: string;
+  researchQueries: string[];
+  likelyCompetitors: string[];
+  keyRisks: string[];
+  complianceNeeds: string[];
+  forbiddenAssumptions: string[];
+  workflowSteps: WorkflowRow[];
+  architectureLayers: ProfileRow[];
+  validationGates: ProfileRow[];
 };
 
-const templates: Record<string, Template> = {
-  healthcare_rpm: {
-    type: "healthcare_rpm",
-    label: "Healthcare / remote patient monitoring",
-    coreTerms: ["HIPAA", "EHR integration", "device integration", "reimbursement", "clinical workflow", "patient adherence"],
-    bannedTerms: ["inter-agency", "GMV", "take rate", "anchor suppliers", "investment committee"],
-    competitors: ["Medtronic", "Philips", "Dexcom", "Abbott", "Epic", "Oracle Health"],
-    compliance: ["HIPAA", "FDA/SaMD classification", "patient consent", "clinical alert safety", "SOC 2"],
-    risks: ["HIPAA breach", "EHR integration delay", "patient adherence", "alert fatigue", "reimbursement failure"],
-    gtmChannels: ["health system pilots", "specialty clinics", "payer/provider partnerships", "EHR marketplace"],
-    recommendationRule: "Default to Conditional Proceed until provider adoption, integration feasibility and clinical workflow usage are validated.",
-    searchQueries: ["remote patient monitoring market HIPAA EHR reimbursement"]
-  },
-  public_sector_data_exchange: {
-    type: "public_sector_data_exchange",
-    label: "Public-sector data exchange",
-    coreTerms: ["FedRAMP", "agency adoption", "procurement", "data-sharing agreements", "legacy systems", "auditability"],
-    bannedTerms: ["patient adherence", "EHR integration", "GMV", "take rate", "portfolio alpha"],
-    competitors: ["Palantir", "Tyler Technologies", "IBM", "Oracle", "Microsoft Azure Government", "Snowflake"],
-    compliance: ["FedRAMP", "data-sharing agreements", "sovereign cloud", "audit logs", "procurement controls"],
-    risks: ["agency adoption", "legacy integration", "policy shift", "security accreditation", "procurement delay"],
-    gtmChannels: ["agency pilots", "systems integrators", "cloud marketplace", "policy workshops"],
-    recommendationRule: "Use Conditional Proceed unless procurement path, accreditation and agency sponsor are validated.",
-    searchQueries: ["government data exchange platform FedRAMP procurement market"]
-  },
-  identity_verification: {
-    type: "identity_verification",
-    label: "Identity verification / security SaaS",
-    coreTerms: ["KYC", "AML", "liveness detection", "document verification", "PII", "fraud reduction", "GDPR", "eIDAS", "audit logs"],
-    bannedTerms: ["portfolio alpha", "investment committee", "GMV", "take rate", "anchor suppliers"],
-    competitors: ["Onfido", "Jumio", "Persona", "ID.me", "Trulioo", "Sumsub"],
-    compliance: ["KYC/AML", "GDPR", "eIDAS", "SOC 2", "PII security", "data residency"],
-    risks: ["data breach", "false rejection", "regulatory change", "high CAC", "competitor dominance"],
-    gtmChannels: ["developer-led API pilots", "fintech/e-commerce pilots", "systems integrators", "cloud marketplace"],
-    recommendationRule: "Use Conditional Proceed until security, compliance, verification quality, API adoption and paid pilots are validated.",
-    searchQueries: ["digital identity verification market KYC AML Onfido Jumio Persona"]
-  },
-  enterprise_workflow: {
-    type: "enterprise_workflow",
-    label: "Enterprise workflow automation SaaS",
-    coreTerms: ["workflow automation", "ERP integration", "HRIS integration", "SSO", "RBAC", "audit logs", "SOC 2", "customer success", "NRR"],
-    bannedTerms: ["GMV", "take rate", "anchor suppliers", "supplier liquidity", "portfolio alpha", "investment committee"],
-    competitors: ["Monday.com", "Jira Service Management", "ServiceNow", "Asana", "Workato", "Zapier"],
-    compliance: ["SOC 2", "GDPR", "SSO", "RBAC", "audit logs", "data retention"],
-    risks: ["long enterprise sales cycle", "implementation burden", "low adoption", "integration complexity", "security review failure"],
-    gtmChannels: ["enterprise outbound", "systems integrators", "workflow pilots", "customer expansion"],
-    recommendationRule: "Proceed only if security review, implementation cost, adoption and renewal path are credible.",
-    searchQueries: ["enterprise workflow automation software market ServiceNow Monday Asana Jira"]
-  },
-  enterprise_data_insights: {
-    type: "enterprise_data_insights",
-    label: "Enterprise data insights / BI analytics",
-    coreTerms: ["business intelligence", "data ingestion", "data quality", "semantic layer", "governed KPIs", "self-service analytics", "time-to-insight"],
-    bannedTerms: ["remote patient monitoring", "EHR integration", "GMV", "take rate", "anchor suppliers"],
-    competitors: ["Power BI", "Tableau", "Looker", "Qlik", "ThoughtSpot", "Domo"],
-    compliance: ["SOC 2", "ISO 27001", "SSO", "RBAC", "audit logs", "data access controls"],
-    risks: ["poor data quality", "integration delays", "weak differentiation", "high CAC", "long enterprise sales cycle"],
-    gtmChannels: ["CIO/CDO/CFO outbound", "department-led pilots", "BI modernization campaigns", "cloud marketplace"],
-    recommendationRule: "Default to Conditional Proceed until paid pilots prove integrations, time-to-insight improvement, ACV, CAC payback and retention.",
-    searchQueries: ["business intelligence analytics platform market Power BI Tableau Looker"]
-  },
-  customer_data_platform: {
-    type: "customer_data_platform",
-    label: "Customer data platform",
-    coreTerms: ["CDP", "customer 360", "identity resolution", "consent management", "segmentation", "activation", "LTV"],
-    bannedTerms: ["remote patient monitoring", "inter-agency", "GMV", "take rate"],
-    competitors: ["Twilio Segment", "Salesforce Data Cloud", "Adobe Real-Time CDP", "Tealium", "mParticle", "Hightouch"],
-    compliance: ["GDPR", "CCPA", "SOC 2", "consent management", "data deletion", "audit logs"],
-    risks: ["identity resolution failure", "poor data quality", "consent violation", "integration complexity"],
-    gtmChannels: ["CMO/CDO outbound", "marketing operations pilots", "data consulting partners", "CRM partnerships"],
-    recommendationRule: "Use Conditional Proceed until identity resolution, privacy workflow, integrations, activation and CAC payback are validated.",
-    searchQueries: ["customer data platform CDP market Segment Salesforce Data Cloud Adobe"]
-  },
-  marketplace: {
-    type: "marketplace",
-    label: "B2B marketplace / procurement platform",
-    coreTerms: ["liquidity", "supply", "demand", "take rate", "GMV", "network effects", "retention"],
-    bannedTerms: ["workflow automation", "ERP/HRIS", "task assignment", "portfolio alpha", "investment committee"],
-    competitors: ["Tradeling", "Moglix", "Alibaba Business", "Amazon Business", "SAP Ariba"],
-    compliance: ["payments", "platform policies", "trust and safety", "tax invoicing"],
-    risks: ["cold start", "low liquidity", "CAC", "supply quality", "trust issues"],
-    gtmChannels: ["supply acquisition", "demand acquisition", "partnerships", "community loops"],
-    recommendationRule: "Proceed only if one side of the marketplace can be seeded cheaply and retained.",
-    searchQueries: ["B2B procurement marketplace market Tradeling Moglix Amazon Business"]
-  },
-  generic_saas: {
-    type: "generic_saas",
-    label: "SaaS feasibility",
-    coreTerms: ["ACV", "CAC", "churn", "LTV:CAC", "retention", "GTM", "roadmap"],
-    bannedTerms: ["GMV", "take rate", "HIPAA", "FedRAMP", "portfolio alpha"],
-    competitors: ["Microsoft", "Google", "Salesforce", "Oracle", "Atlassian"],
-    compliance: ["SOC 2", "privacy", "SSO", "RBAC", "security review"],
-    risks: ["CAC inflation", "churn", "low conversion", "implementation cost", "competition"],
-    gtmChannels: ["enterprise outbound", "PLG", "cloud marketplace", "partners"],
-    recommendationRule: "Proceed only when unit economics, retention and differentiation are validated.",
-    searchQueries: ["SaaS market ACV CAC churn benchmarks"]
-  }
+type FallbackTemplate = {
+  label: string;
+  searchQueries: string[];
+  forbiddenAssumptions: string[];
+  likelyCompetitors: string[];
+  keyRisks: string[];
+  complianceNeeds: string[];
+};
+
+const fallbackTemplates: Record<string, FallbackTemplate> = {
+  healthcare_rpm: { label: "Healthcare / remote patient monitoring", searchQueries: ["remote patient monitoring market HIPAA EHR reimbursement"], forbiddenAssumptions: ["inter-agency", "GMV", "take rate", "anchor suppliers"], likelyCompetitors: ["Medtronic", "Philips", "Dexcom", "Abbott", "Epic"], keyRisks: ["HIPAA breach", "EHR integration delay", "patient adherence"], complianceNeeds: ["HIPAA", "FDA/SaMD", "SOC 2"] },
+  public_sector_data_exchange: { label: "Public-sector data exchange", searchQueries: ["government data exchange platform FedRAMP procurement market"], forbiddenAssumptions: ["patient adherence", "GMV", "take rate", "portfolio alpha"], likelyCompetitors: ["Palantir", "Tyler Technologies", "IBM", "Oracle", "Microsoft Azure Government"], keyRisks: ["agency adoption", "legacy integration", "policy shift"], complianceNeeds: ["FedRAMP", "data-sharing agreements", "audit logs"] },
+  identity_verification: { label: "Identity verification / security SaaS", searchQueries: ["digital identity verification market KYC AML Onfido Jumio Persona"], forbiddenAssumptions: ["portfolio alpha", "investment committee", "GMV", "take rate", "anchor suppliers"], likelyCompetitors: ["Onfido", "Jumio", "Persona", "ID.me", "Trulioo"], keyRisks: ["data breach", "false rejection", "regulatory change"], complianceNeeds: ["KYC/AML", "GDPR", "eIDAS", "SOC 2"] },
+  enterprise_workflow: { label: "Enterprise workflow automation SaaS", searchQueries: ["enterprise workflow automation software market ServiceNow Monday Asana Jira"], forbiddenAssumptions: ["GMV", "take rate", "anchor suppliers", "supplier liquidity", "portfolio alpha"], likelyCompetitors: ["Monday.com", "Jira Service Management", "ServiceNow", "Asana", "Workato"], keyRisks: ["long enterprise sales cycle", "implementation burden", "low adoption"], complianceNeeds: ["SOC 2", "GDPR", "SSO", "RBAC", "audit logs"] },
+  enterprise_data_insights: { label: "Enterprise data insights / BI analytics", searchQueries: ["business intelligence analytics platform market Power BI Tableau Looker"], forbiddenAssumptions: ["remote patient monitoring", "GMV", "take rate", "anchor suppliers"], likelyCompetitors: ["Power BI", "Tableau", "Looker", "Qlik", "ThoughtSpot"], keyRisks: ["poor data quality", "integration delays", "weak differentiation"], complianceNeeds: ["SOC 2", "ISO 27001", "SSO", "RBAC"] },
+  customer_data_platform: { label: "Customer data platform", searchQueries: ["customer data platform CDP market Segment Salesforce Data Cloud Adobe"], forbiddenAssumptions: ["remote patient monitoring", "inter-agency", "GMV", "take rate"], likelyCompetitors: ["Twilio Segment", "Salesforce Data Cloud", "Adobe Real-Time CDP", "Tealium", "mParticle"], keyRisks: ["identity resolution failure", "poor data quality", "consent violation"], complianceNeeds: ["GDPR", "CCPA", "SOC 2", "consent management"] },
+  marketplace: { label: "B2B marketplace / procurement platform", searchQueries: ["B2B procurement marketplace market Tradeling Moglix Amazon Business"], forbiddenAssumptions: ["workflow automation", "ERP/HRIS", "task assignment", "portfolio alpha"], likelyCompetitors: ["Tradeling", "Moglix", "Alibaba Business", "Amazon Business", "SAP Ariba"], keyRisks: ["cold start", "low liquidity", "CAC"], complianceNeeds: ["payments", "trust and safety", "tax invoicing"] },
+  generic_saas: { label: "SaaS feasibility", searchQueries: ["SaaS market ACV CAC churn benchmarks"], forbiddenAssumptions: ["GMV", "take rate", "HIPAA", "FedRAMP", "portfolio alpha"], likelyCompetitors: ["Microsoft", "Google", "Salesforce", "Oracle", "Atlassian"], keyRisks: ["CAC inflation", "churn", "low conversion"], complianceNeeds: ["SOC 2", "privacy", "SSO", "RBAC"] }
 };
 
 function isAllowedOrigin(origin: string) {
@@ -138,22 +72,19 @@ function corsHeaders(req: Request) {
   const allowed = isAllowedOrigin(origin) ? origin : allowedOrigins[0] ?? "*";
   return { "Access-Control-Allow-Origin": allowed, "Vary": "Origin", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version" };
 }
-
-function json(req: Request, body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
-}
+function json(req: Request, body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }); }
 function safePublicError() { return "Analysis service is temporarily unavailable. Please try again later."; }
-function text(inputs: Inputs) { return `${inputs.projectName} ${inputs.industry} ${inputs.description} ${inputs.businessModel} ${inputs.revenueModel} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.dependencies} ${inputs.assumptions}`.toLowerCase(); }
-function resolveTemplate(inputs: Inputs): Template {
-  const t = text(inputs);
-  if (/remote patient|patient monitoring|\brpm\b|hospital|clinic|ehr|hipaa|healthcare|clinical/.test(t)) return templates.healthcare_rpm;
-  if (/inter-agency|secure data exchange|government data|public sector|agency|fedramp|sovereign cloud|govtech/.test(t)) return templates.public_sector_data_exchange;
-  if (/identity verification|digital identity|id verification|liveness|biometric|eidas|kyc|aml|fraud reduction/.test(t)) return templates.identity_verification;
-  if (/customer data platform|\bcdp\b|customer 360|unified customer|identity resolution|first-party data/.test(t)) return templates.customer_data_platform;
-  if (/workflow automation|enterprise workflow|task assignment|task tracking|cross-departmental|orchestration|erp\/hris|hris|approval workflow|work about work/.test(t)) return templates.enterprise_workflow;
-  if (/data insights|business intelligence|\bbi platform\b|enterprise analytics|semantic layer|time-to-insight/.test(t)) return templates.enterprise_data_insights;
-  if (/marketplace|b2b procurement platform|procurement marketplace|supplier marketplace|rfq platform|gmv|take rate/.test(t)) return templates.marketplace;
-  return templates.generic_saas;
+function joinedInputs(inputs: Inputs) { return `${inputs.projectName} ${inputs.industry} ${inputs.location} ${inputs.description} ${inputs.strategicObjectives} ${inputs.businessModel} ${inputs.revenueModel} ${inputs.founderExperience} ${inputs.budgetRange} ${inputs.timeline} ${inputs.teamSize} ${inputs.dependencies} ${inputs.assumptions} ${inputs.constraints} ${inputs.successFactors} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.technologyReadiness} ${inputs.competitorUrls}`.toLowerCase(); }
+function fallbackTemplate(inputs: Inputs): FallbackTemplate {
+  const t = joinedInputs(inputs);
+  if (/remote patient|patient monitoring|\brpm\b|hospital|clinic|ehr|hipaa|healthcare|clinical/.test(t)) return fallbackTemplates.healthcare_rpm;
+  if (/inter-agency|secure data exchange|government data|public sector|agency|fedramp|sovereign cloud|govtech/.test(t)) return fallbackTemplates.public_sector_data_exchange;
+  if (/identity verification|digital identity|id verification|liveness|biometric|eidas|kyc|aml|fraud reduction/.test(t)) return fallbackTemplates.identity_verification;
+  if (/customer data platform|\bcdp\b|customer 360|unified customer|identity resolution|first-party data/.test(t)) return fallbackTemplates.customer_data_platform;
+  if (/workflow automation|enterprise workflow|task assignment|task tracking|cross-departmental|orchestration|erp\/hris|hris|approval workflow|work about work/.test(t)) return fallbackTemplates.enterprise_workflow;
+  if (/data insights|business intelligence|\bbi platform\b|enterprise analytics|semantic layer|time-to-insight/.test(t)) return fallbackTemplates.enterprise_data_insights;
+  if (/marketplace|b2b procurement platform|procurement marketplace|supplier marketplace|rfq platform|gmv|take rate/.test(t)) return fallbackTemplates.marketplace;
+  return fallbackTemplates.generic_saas;
 }
 function sanitizeInputs(raw: unknown): { ok: true; inputs: Inputs } | { ok: false; error: string; status: number } {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Invalid inputs payload", status: 400 };
@@ -166,10 +97,10 @@ function sanitizeInputs(raw: unknown): { ok: true; inputs: Inputs } | { ok: fals
   if (!inputs.projectName || !inputs.industry || !inputs.description) return { ok: false, error: "Missing required project fields", status: 400 };
   return { ok: true, inputs };
 }
-function stripBanned(value: unknown, template: Template): unknown {
-  if (typeof value === "string") return template.bannedTerms.reduce((out, term) => out.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "sector-specific validation"), value);
-  if (Array.isArray(value)) return value.map((v) => stripBanned(v, template));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, stripBanned(v, template)]));
+function stripForbidden(value: unknown, forbidden: string[]): unknown {
+  if (typeof value === "string") return forbidden.reduce((out, term) => out.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "sector-specific validation"), value);
+  if (Array.isArray(value)) return value.map((v) => stripForbidden(v, forbidden));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, stripForbidden(v, forbidden)]));
   return value;
 }
 function getRecord(value: unknown, field: string): Record<string, unknown> { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid report field: ${field}`); return value as Record<string, unknown>; }
@@ -191,9 +122,82 @@ async function checkRateLimit(userId: string) {
   const count = Number(data?.count ?? 0) + 1; if (count > 8) return { ok: false };
   await admin.from("edge_rate_limits").upsert({ user_id: userId, action, window_start: windowStart, count, updated_at: now.toISOString() }); return { ok: true };
 }
-async function tavilyResearch(inputs: Inputs, template: Template): Promise<{ answer: string; citations: Citation[] }> {
+
+const profileSchema = {
+  type: "object",
+  properties: {
+    reportTypeLabel: { type: "string" }, businessArchetype: { type: "string" }, useCase: { type: "string" }, buyer: { type: "string" }, users: { type: "string" }, jobToBeDone: { type: "string" }, workflowReplaced: { type: "string" }, monetizationLogic: { type: "string" }, marketFrame: { type: "string" }, complianceFrame: { type: "string" }, riskFrame: { type: "string" }, competitorFrame: { type: "string" }, gtmMotion: { type: "string" },
+    researchQueries: { type: "array", items: { type: "string" } }, likelyCompetitors: { type: "array", items: { type: "string" } }, keyRisks: { type: "array", items: { type: "string" } }, complianceNeeds: { type: "array", items: { type: "string" } }, forbiddenAssumptions: { type: "array", items: { type: "string" } },
+    workflowSteps: { type: "array", items: { type: "object", properties: { step: { type: "string" }, input: { type: "string" }, activity: { type: "string" }, output: { type: "string" }, control: { type: "string" } }, required: ["step", "input", "activity", "output", "control"] } },
+    architectureLayers: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } }, required: ["label", "value"] } },
+    validationGates: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } }, required: ["label", "value"] } }
+  },
+  required: ["reportTypeLabel", "businessArchetype", "useCase", "buyer", "users", "jobToBeDone", "workflowReplaced", "monetizationLogic", "marketFrame", "complianceFrame", "riskFrame", "competitorFrame", "gtmMotion", "researchQueries", "likelyCompetitors", "keyRisks", "complianceNeeds", "forbiddenAssumptions", "workflowSteps", "architectureLayers", "validationGates"]
+};
+
+function fallbackProfile(inputs: Inputs, fallback: FallbackTemplate): UseCaseProfile {
+  return {
+    reportTypeLabel: fallback.label,
+    businessArchetype: inputs.businessModel || "SaaS / platform business",
+    useCase: inputs.description || inputs.projectName,
+    buyer: "Target buyer defined by the submitted business concept",
+    users: "Primary end users defined by the submitted workflow",
+    jobToBeDone: inputs.strategicObjectives || "Solve the core operational problem described in the concept",
+    workflowReplaced: "Current manual or fragmented workflow",
+    monetizationLogic: inputs.revenueModel || "Revenue model to be validated",
+    marketFrame: fallback.searchQueries[0] || inputs.industry,
+    complianceFrame: fallback.complianceNeeds.join(", "),
+    riskFrame: fallback.keyRisks.join(", "),
+    competitorFrame: fallback.likelyCompetitors.join(", "),
+    gtmMotion: "Paid pilots followed by staged expansion",
+    researchQueries: fallback.searchQueries,
+    likelyCompetitors: fallback.likelyCompetitors,
+    keyRisks: fallback.keyRisks,
+    complianceNeeds: fallback.complianceNeeds,
+    forbiddenAssumptions: fallback.forbiddenAssumptions,
+    workflowSteps: [
+      { step: "1", input: "Target customer need", activity: "Capture and qualify the use case", output: "Validated problem statement", control: "Buyer fit check" },
+      { step: "2", input: "Workflow and data inputs", activity: "Run the proposed product workflow", output: "Measurable business result", control: "Operational control point" },
+      { step: "3", input: "Usage and financial data", activity: "Measure adoption and economics", output: "Scale decision", control: "Validation gate" }
+    ],
+    architectureLayers: [{ label: "Experience layer", value: "User workflow and buyer journey." }, { label: "Application layer", value: "Core product logic and workflow controls." }, { label: "Data and security layer", value: "Reporting, access control, auditability and privacy." }],
+    validationGates: [{ label: "Buyer proof", value: "Validate buyer urgency and willingness to pay." }, { label: "Financial proof", value: "Validate ACV, CAC, margin and payback." }, { label: "Execution proof", value: "Validate team, technology and operating readiness." }]
+  };
+}
+
+async function inferUseCaseProfile(key: string, inputs: Inputs, fallback: FallbackTemplate): Promise<UseCaseProfile> {
+  try {
+    const prompt = [
+      "Infer the exact business use case from the submitted concept. Do not force the concept into a predefined category.",
+      "Return the business situation, buyer, user, job-to-be-done, workflow replaced, monetization logic, market frame, compliance frame, risk frame, competitor frame, GTM motion, useful web research queries, and forbidden assumptions.",
+      "The forbidden assumptions must list phrases or logic that would be wrong for this exact concept. Example: for workflow SaaS, forbid GMV, supplier liquidity, take rate, anchor suppliers. For marketplace, forbid workflow-only SaaS assumptions.",
+      "Use the fallback hints only if they match the submitted concept. If the fallback conflicts with the concept, ignore the fallback."
+    ].join("\n");
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [{ role: "system", content: prompt }, { role: "user", content: JSON.stringify({ inputs, fallbackHints: fallback }) }],
+        tools: [{ type: "function", function: { name: "provide_use_case_profile", description: "Return the inferred use-case profile", parameters: profileSchema } }],
+        tool_choice: { type: "function", function: { name: "provide_use_case_profile" } }
+      })
+    });
+    if (!response.ok) throw new Error("profile inference failed");
+    const data = await response.json(); const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) throw new Error("profile inference returned no args");
+    const profile = JSON.parse(args) as UseCaseProfile;
+    if (!profile.reportTypeLabel || !Array.isArray(profile.workflowSteps) || profile.workflowSteps.length < 3) throw new Error("profile incomplete");
+    return profile;
+  } catch {
+    return fallbackProfile(inputs, fallback);
+  }
+}
+
+async function tavilyResearch(inputs: Inputs, profile: UseCaseProfile): Promise<{ answer: string; citations: Citation[] }> {
   const key = Deno.env.get("TAVILY_API_KEY"); if (!key) return { answer: "", citations: [] };
-  const query = [inputs.projectName, inputs.industry, inputs.location, template.searchQueries[0]].filter(Boolean).join(" ").slice(0, 420);
+  const query = [inputs.projectName, inputs.location, profile.researchQueries?.[0] || profile.marketFrame].filter(Boolean).join(" ").slice(0, 390);
   try {
     const response = await fetch("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(12000), body: JSON.stringify({ api_key: key, query, search_depth: "advanced", max_results: 8, include_answer: true, include_raw_content: false }) });
     if (!response.ok) return { answer: "", citations: [] };
@@ -205,7 +209,8 @@ async function tavilyResearch(inputs: Inputs, template: Template): Promise<{ ans
     return { answer: String(data.answer ?? "").slice(0, 600), citations };
   } catch { return { answer: "", citations: [] }; }
 }
-const reportSchema = { type: "object", properties: { executiveSummary: { type: "string" }, scores: { type: "object" }, market: { type: "object" }, customer: { type: "object" }, competitors: { type: "array", items: { type: "object" } }, research: { type: "object" }, financials: { type: "object" }, risks: { type: "array", items: { type: "object" } }, fundingMix: { type: "array", items: { type: "object" } }, fundingAdvisory: { type: "string" }, recommendations: { type: "array", items: { type: "string" } }, nextSteps: { type: "array", items: { type: "string" } }, implementationRoadmap: { type: "object" } }, required: ["executiveSummary", "scores", "market", "customer", "competitors", "research", "financials", "risks", "fundingMix", "fundingAdvisory", "recommendations", "nextSteps"] };
+
+const reportSchema = { type: "object", properties: { useCaseProfile: profileSchema, executiveSummary: { type: "string" }, scores: { type: "object" }, market: { type: "object" }, customer: { type: "object" }, competitors: { type: "array", items: { type: "object" } }, research: { type: "object" }, financials: { type: "object" }, risks: { type: "array", items: { type: "object" } }, fundingMix: { type: "array", items: { type: "object" } }, fundingAdvisory: { type: "string" }, recommendations: { type: "array", items: { type: "string" } }, nextSteps: { type: "array", items: { type: "string" } }, implementationRoadmap: { type: "object" } }, required: ["useCaseProfile", "executiveSummary", "scores", "market", "customer", "competitors", "research", "financials", "risks", "fundingMix", "fundingAdvisory", "recommendations", "nextSteps"] };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
@@ -216,30 +221,33 @@ serve(async (req) => {
     if (userError || !userData?.user?.id) return json(req, { error: "Your session has expired. Please sign in again." }, 401);
     const limit = await checkRateLimit(userData.user.id); if (!limit.ok) return json(req, { error: "Too many requests. Please wait and try again." }, 429);
     const body = await req.json(); const sanitized = sanitizeInputs(body?.inputs); if (!sanitized.ok) return json(req, { error: sanitized.error }, sanitized.status);
-    const selectedTemplate = resolveTemplate(sanitized.inputs); const research = await tavilyResearch(sanitized.inputs, selectedTemplate);
     const key = Deno.env.get("LOVABLE_API_KEY"); if (!key) throw new Error("AI service key missing");
+
+    const fallback = fallbackTemplate(sanitized.inputs);
+    const profile = await inferUseCaseProfile(key, sanitized.inputs, fallback);
+    const research = await tavilyResearch(sanitized.inputs, profile);
+    const forbidden = Array.from(new Set([...(profile.forbiddenAssumptions || []), ...fallback.forbiddenAssumptions])).filter(Boolean);
+
     const systemPrompt = [
       "You are a senior feasibility consultant. Return only a professional consumer-facing feasibility report by calling provide_report.",
+      "Use the AI-inferred useCaseProfile as the source of truth. Do not force the report into a fixed category.",
       "Never mention system diagnostics, templates, internal status, fallback, debug details, stack traces, or repair logic.",
-      `Use this report type only: ${selectedTemplate.label}.`,
-      `Must include sector terms: ${selectedTemplate.coreTerms.join(", ")}.`,
-      `Must avoid wrong-template terms: ${selectedTemplate.bannedTerms.join(", ")}.`,
-      `Use relevant competitors only from this business category: ${selectedTemplate.competitors.join(", ")}.`,
-      `Use compliance path: ${selectedTemplate.compliance.join(", ")}.`,
-      `Use risks: ${selectedTemplate.risks.join(", ")}.`,
-      `Use GTM channels: ${selectedTemplate.gtmChannels.join(", ")}.`,
-      `Recommendation rule: ${selectedTemplate.recommendationRule}`,
+      "Build the report from the business situation, buyer, user, job-to-be-done, workflow replaced, monetization logic, competitors, compliance context, risks, and validation gates in useCaseProfile.",
+      "The reportTypeLabel must be the useCaseProfile.reportTypeLabel, not a hard-coded category.",
+      `Forbidden assumptions and terms for this concept: ${forbidden.join(", ")}.`,
+      "Do not include any workflow, competitor, revenue logic, risks, or diagrams that conflict with the useCaseProfile.",
       "Scores must be 0-10. Financial scenarios must be exactly three: Optimistic, Base Case, Pessimistic.",
       "TAM must be greater than or equal to SAM, and SAM must be greater than or equal to SOM.",
-      "Use the Tavily research citations when available and include them in research.citations."
+      "Use Tavily research citations when available and include them in research.citations. If no citations are available, set research.confidence to Low and state that primary research is required."
     ].join("\n");
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(45000), body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ inputs: sanitized.inputs, selectedTemplate, webResearch: research }) }], tools: [{ type: "function", function: { name: "provide_report", description: "Return the full feasibility report", parameters: reportSchema } }], tool_choice: { type: "function", function: { name: "provide_report" } } }) });
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(45000), body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ inputs: sanitized.inputs, useCaseProfile: profile, webResearch: research }) }], tools: [{ type: "function", function: { name: "provide_report", description: "Return the full feasibility report", parameters: reportSchema } }], tool_choice: { type: "function", function: { name: "provide_report" } } }) });
     if (!response.ok) { console.error("AI gateway failed", response.status); if (response.status === 429) return json(req, { error: "Rate limit exceeded. Try again shortly." }, 429); if (response.status === 402) return json(req, { error: "AI usage limit reached. Add credits to continue." }, 402); throw new Error("AI gateway unavailable"); }
     const data = await response.json(); const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments; if (!args) throw new Error("Invalid AI response");
-    let report = stripBanned(JSON.parse(args) as Report, selectedTemplate) as Report;
+    let report = stripForbidden(JSON.parse(args) as Report, forbidden) as Report;
+    report.useCaseProfile = profile;
     report.reportId = typeof report.reportId === "string" ? report.reportId : `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     report.dateIssued = typeof report.dateIssued === "string" ? report.dateIssued : new Date().toISOString().slice(0, 10);
-    report.classification = "Confidential"; report.preparedBy = "Concept AI"; report.methodology = `FMART weighted feasibility scoring using ${selectedTemplate.label}.`;
+    report.classification = "Confidential"; report.preparedBy = "Concept AI"; report.methodology = `FMART weighted feasibility scoring using an AI-inferred use-case profile: ${profile.reportTypeLabel}.`;
     const reportResearch = getRecord(report.research, "research");
     if (research.citations.length > 0) { reportResearch.citations = research.citations; reportResearch.confidence = research.citations.length >= 5 ? "High" : "Medium"; reportResearch.overview = String(reportResearch.overview ?? research.answer ?? "External research supports market and competitor context."); report.research = reportResearch; }
     validateReport(report); return json(req, report);
