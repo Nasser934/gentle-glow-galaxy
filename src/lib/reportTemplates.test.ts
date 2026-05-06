@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { detectReportType, validateTemplateIntegrity } from "./reportTemplates";
+import { generateLocalReport } from "./localReport";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const baseInputs = (projectName: string, industry: string): ConceptInputs => ({
@@ -40,12 +41,12 @@ const baseReport = (summary: string): FeasibilityReport => ({
     operational: 7,
     overall: 7.4,
     verdict: "PROCEED WITH CAUTION",
-    financialFinding: "",
-    marketFinding: "",
-    achievabilityFinding: "",
-    riskFinding: "",
-    timingFinding: "",
-    operationalFinding: "",
+    financialFinding: "Financial evidence needs validation.",
+    marketFinding: "Market evidence needs validation.",
+    achievabilityFinding: "Execution evidence needs validation.",
+    riskFinding: "Risk evidence needs validation.",
+    timingFinding: "Timing evidence needs validation.",
+    operationalFinding: "Operational evidence needs validation.",
   },
   market: {
     tamLabel: "TAM",
@@ -70,7 +71,35 @@ const baseReport = (summary: string): FeasibilityReport => ({
   nextSteps: [],
 });
 
+const allText = (value: unknown) => JSON.stringify(value).toLowerCase();
+
 describe("report template integrity", () => {
+  it("uses enterprise data insights template for BI analytics reports", () => {
+    const inputs = {
+      ...baseInputs("Enterprise Data Insights Platform", "Information Technology"),
+      description: "A business intelligence and enterprise analytics platform for governed KPIs, semantic layer, data ingestion, ERP, CRM, real-time insights and time-to-insight improvement.",
+    };
+    const report = generateLocalReport(inputs);
+    const result = validateTemplateIntegrity(inputs, report);
+    const text = allText(report);
+
+    expect(detectReportType(inputs, report)).toBe("enterprise_data_insights");
+    expect(result.reportType).toBe("enterprise_data_insights");
+    expect(result.hasBlockingIssues).toBe(false);
+    expect(text).toContain("power bi");
+    expect(text).toContain("tableau");
+    expect(text).toContain("looker");
+    expect(text).toContain("semantic layer");
+    expect(text).toContain("time-to-insight");
+    expect(text).not.toContain("cloud collaboration saas");
+    expect(text).not.toContain("slack");
+    expect(text).not.toContain("notion");
+    expect(text).not.toContain("asana");
+    expect(text).not.toContain("microsoft teams");
+    expect(text).not.toContain("remote patient monitoring");
+    expect(text).not.toContain("inter-agency");
+  });
+
   it("uses cloud collaboration / generic SaaS when title says Secure Cloud Collaboration Platform", () => {
     const inputs = baseInputs("Secure Cloud Collaboration Platform", "SaaS / Cloud Collaboration");
     const report = baseReport("Team workspace and collaboration SaaS for remote teams.");
@@ -100,6 +129,18 @@ describe("report template integrity", () => {
     const inputs = { ...baseInputs("Secure Remote Patient Monitoring Application", "Healthcare & Life Sciences"), assumptions: "inter-agency data exchange and justice-to-health workflow" };
     const result = validateTemplateIntegrity(inputs, baseReport("HIPAA RPM platform."));
     expect(result.reportType).toBe("healthcare_rpm");
+    expect(result.hasBlockingIssues).toBe(true);
+  });
+
+  it("blocks cloud collaboration terms inside enterprise data insights reports", () => {
+    const inputs = {
+      ...baseInputs("Enterprise Data Insights Platform", "Information Technology"),
+      description: "A business intelligence analytics platform with semantic layer and governed KPIs.",
+      assumptions: "cloud collaboration SaaS with Slack and Notion style team workspace",
+    };
+    const report = baseReport("Business intelligence platform for governed KPIs and real-time insights.");
+    const result = validateTemplateIntegrity(inputs, report);
+    expect(result.reportType).toBe("enterprise_data_insights");
     expect(result.hasBlockingIssues).toBe(true);
   });
 
