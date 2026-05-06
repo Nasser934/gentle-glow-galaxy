@@ -3,6 +3,7 @@ import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 export type ReportType =
   | "healthcare_rpm"
   | "public_sector_data_exchange"
+  | "enterprise_data_insights"
   | "generic_saas"
   | "ai_product"
   | "marketplace"
@@ -67,6 +68,23 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
     recommendationRule: "Use Conditional Proceed unless procurement path, accreditation and agency sponsor are already validated.",
     scoreBoosters: ["Named agency sponsor", "Data-sharing agreement path", "FedRAMP path confirmed", "Procurement route validated"],
     scoreReducers: ["No lead agency", "Procurement delay", "Security accreditation gap", "Legacy integration blockers"],
+  },
+  enterprise_data_insights: {
+    type: "enterprise_data_insights",
+    label: "Enterprise data insights / BI analytics",
+    titleSignals: [/data insights/i, /business intelligence/i, /\bbi platform\b/i, /analytics platform/i, /data intelligence/i, /enterprise analytics/i, /real-time insights/i, /decision intelligence/i],
+    industrySignals: [/business intelligence/i, /analytics/i, /data insights/i, /data platform/i, /data intelligence/i, /decision intelligence/i, /enterprise data/i],
+    coreTerms: ["business intelligence", "data insights", "analytics platform", "data ingestion", "data quality", "semantic layer", "governed KPIs", "metric catalog", "self-service analytics", "real-time insights", "dashboard", "alerts", "recommendations", "data governance", "data connectors", "ERP", "CRM", "data warehouse", "decision intelligence", "time-to-insight"],
+    bannedTerms: ["remote patient monitoring", "RPM", "EHR integration", "FHIR/HL7", "patient adherence", "care team", "FDA/SaMD", "reimbursement capture", "billing documentation", "inter-agency", "public-sector data exchange", "justice-to-health", "central treasury", "team chat", "video meetings", "document collaboration as core product", "cloud collaboration SaaS"],
+    sourceSignals: [/business intelligence/i, /analytics/i, /data management/i, /data governance/i, /self-service analytics/i, /power bi/i, /tableau/i, /looker/i, /gartner/i, /forrester/i, /idc/i],
+    competitorSignals: [/power bi/i, /tableau/i, /looker/i, /qlik/i, /thoughtspot/i, /domo/i, /sigma/i, /mode/i],
+    compliance: ["SOC 2", "ISO 27001", "GDPR", "CCPA", "SSO", "RBAC", "audit logs", "data access controls", "data retention", "data residency"],
+    risks: ["poor data quality", "integration delays", "weak differentiation vs BI incumbents", "high CAC", "long enterprise sales cycle", "low user adoption", "weak data governance", "dashboard fatigue", "security and privacy concern", "low expansion revenue", "custom implementation overload", "low retention"],
+    gtmChannels: ["enterprise outbound to CIO/CDO/COO/CFO", "department-led land and expand", "BI modernization campaigns", "cloud marketplace", "data consulting partners", "executive dashboard pilots"],
+    diagrams: ["data insight workflow", "enterprise data architecture", "TAM/SAM/SOM funnel", "competitor wedge map", "unit economics bridge", "risk heatmap", "phase-gate roadmap"],
+    recommendationRule: "Default to Conditional Proceed. Proceed only after 3+ paid pilots, validated integrations, time-to-insight improvement, ACV validation, CAC payback below 18 months, retention signals and a clear wedge against Power BI, Tableau and Looker.",
+    scoreBoosters: ["3+ paid pilots signed", "Core integrations validated", "Time-to-insight improvement proven", "ACV validated", "CAC payback below 18 months", "Retention and expansion signals proven"],
+    scoreReducers: ["Integration cost rises", "Low adoption", "Power BI/Tableau pressure increases", "Poor source data quality", "CAC payback exceeds target", "Expansion revenue underperforms"],
   },
   generic_saas: {
     type: "generic_saas",
@@ -139,11 +157,11 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
   enterprise_software: {
     type: "enterprise_software",
     label: "Enterprise software",
-    titleSignals: [/enterprise software/i, /data platform/i, /management platform/i, /analytics platform/i],
-    industrySignals: [/enterprise/i, /software/i, /it/i, /data/i],
+    titleSignals: [/enterprise software/i, /management platform/i],
+    industrySignals: [/enterprise/i, /software/i, /it/i],
     coreTerms: ["procurement", "integrations", "security", "implementation", "customer success", "renewals"],
     bannedTerms: [],
-    sourceSignals: [/enterprise/i, /software/i, /data/i, /security/i, /implementation/i],
+    sourceSignals: [/enterprise/i, /software/i, /security/i, /implementation/i],
     competitorSignals: [/salesforce/i, /servicenow/i, /oracle/i, /sap/i, /snowflake/i, /databricks/i],
     compliance: ["SOC2", "SSO", "audit logs", "data privacy", "enterprise security review"],
     risks: ["long sales cycle", "implementation delay", "low adoption", "integration burden", "renewal risk"],
@@ -162,9 +180,9 @@ function countMatches(patterns: RegExp[], text: string) {
 export function detectReportType(inputs: ConceptInputs, report: FeasibilityReport): ReportType {
   const title = `${inputs.projectName}`.toLowerCase();
   const industry = `${inputs.industry} ${inputs.location}`.toLowerCase();
-  const body = `${inputs.businessModel} ${inputs.revenueModel} ${report.executiveSummary}`.toLowerCase();
+  const body = `${inputs.description} ${inputs.businessModel} ${inputs.revenueModel} ${report.executiveSummary}`.toLowerCase();
   const ranked = Object.values(REPORT_TEMPLATES)
-    .map((template) => ({ type: template.type, score: countMatches(template.titleSignals, title) * 10 + countMatches(template.industrySignals, industry) * 4 + countMatches(template.titleSignals, body) }))
+    .map((template) => ({ type: template.type, score: countMatches(template.titleSignals, title) * 12 + countMatches(template.industrySignals, industry) * 5 + countMatches(template.titleSignals, body) * 3 + countMatches(template.industrySignals, body) }))
     .sort((a, b) => b.score - a.score);
   return ranked[0]?.score > 0 ? ranked[0].type : "generic_saas";
 }
@@ -174,7 +192,7 @@ export function getReportTemplate(inputs: ConceptInputs, report: FeasibilityRepo
 }
 
 export function getRecommendation(overallScore: number, riskScore: number, type: ReportType): Verdict {
-  if (type === "healthcare_rpm") return "Conditional Proceed";
+  if (type === "healthcare_rpm" || type === "enterprise_data_insights") return "Conditional Proceed";
   const highRisk = riskScore < 7;
   if (overallScore >= 8.5 && !highRisk) return "Proceed";
   if (overallScore >= 7) return "Conditional Proceed";
@@ -184,16 +202,17 @@ export function getRecommendation(overallScore: number, riskScore: number, type:
 
 export function sourceQuality(source = "", title = ""): SourceQuality {
   const text = `${source} ${title}`.toLowerCase();
-  if (/cms|fda|hhs|\.gov|sec|annual report|10-k|official|company/.test(text)) return "Primary";
-  if (/mckinsey|bcg|bain|deloitte|gartner|forrester|academic|journal|nih|jama|nejm/.test(text)) return "Expert";
-  if (/market|research|insights|grand view|marketsandmarkets|statista|idc|tavily/.test(text)) return "Market";
+  if (/cms|fda|hhs|\.gov|sec|annual report|10-k|official|company|microsoft|tableau|google|qlik|thoughtspot|domo|sigma|mode/.test(text)) return "Primary";
+  if (/mckinsey|bcg|bain|deloitte|gartner|forrester|academic|journal|nih|jama|nejm|idc/.test(text)) return "Expert";
+  if (/market|research|insights|grand view|marketsandmarkets|statista|mordor|researchandmarkets|tavily/.test(text)) return "Market";
   return "Weak";
 }
 
 export function sanitizeForTemplate(text: string, template: ReportTemplate) {
   let output = text;
+  const replacements: Array<[RegExp, string]> = [];
   if (template.type === "healthcare_rpm") {
-    const replacements: Array<[RegExp, string]> = [
+    replacements.push(
       [/inter-agency secure data exchange layer/gi, "HIPAA-compliant remote patient monitoring platform"],
       [/inter-agency data exchange/gi, "remote patient monitoring"],
       [/public-sector organisations?/gi, "health systems and provider groups"],
@@ -207,11 +226,21 @@ export function sanitizeForTemplate(text: string, template: ReportTemplate) {
       [/sovereign\/private cloud/gi, "HIPAA-ready cloud deployment"],
       [/government data exchange demand/gi, "remote patient monitoring demand"],
       [/regulated buyers/gi, "healthcare buyers"],
-    ];
-    replacements.forEach(([pattern, replacement]) => {
-      output = output.replace(pattern, replacement);
-    });
+    );
   }
+  if (template.type === "enterprise_data_insights") {
+    replacements.push(
+      [/cloud collaboration SaaS/gi, "enterprise data insights platform"],
+      [/departmental work, shared knowledge, workflows and reporting across teams/gi, "source systems, governed metrics, analytics workflows and decision actions across business units"],
+      [/team workspace/gi, "governed analytics workspace"],
+      [/team chat/gi, "insight collaboration"],
+      [/document collaboration/gi, "governed metric collaboration"],
+      [/shared knowledge/gi, "shared metric definitions"],
+    );
+  }
+  replacements.forEach(([pattern, replacement]) => {
+    output = output.replace(pattern, replacement);
+  });
   return output;
 }
 
@@ -222,12 +251,12 @@ export function validateTemplateIntegrity(inputs: ConceptInputs, report: Feasibi
   const industry = inputs.industry || "";
   const competitorText = (report.competitors || []).map((c) => `${c.name} ${c.model} ${c.edge} ${c.weakness}`).join(" ");
   const sourceText = (report.research?.citations || []).map((c) => `${c.source} ${c.title} ${c.takeaway}`).join(" ");
-  const assumptionText = `${inputs.assumptions} ${inputs.constraints} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.dependencies} ${report.executiveSummary} ${report.recommendations.join(" ")} ${report.nextSteps.join(" ")}`;
+  const assumptionText = `${inputs.description} ${inputs.assumptions} ${inputs.constraints} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.dependencies} ${report.executiveSummary} ${report.recommendations.join(" ")} ${report.nextSteps.join(" ")}`;
   const fullText = `${title} ${industry} ${competitorText} ${sourceText} ${assumptionText}`.toLowerCase();
   const issues: TemplateValidationIssue[] = [];
 
-  if (countMatches(template.titleSignals, title.toLowerCase()) === 0 && countMatches(template.industrySignals, industry.toLowerCase()) === 0) {
-    issues.push({ severity: "warning", field: "title/industry", message: `Title and industry do not strongly match ${template.label}.` });
+  if (countMatches(template.titleSignals, title.toLowerCase()) === 0 && countMatches(template.industrySignals, industry.toLowerCase()) === 0 && countMatches(template.industrySignals, assumptionText.toLowerCase()) === 0) {
+    issues.push({ severity: "warning", field: "title/industry", message: `Title, industry and concept do not strongly match ${template.label}.` });
   }
   template.bannedTerms.forEach((term) => {
     if (fullText.includes(term.toLowerCase())) issues.push({ severity: "error", field: "bannedTerms", message: `Banned ${template.label} term found: ${term}` });
@@ -243,6 +272,9 @@ export function validateTemplateIntegrity(inputs: ConceptInputs, report: Feasibi
   }
   if (template.type === "generic_saas" && /patient|hipaa|reimbursement|ehr|clinician|post-discharge/i.test(assumptionText + sourceText)) {
     issues.push({ severity: "error", field: "crossTemplate", message: "Healthcare/RPM terms found inside cloud collaboration/generic SaaS report." });
+  }
+  if (template.type === "enterprise_data_insights" && /slack|notion|asana|monday|microsoft teams|team chat|video meetings|cloud collaboration SaaS/i.test(competitorText + assumptionText)) {
+    issues.push({ severity: "error", field: "crossTemplate", message: "Cloud collaboration terms found inside enterprise data insights report." });
   }
   return { reportType: template.type, template, recommendation, issues, hasBlockingIssues: issues.some((issue) => issue.severity === "error") };
 }
