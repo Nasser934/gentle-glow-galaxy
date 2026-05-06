@@ -9,6 +9,7 @@ type LocationState = {
   slug?: string;
   reportId?: string;
   isPublic?: boolean;
+  repaired?: boolean;
 };
 
 const isValidReport = (report: Partial<FeasibilityReport> | undefined): report is FeasibilityReport => {
@@ -31,9 +32,14 @@ export default function ResultsSafe() {
 
   if (!state.inputs) return <Navigate to="/analyze" replace />;
 
-  if (!isValidReport(state.report)) {
-    const safeReport = generateLocalReport(state.inputs);
-    return <ResultsV2 key="safe-results" />;
+  if (!isValidReport(state.report) && !state.repaired) {
+    return (
+      <Navigate
+        to="/results"
+        replace
+        state={{ ...state, report: generateLocalReport(state.inputs), repaired: true }}
+      />
+    );
   }
 
   return <ResultsV2 />;
