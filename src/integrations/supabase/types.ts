@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      edge_rate_limits: {
+        Row: {
+          action: string
+          count: number
+          updated_at: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          count?: number
+          updated_at?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          action?: string
+          count?: number
+          updated_at?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           actor_id: string | null

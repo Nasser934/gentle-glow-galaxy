@@ -295,7 +295,15 @@ export async function exportReportToPdfV2(_root: HTMLElement, fileName: string, 
   const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
   const template = validation.template;
   const recommendation = validation.recommendation;
-  cover(pdf, report, inputs, `${template.label} investment-grade feasibility case`, recommendation);
+  const id = report.reportId || "Concept-AI";
+  const title = inputs.projectName || "Feasibility Report";
+  fill(pdf, C.navy); pdf.rect(0, 0, PAGE.w, PAGE.h, "F");
+  txt(pdf, C.white); pdf.setFont("helvetica", "bold"); pdf.setFontSize(28);
+  pdf.text(title, PAGE.m, 240);
+  pdf.setFontSize(14); pdf.setFont("helvetica", "normal");
+  pdf.text(`${template.label} investment-grade feasibility case`, PAGE.m, 270);
+  pdf.setFontSize(10); pdf.text(`Recommendation: ${recommendation}`, PAGE.m, 300);
+  pdf.text(`Report ID: ${id}`, PAGE.m, 320);
   addFullReport(pdf, payload);
   if ((pdf as PdfWithPages).putTotalPages) (pdf as PdfWithPages).putTotalPages?.(TOTAL);
   pdf.save(fileName);

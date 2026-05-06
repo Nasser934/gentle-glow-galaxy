@@ -166,7 +166,7 @@ function soWhat(pdf: jsPDF, y: number, text: string, title: string, reportId: st
 }
 function table(pdf: jsPDF, y: number, title: string, reportId: string, section: SectionKey, head: string[][], body: Cell[][], opts: { fontSize?: number; firstWidth?: number; scoreWidth?: number; highlightLast?: boolean } = {}) {
   if (!body.length) return y;
-  const columnStyles: Record<number, { cellWidth?: number; fontStyle?: string; halign?: "left" | "center" | "right" }> = {};
+  const columnStyles: { [key: string]: { cellWidth?: number; fontStyle?: "bold" | "normal" | "italic" | "bolditalic"; halign?: "left" | "center" | "right" } } = {};
   if (opts.firstWidth) columnStyles[0] = { cellWidth: opts.firstWidth, fontStyle: "bold" };
   if (opts.scoreWidth) columnStyles[1] = { cellWidth: opts.scoreWidth, halign: "center" };
   autoTable(pdf, {
