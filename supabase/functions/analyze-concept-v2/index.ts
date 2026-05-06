@@ -151,18 +151,91 @@ async function checkRateLimit(userId: string) {
 const reportSchema = {
   type: "object",
   properties: {
-    executiveSummary: { type: "string" },
-    scores: { type: "object" },
-    market: { type: "object" },
-    customer: { type: "object" },
-    competitors: { type: "array" },
-    research: { type: "object" },
-    financials: { type: "object" },
-    risks: { type: "array" },
-    fundingMix: { type: "array" },
+    executiveSummary: { type: "string", description: "Two concise board-ready paragraphs." },
+    scores: {
+      type: "object",
+      properties: {
+        financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
+        risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" }, overall: { type: "number" },
+        verdict: { type: "string", enum: ["PROCEED", "PROCEED WITH CAUTION", "REVISE", "DO NOT PROCEED"] },
+        financialFinding: { type: "string" }, marketFinding: { type: "string" }, achievabilityFinding: { type: "string" },
+        riskFinding: { type: "string" }, timingFinding: { type: "string" }, operationalFinding: { type: "string" },
+        weights: {
+          type: "object",
+          properties: {
+            financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
+            risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
+          },
+          required: ["financial", "market", "achievability", "risk", "timing", "operational"],
+        },
+        confidence: {
+          type: "object",
+          properties: {
+            financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
+            risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
+          },
+          required: ["financial", "market", "achievability", "risk", "timing", "operational"],
+        },
+        rationale: {
+          type: "object",
+          properties: {
+            financial: { type: "string" }, market: { type: "string" }, achievability: { type: "string" },
+            risk: { type: "string" }, timing: { type: "string" }, operational: { type: "string" },
+          },
+          required: ["financial", "market", "achievability", "risk", "timing", "operational"],
+        },
+      },
+      required: ["financial", "market", "achievability", "risk", "timing", "operational", "overall", "verdict", "financialFinding", "marketFinding", "achievabilityFinding", "riskFinding", "timingFinding", "operationalFinding", "weights", "confidence", "rationale"],
+    },
+    market: {
+      type: "object",
+      properties: {
+        currency: { type: "string" }, tamLabel: { type: "string" }, tamValue: { type: "string" }, tamCagr: { type: "string" },
+        samLabel: { type: "string" }, samValue: { type: "string" }, samCagr: { type: "string" },
+        somLabel: { type: "string" }, somValue: { type: "string" }, somCagr: { type: "string" },
+        growthChart: {
+          type: "array",
+          items: { type: "object", properties: { year: { type: "string" }, tam: { type: "number" }, sam: { type: "number" } }, required: ["year", "tam", "sam"] },
+        },
+      },
+      required: ["currency", "tamLabel", "tamValue", "tamCagr", "samLabel", "samValue", "samCagr", "somLabel", "somValue", "somCagr", "growthChart"],
+    },
+    customer: {
+      type: "object",
+      properties: { ageLocation: { type: "string" }, income: { type: "string" }, goals: { type: "string" }, willingnessToPay: { type: "string" }, behavior: { type: "string" } },
+      required: ["ageLocation", "income", "goals", "willingnessToPay", "behavior"],
+    },
+    competitors: {
+      type: "array",
+      items: { type: "object", properties: { name: { type: "string" }, model: { type: "string" }, weakness: { type: "string" }, edge: { type: "string" } }, required: ["name", "model", "weakness", "edge"] },
+    },
+    research: {
+      type: "object",
+      properties: {
+        overview: { type: "string" }, confidence: { type: "string", enum: ["High", "Medium", "Low"] },
+        sentiment: { type: "string", enum: ["Positive", "Mixed", "Negative", "Insufficient data"] },
+        keySignals: { type: "array", items: { type: "string" } }, painPoints: { type: "array", items: { type: "string" } },
+        competitorMentions: { type: "array", items: { type: "string" } }, redditSignals: { type: "array", items: { type: "string" } }, webSignals: { type: "array", items: { type: "string" } },
+      },
+      required: ["overview", "confidence", "sentiment", "keySignals", "painPoints", "competitorMentions", "redditSignals", "webSignals"],
+    },
+    financials: {
+      type: "object",
+      properties: {
+        currency: { type: "string" },
+        capExTotal: { type: "object", properties: { low: { type: "number" }, high: { type: "number" }, mid: { type: "number" } }, required: ["low", "high", "mid"] },
+        capEx: { type: "array", items: { type: "object", properties: { category: { type: "string" }, low: { type: "number" }, high: { type: "number" }, notes: { type: "string" } }, required: ["category", "low", "high", "notes"] } },
+        opEx: { type: "array", items: { type: "object", properties: { category: { type: "string" }, monthly: { type: "number" }, annual: { type: "number" } }, required: ["category", "monthly", "annual"] } },
+        scenarios: { type: "array", items: { type: "object", properties: { scenario: { type: "string", enum: ["Optimistic", "Base Case", "Pessimistic"] }, probability: { type: "string" }, subscribersYr1: { type: "string" }, annualRevenue: { type: "string" }, breakEven: { type: "string" } }, required: ["scenario", "probability", "subscribersYr1", "annualRevenue", "breakEven"] } },
+        investmentRange: { type: "string" }, breakEvenSummary: { type: "string" }, ltvCacRatio: { type: "string" },
+      },
+      required: ["currency", "capExTotal", "capEx", "opEx", "scenarios", "investmentRange", "breakEvenSummary", "ltvCacRatio"],
+    },
+    risks: { type: "array", items: { type: "object", properties: { name: { type: "string" }, probability: { type: "string", enum: ["Low", "Med", "High"] }, impact: { type: "string", enum: ["Low", "Med", "High"] }, level: { type: "string", enum: ["Low", "Med", "High"] }, mitigation: { type: "string" } }, required: ["name", "probability", "impact", "level", "mitigation"] } },
+    fundingMix: { type: "array", items: { type: "object", properties: { source: { type: "string" }, share: { type: "string" }, amount: { type: "string" }, rationale: { type: "string" } }, required: ["source", "share", "amount", "rationale"] } },
     fundingAdvisory: { type: "string" },
-    recommendations: { type: "array" },
-    nextSteps: { type: "array" },
+    recommendations: { type: "array", items: { type: "string" } },
+    nextSteps: { type: "array", items: { type: "string" } },
   },
   required: ["executiveSummary", "scores", "market", "customer", "competitors", "financials", "risks", "fundingMix", "fundingAdvisory", "recommendations", "nextSteps"],
 };
