@@ -12,9 +12,22 @@ import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 type State = { report?: Partial<FeasibilityReport>; inputs?: ConceptInputs };
 
-const valid = (r?: Partial<FeasibilityReport>): r is FeasibilityReport => Boolean(
-  r?.reportId && r?.scores && typeof r.scores.overall === "number" && r.market && r.financials && Array.isArray(r.risks)
-);
+const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const hasTextArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const valid = (r?: Partial<FeasibilityReport>): r is FeasibilityReport => {
+  if (!r) return false;
+  if (!isText(r.reportId) || !isText(r.executiveSummary)) return false;
+  if (!r.scores || !isNumber(r.scores.overall) || !isNumber(r.scores.financial) || !isNumber(r.scores.market) || !isNumber(r.scores.achievability) || !isNumber(r.scores.risk) || !isNumber(r.scores.timing) || !isNumber(r.scores.operational)) return false;
+  if (!isText(r.scores.financialFinding) || !isText(r.scores.marketFinding) || !isText(r.scores.achievabilityFinding) || !isText(r.scores.riskFinding) || !isText(r.scores.timingFinding) || !isText(r.scores.operationalFinding)) return false;
+  if (!r.market || !isText(r.market.tamValue) || !isText(r.market.tamCagr) || !isText(r.market.tamLabel) || !isText(r.market.samValue) || !isText(r.market.samCagr) || !isText(r.market.samLabel) || !isText(r.market.somValue) || !isText(r.market.somCagr) || !isText(r.market.somLabel)) return false;
+  if (!r.customer || !isText(r.customer.ageLocation) || !isText(r.customer.goals) || !isText(r.customer.willingnessToPay) || !isText(r.customer.behavior)) return false;
+  if (!r.financials || !isText(r.financials.currency) || !r.financials.capExTotal || !isNumber(r.financials.capExTotal.mid) || !Array.isArray(r.financials.scenarios)) return false;
+  if (!Array.isArray(r.risks) || !Array.isArray(r.competitors) || !Array.isArray(r.fundingMix)) return false;
+  if (!hasTextArray(r.recommendations) || !hasTextArray(r.nextSteps)) return false;
+  return true;
+};
 
 const money = (v: number) => `USD ${Math.round(v).toLocaleString()}`;
 
@@ -40,10 +53,15 @@ export default function ResultsRecovery() {
   const tone = recommendation === "Proceed" ? "bg-success text-success-foreground" : "bg-warning text-warning-foreground";
 
   const exportPdf = async () => {
-    const { exportReportToPdfV2 } = await import("@/lib/exportPdfV4");
-    const root = document.getElementById("recovery-report-root");
-    if (!root) return;
-    await exportReportToPdfV2(root, `${report.reportId}.pdf`, { report, inputs });
+    try {
+      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV4");
+      const root = document.getElementById("recovery-report-root");
+      if (!root) return;
+      await exportReportToPdfV2(root, `${report.reportId}.pdf`, { report, inputs });
+    } catch (error) {
+      console.error("PDF export failed", error);
+      window.alert(error instanceof Error ? error.message : "PDF export failed. Please try again.");
+    }
   };
 
   return <div className="min-h-screen bg-background text-foreground">
@@ -75,9 +93,9 @@ export default function ResultsRecovery() {
         <Card><CardHeader><CardTitle>Executive Summary</CardTitle></CardHeader><CardContent><p className="text-sm leading-7 text-foreground">{report.executiveSummary}</p></CardContent></Card>
         <Card><CardHeader><CardTitle>Score Breakdown</CardTitle></CardHeader><CardContent className="space-y-3">{[
           ["Financial", report.scores.financial, report.scores.financialFinding], ["Market", report.scores.market, report.scores.marketFinding], ["Achievable", report.scores.achievability, report.scores.achievabilityFinding], ["Risk", report.scores.risk, report.scores.riskFinding], ["Timing", report.scores.timing, report.scores.timingFinding], ["Operational", report.scores.operational, report.scores.operationalFinding]
-        ].map(([name, score, finding]) => <div key={String(name)} className="rounded-md border border-border p-3"><div className="flex justify-between text-sm font-semibold"><span>{name}</span><span className="text-primary">{Number(score).toFixed(1)} / 10</span></div><p className="mt-1 text-xs text-muted-foreground">{String(finding)}</p></div>)}</CardContent></Card>
+        ].map(([name, itemScore, finding]) => <div key={String(name)} className="rounded-md border border-border p-3"><div className="flex justify-between text-sm font-semibold"><span>{name}</span><span className="text-primary">{Number(itemScore).toFixed(1)} / 10</span></div><p className="mt-1 text-xs text-muted-foreground">{String(finding)}</p></div>)}</CardContent></Card>
         <Card><CardHeader><CardTitle>Top Risks</CardTitle></CardHeader><CardContent className="space-y-2">{report.risks.slice(0, 6).map((r) => <div key={r.name} className="rounded-md border border-border p-3"><div className="flex justify-between gap-3"><b>{r.name}</b><Badge variant="outline">{r.level}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{r.mitigation}</p></div>)}</CardContent></Card>
-        <Card><CardHeader><CardTitle>Recommendations</CardTitle></CardHeader><CardContent><ol className="space-y-2 text-sm">{report.recommendations.map((x, i) => <li key={x} className="flex gap-2"><span className="font-bold text-primary">{i + 1}.</span><span>{x}</span></li>)}</ol></CardContent></Card>
+        <Card><CardHeader><CardTitle>Recommendations</CardTitle></CardHeader><CardContent><ol className="space-y-2 text-sm">{report.recommendations.map((x, i) => <li key={`${i}-${x}`} className="flex gap-2"><span className="font-bold text-primary">{i + 1}.</span><span>{x}</span></li>)}</ol></CardContent></Card>
       </div>
     </main>
   </div>;
