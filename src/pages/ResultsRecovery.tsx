@@ -11,7 +11,6 @@ import { validateTemplateIntegrity } from "@/lib/reportTemplates";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 type State = { report?: Partial<FeasibilityReport>; inputs?: ConceptInputs };
-type ExportPayload = { report: FeasibilityReport; inputs: ConceptInputs; repaired: boolean };
 
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -29,31 +28,6 @@ const valid = (r?: Partial<FeasibilityReport>): r is FeasibilityReport => {
   if (!Array.isArray(r.risks) || !Array.isArray(r.competitors) || !Array.isArray(r.fundingMix)) return false;
   if (!hasTextArray(r.recommendations) || !hasTextArray(r.nextSteps)) return false;
   return true;
-};
-
-const dataInsightTerms = "enterprise data insights business intelligence analytics platform data ingestion data quality data governance governed KPIs semantic layer data warehouse data connectors ERP CRM real-time insights dashboard alerts recommendations decision intelligence time-to-insight";
-const cdpTerms = "customer data platform CDP unified customer profile customer 360 identity resolution first-party data consent management GDPR CCPA segmentation activation CRM email support billing product analytics retention churn LTV personalization";
-
-const exportSafeInputs = (inputs: ConceptInputs): ConceptInputs => {
-  const text = `${inputs.projectName} ${inputs.industry} ${inputs.description} ${inputs.knownRisks} ${inputs.regulatoryConsiderations}`.toLowerCase();
-  if (/unified customer profile|customer data platform|\bcdp\b|customer 360|identity resolution/.test(text)) {
-    return { ...inputs, description: `${inputs.description} ${cdpTerms}` };
-  }
-  if (/secure client data|client data management|client data platform|sensitive client data|financial services.*data|asset manager|ria|zero trust|pci dss|soc ?2|cybersecurity/.test(text)) {
-    return { ...inputs, description: `${inputs.description} ${dataInsightTerms} financial services client data security SOC 2 PCI DSS zero trust encryption RBAC audit logs data residency privacy controls implementation customer success renewals procurement integrations` };
-  }
-  if (/enterprise data platform|data platform|data infrastructure|data modernization|data warehouse|data lakehouse|data governance|legacy data migration/.test(text)) {
-    return { ...inputs, description: `${inputs.description} ${dataInsightTerms}` };
-  }
-  return { ...inputs, description: `${inputs.description} procurement integrations security implementation customer success renewals enterprise software Salesforce ServiceNow Oracle SAP` };
-};
-
-const getExportPayload = (inputs: ConceptInputs, report: FeasibilityReport): ExportPayload => {
-  if (!validateTemplateIntegrity(inputs, report).hasBlockingIssues) return { inputs, report, repaired: false };
-  const repairedInputs = exportSafeInputs(inputs);
-  const repairedReport = generateLocalReport(repairedInputs);
-  if (!validateTemplateIntegrity(repairedInputs, repairedReport).hasBlockingIssues) return { inputs: repairedInputs, report: repairedReport, repaired: true };
-  return { inputs, report, repaired: false };
 };
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -74,12 +48,10 @@ export default function ResultsRecovery() {
 
   const exportPdf = async () => {
     try {
-      const { exportReportToPdfV2 } = await import("@/lib/exportPdfV4");
+      const { exportReportToPdfSafe } = await import("@/lib/exportPdfSafe");
       const root = document.getElementById("recovery-report-root");
       if (!root) return;
-      const payload = getExportPayload(inputs, report);
-      await exportReportToPdfV2(root, `${payload.report.reportId}.pdf`, { report: payload.report, inputs: payload.inputs });
-      if (payload.repaired) window.alert("The live report was missing export-required evidence, so Concept AI exported a template-aligned repaired report.");
+      await exportReportToPdfSafe(root, `${report.reportId}.pdf`, { report, inputs });
     } catch (error) {
       console.error("PDF export failed", error);
       window.alert(error instanceof Error ? error.message : "PDF export failed. Please try again.");
