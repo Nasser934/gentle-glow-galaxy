@@ -60,7 +60,6 @@ export function WorkflowFigure({ rows }: { rows: DiagramRow[] }) {
 
 export function RiskMatrixFigure({ report }: { report: FeasibilityReport }) {
   const risks = report.risks.slice(0, 6);
-  const pos = (v: string) => v === "High" ? 2 : v === "Med" ? 1 : 0;
   return <Card>
     <CardHeader><CardTitle className="text-base">Risk Heatmap Figure</CardTitle></CardHeader>
     <CardContent>
