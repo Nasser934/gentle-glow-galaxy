@@ -9,7 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PageLoader } from "@/components/PageLoader";
 import Index from "./pages/Index";
 
-const Analyze = lazy(() => import("./pages/Analyze"));
+const Analyze = lazy(() => import("./pages/AnalyzeResilient"));
 const Results = lazy(() => import("./pages/ResultsV2"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
