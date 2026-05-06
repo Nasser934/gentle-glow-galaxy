@@ -9,12 +9,13 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PageLoader } from "@/components/PageLoader";
 import Index from "./pages/Index";
 
-const Analyze = lazy(() => import("./pages/Analyze"));
+const Analyze = lazy(() => import("./pages/AnalyzeSafe"));
 const Results = lazy(() => import("./pages/ResultsRecovery"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
 const Compare = lazy(() => import("./pages/Compare"));
+const AdminQA = lazy(() => import("./pages/AdminQA"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
+              <Route path="/admin/qa" element={<ProtectedRoute><AdminQA /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
