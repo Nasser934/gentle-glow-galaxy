@@ -49,8 +49,8 @@ export default function ResultsRecovery() {
 
   const exportPdf = async () => {
     try {
-      const { exportReportToPdfV3 } = await import("@/lib/exportPdfV3");
-      await exportReportToPdfV3(`${report.reportId}.pdf`, { report, inputs });
+      const { exportConsumerReportPdf } = await import("@/lib/exportPdfConsumer");
+      await exportConsumerReportPdf(`${report.reportId}.pdf`, { report, inputs });
     } catch (error) {
       console.error("PDF export failed", error);
       toast.error("PDF export could not be completed. Please try again.");
