@@ -8,7 +8,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { ConsumerReportDashboard } from "@/components/report/ConsumerReportDashboard";
 import { generateLocalReport } from "@/lib/localReport";
 import { validateTemplateIntegrity } from "@/lib/reportTemplates";
-import { consumerSafeEvidenceNote, sanitizeConsumerText } from "@/lib/consumerSafety";
+import { consumerSafeEvidenceNote, sanitizeConsumerObject, sanitizeConsumerText } from "@/lib/consumerSafety";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -36,7 +36,11 @@ export default function ResultsRecovery() {
   const navigate = useNavigate();
   const state = (location.state ?? {}) as State;
   const inputs = state.inputs;
-  const report = useMemo(() => inputs ? (valid(state.report) ? state.report : generateLocalReport(inputs)) : null, [inputs, state.report]);
+  const report = useMemo(() => {
+    if (!inputs) return null;
+    const generated = valid(state.report) ? state.report : generateLocalReport(inputs);
+    return sanitizeConsumerObject(generated);
+  }, [inputs, state.report]);
   const [savedId, setSavedId] = useState(state.reportId ?? "");
   const [slug, setSlug] = useState(state.slug ?? "");
   const [isPublic, setIsPublic] = useState(Boolean(state.isPublic));
