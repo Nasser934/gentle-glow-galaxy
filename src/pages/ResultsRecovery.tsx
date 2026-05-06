@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
-import { ConsumerReportDashboard } from "@/components/report/ConsumerReportDashboard";
+import { FeasibilityStudyDashboard } from "@/components/report/FeasibilityStudyDashboard";
 import { generateLocalReport } from "@/lib/localReport";
 import { validateTemplateIntegrity } from "@/lib/reportTemplates";
 import { consumerSafeEvidenceNote, sanitizeConsumerObject, sanitizeConsumerText } from "@/lib/consumerSafety";
-import { effectiveAnalysisConfidence, normalizeReportForDisplay } from "@/lib/reportPresentation";
+import { effectiveAnalysisConfidence, normalizeReportForDisplay, presentationReportLabel } from "@/lib/reportPresentation";
 import { publishReport, saveReport, unpublishReport } from "@/lib/reports";
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -121,13 +121,13 @@ export default function ResultsRecovery() {
     <main id="main-content" className="container mx-auto max-w-7xl px-6 py-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Badge variant="outline">{sanitizeConsumerText(validation.template.label)}</Badge>
+          <Badge variant="outline">{sanitizeConsumerText(presentationReportLabel(inputs, report))}</Badge>
           <Badge className="bg-primary text-primary-foreground">{sanitizeConsumerText(validation.recommendation)}</Badge>
           {isPublic && slug && <Badge variant="outline">Shared</Badge>}
         </div>
         <p className="max-w-2xl text-right text-xs text-muted-foreground">{evidenceNote}</p>
       </div>
-      <ConsumerReportDashboard report={report} inputs={inputs} />
+      <FeasibilityStudyDashboard report={report} inputs={inputs} />
     </main>
   </div>;
 }
