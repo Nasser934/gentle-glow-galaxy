@@ -3,7 +3,7 @@ import autoTable from "jspdf-autotable";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { validateTemplateIntegrity } from "@/lib/reportTemplates";
 import { consumerValidationNote, sanitizeConsumerText } from "@/lib/consumerSafety";
-import { buildArchitectureRows, buildConceptNarrative, buildHeadSummary, buildValidationPlan, buildWorkflowRows, effectiveAnalysisConfidence, evidenceRows } from "@/lib/reportPresentation";
+import { buildArchitectureRows, buildConceptNarrative, buildHeadSummary, buildValidationPlan, buildWorkflowRows, effectiveAnalysisConfidence, evidenceRows, presentationReportLabel } from "@/lib/reportPresentation";
 
 type Payload = { report: FeasibilityReport; inputs: ConceptInputs };
 type PdfWithTable = jsPDF & { lastAutoTable?: { finalY: number }; putTotalPages?: (value: string) => void };
@@ -30,7 +30,7 @@ function header(pdf: jsPDF, title: string, section: string) {
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(8);
   pdf.setTextColor(...NAVY);
-  pdf.text("CONCEPT AI · BRD-ALIGNED FEASIBILITY STUDY", M, 28);
+  pdf.text("CONCEPT AI · PROFESSIONAL FEASIBILITY STUDY", M, 28);
   pdf.setFont("helvetica", "normal");
   pdf.setTextColor(...MUTED);
   pdf.text(sanitizeConsumerText(title), W - M, 28, { align: "right" });
@@ -53,10 +53,10 @@ function cover(pdf: jsPDF, title: string, subtitle: string, reportId: string, re
   pdf.text(pdf.splitTextToSize(sanitizeConsumerText(subtitle), W - M * 2), M, 218);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(11);
-  pdf.text("Business Requirements Review Output", M, 288);
+  pdf.text("Professional Feasibility Study & Investment Report", M, 288);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(9.5);
-  pdf.text("Executive brief, concept detail, workflow, architecture, FMART, financials, risks, roadmap, validation plan and evidence gaps.", M, 308, { maxWidth: W - M * 2 });
+  pdf.text("Executive brief, concept explanation, workflow, architecture, FMART scorecard, financial model, risks, roadmap, validation plan and evidence gaps.", M, 308, { maxWidth: W - M * 2 });
   pdf.setFontSize(10);
   pdf.text(`Report ${sanitizeConsumerText(reportId)} · ${sanitizeConsumerText(reportType)}`, M, 708);
   pdf.text("Confidential · Concept AI", M, 730);
@@ -119,9 +119,10 @@ export async function exportBRDReportPdf(fileName: string, payload: Payload): Pr
   const validation = validateTemplateIntegrity(inputs, report);
   const confidence = effectiveAnalysisConfidence(report);
   const title = sanitizeConsumerText(inputs.projectName || "Feasibility Study");
+  const reportLabel = presentationReportLabel(inputs, report);
   const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
 
-  cover(pdf, title, `${sanitizeConsumerText(inputs.industry || "Business concept")} · ${sanitizeConsumerText(inputs.location || "Selected market")}`, report.reportId, validation.template.label);
+  cover(pdf, title, `${sanitizeConsumerText(inputs.industry || "Business concept")} · ${sanitizeConsumerText(inputs.location || "Selected market")}`, report.reportId, reportLabel);
 
   let y = page(pdf, title, "Executive brief", "Decision-first summary with the reason, winning wedge, confidence level and validation path.");
   y = table(pdf, y, title, "Executive brief", ["Executive question", "Answer"], buildHeadSummary(inputs, report).map((r) => [r.label, r.value]));
