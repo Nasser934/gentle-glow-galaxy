@@ -14,10 +14,10 @@ import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 import { generateLocalReport } from "@/lib/localReport";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { ConceptInputs } from "@/types/analysis";
 import {
   BUDGET_RANGES,
   BUSINESS_MODELS,
-  ConceptInputs,
   INDUSTRIES,
   REVENUE_MODELS,
   TECHNOLOGY_READINESS,
