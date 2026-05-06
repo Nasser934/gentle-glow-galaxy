@@ -31,15 +31,21 @@ const valid = (r?: Partial<FeasibilityReport>): r is FeasibilityReport => {
   return true;
 };
 
+const dataInsightTerms = "enterprise data insights business intelligence analytics platform data ingestion data quality data governance governed KPIs semantic layer data warehouse data connectors ERP CRM real-time insights dashboard alerts recommendations decision intelligence time-to-insight";
+const cdpTerms = "customer data platform CDP unified customer profile customer 360 identity resolution first-party data consent management GDPR CCPA segmentation activation CRM email support billing product analytics retention churn LTV personalization";
+
 const exportSafeInputs = (inputs: ConceptInputs): ConceptInputs => {
-  const text = `${inputs.projectName} ${inputs.description}`.toLowerCase();
+  const text = `${inputs.projectName} ${inputs.industry} ${inputs.description} ${inputs.knownRisks} ${inputs.regulatoryConsiderations}`.toLowerCase();
   if (/unified customer profile|customer data platform|\bcdp\b|customer 360|identity resolution/.test(text)) {
-    return { ...inputs, description: `${inputs.description} customer data platform CDP unified customer profile customer 360 identity resolution first-party data consent management GDPR CCPA segmentation activation CRM email support billing product analytics retention churn LTV personalization` };
+    return { ...inputs, description: `${inputs.description} ${cdpTerms}` };
+  }
+  if (/secure client data|client data management|client data platform|sensitive client data|financial services.*data|asset manager|ria|zero trust|pci dss|soc ?2|cybersecurity/.test(text)) {
+    return { ...inputs, description: `${inputs.description} ${dataInsightTerms} financial services client data security SOC 2 PCI DSS zero trust encryption RBAC audit logs data residency privacy controls implementation customer success renewals procurement integrations` };
   }
   if (/enterprise data platform|data platform|data infrastructure|data modernization|data warehouse|data lakehouse|data governance|legacy data migration/.test(text)) {
-    return { ...inputs, description: `${inputs.description} enterprise data insights business intelligence analytics platform data ingestion data quality data governance governed KPIs semantic layer data warehouse data connectors ERP CRM real-time insights dashboard alerts recommendations decision intelligence time-to-insight` };
+    return { ...inputs, description: `${inputs.description} ${dataInsightTerms}` };
   }
-  return inputs;
+  return { ...inputs, description: `${inputs.description} procurement integrations security implementation customer success renewals enterprise software Salesforce ServiceNow Oracle SAP` };
 };
 
 const getExportPayload = (inputs: ConceptInputs, report: FeasibilityReport): ExportPayload => {
