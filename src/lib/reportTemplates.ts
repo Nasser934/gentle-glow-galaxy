@@ -4,6 +4,7 @@ export type ReportType =
   | "healthcare_rpm"
   | "public_sector_data_exchange"
   | "enterprise_data_insights"
+  | "customer_data_platform"
   | "generic_saas"
   | "ai_product"
   | "marketplace"
@@ -41,7 +42,7 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
     titleSignals: [/remote patient/i, /patient monitoring/i, /\brpm\b/i, /chronic care/i, /post-discharge/i],
     industrySignals: [/healthcare/i, /life sciences/i, /clinical/i, /provider/i, /hospital/i, /patient/i],
     coreTerms: ["HIPAA", "FDA/SaMD", "EHR integration", "device integration", "reimbursement", "clinical workflow", "patient adherence", "cybersecurity"],
-    bannedTerms: ["inter-agency", "agency modernization", "justice-to-health", "finance-to-benefits", "central treasury", "GovTech buyers", "government outbound", "agency-level adoption"],
+    bannedTerms: ["inter-agency", "agency modernization", "justice-to-health", "finance-to-benefits", "central treasury", "GovTech buyers", "government outbound", "agency-level adoption", "cloud collaboration SaaS"],
     sourceSignals: [/cms/i, /fda/i, /hhs/i, /hipaa/i, /remote patient/i, /rpm/i, /telehealth/i, /ehr/i, /medicare/i, /clinical/i],
     competitorSignals: [/medtronic/i, /philips/i, /dexcom/i, /abbott/i, /vivify/i, /optum/i, /epic/i, /cerner/i, /oracle health/i],
     compliance: ["HIPAA", "FDA/SaMD classification", "patient consent", "clinical alert safety", "billing documentation", "SOC2 roadmap"],
@@ -58,7 +59,7 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
     titleSignals: [/inter-agency/i, /data exchange/i, /secure data/i, /government data/i],
     industrySignals: [/public sector/i, /government/i, /govtech/i, /national/i, /agency/i],
     coreTerms: ["FedRAMP", "agency adoption", "procurement", "data-sharing agreements", "legacy systems", "auditability"],
-    bannedTerms: ["RPM reimbursement", "patient adherence", "clinician workflow", "remote patient monitoring", "post-discharge", "chronic-care"],
+    bannedTerms: ["RPM reimbursement", "patient adherence", "clinician workflow", "remote patient monitoring", "post-discharge", "chronic-care", "cloud collaboration SaaS"],
     sourceSignals: [/fedramp/i, /government/i, /public sector/i, /agency/i, /procurement/i, /data exchange/i, /govtech/i],
     competitorSignals: [/palantir/i, /tyler/i, /ibm/i, /oracle/i, /microsoft azure government/i, /snowflake/i],
     compliance: ["FedRAMP", "data-sharing agreements", "sovereign cloud", "audit logs", "procurement controls"],
@@ -86,13 +87,30 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
     scoreBoosters: ["3+ paid pilots signed", "Core integrations validated", "Time-to-insight improvement proven", "ACV validated", "CAC payback below 18 months", "Retention and expansion signals proven"],
     scoreReducers: ["Integration cost rises", "Low adoption", "Power BI/Tableau pressure increases", "Poor source data quality", "CAC payback exceeds target", "Expansion revenue underperforms"],
   },
+  customer_data_platform: {
+    type: "customer_data_platform",
+    label: "Customer data platform / Unified customer profile",
+    titleSignals: [/unified customer profile/i, /customer data platform/i, /\bcdp\b/i, /customer 360/i, /customer profile/i, /customer data unification/i, /identity resolution/i, /first-party data/i, /segmentation/i, /activation/i, /customer intelligence/i, /customer journey/i, /personalization/i],
+    industrySignals: [/customer data/i, /marketing technology/i, /martech/i, /customer intelligence/i, /customer 360/i, /first-party data/i, /personalization/i, /retention/i],
+    coreTerms: ["customer data platform", "CDP", "unified customer profile", "customer 360", "identity resolution", "profile unification", "first-party data", "consent management", "GDPR", "CCPA", "segmentation", "activation", "reverse ETL", "data ingestion", "event tracking", "CRM", "email platform", "support platform", "billing system", "product analytics", "data quality", "customer journey", "retention", "churn", "LTV", "personalization"],
+    bannedTerms: ["cloud collaboration SaaS", "team collaboration", "video meetings", "document collaboration", "workspace as core product", "Microsoft Teams", "Slack", "Notion", "Asana", "Monday", "inter-agency", "public-sector data exchange", "remote patient monitoring", "EHR integration", "FDA/SaMD", "reimbursement capture", "care team", "clinical workflow"],
+    sourceSignals: [/customer data platform/i, /\bcdp\b/i, /segment/i, /salesforce data cloud/i, /adobe real-time cdp/i, /tealium/i, /mparticle/i, /treasure data/i, /hightouch/i, /rudderstack/i, /actioniq/i, /blueconic/i, /gdpr/i, /ccpa/i, /first-party data/i, /martech/i],
+    competitorSignals: [/segment/i, /salesforce data cloud/i, /adobe real-time cdp/i, /tealium/i, /mparticle/i, /treasure data/i, /hightouch/i, /rudderstack/i, /actioniq/i, /blueconic/i, /customer insights/i],
+    compliance: ["GDPR", "CCPA", "SOC 2", "ISO 27001", "consent management", "data retention", "data deletion", "DSAR support", "SSO", "RBAC", "audit logs", "encryption", "data residency"],
+    risks: ["data breach", "identity resolution failure", "poor data quality", "GDPR/CCPA consent violation", "integration complexity", "weak differentiation vs CDP incumbents", "high CAC", "long enterprise sales cycle", "low activation", "low retention", "weak expansion revenue", "data latency", "customer trust issue", "over-customization", "implementation margin erosion"],
+    gtmChannels: ["enterprise outbound to CMO/CDO/CIO", "marketing operations-led pilots", "customer success use-case pilots", "data consulting partners", "cloud marketplace", "CRM and marketing automation partnerships"],
+    diagrams: ["customer data flow", "identity resolution architecture", "customer 360 profile model", "activation workflow", "consent and privacy workflow", "TAM/SAM/SOM funnel", "unit economics bridge", "risk heatmap", "phase-gate roadmap"],
+    recommendationRule: "Default to Conditional Proceed. Proceed only after 3+ paid pilots, identity resolution accuracy, core CRM/email/support/billing integrations, GDPR/CCPA consent workflow, activation use cases, ACV validation, CAC payback below 18 months and a clear wedge against Segment, Salesforce Data Cloud and Adobe Real-Time CDP.",
+    scoreBoosters: ["3+ paid pilots signed", "Identity resolution accuracy validated", "Core integrations validated", "Consent workflow validated", "Activation use cases proven", "ACV validated", "CAC payback below 18 months"],
+    scoreReducers: ["Identity resolution fails", "Consent workflow gaps", "Integration cost rises", "Low activation", "Weak differentiation vs CDP incumbents", "CAC payback exceeds target", "Retention below target"],
+  },
   generic_saas: {
     type: "generic_saas",
     label: "Generic SaaS / cloud collaboration",
     titleSignals: [/cloud collaboration/i, /collaboration platform/i, /team workspace/i, /productivity platform/i, /workflow platform/i],
     industrySignals: [/saas/i, /software/i, /collaboration/i, /productivity/i, /cloud/i],
     coreTerms: ["ACV", "CAC", "churn", "LTV:CAC", "retention", "GTM", "product roadmap"],
-    bannedTerms: ["HIPAA", "FDA/SaMD", "RPM reimbursement", "patient adherence", "inter-agency", "justice-to-health", "central treasury"],
+    bannedTerms: ["HIPAA", "FDA/SaMD", "RPM reimbursement", "patient adherence", "inter-agency", "justice-to-health", "central treasury", "customer data platform", "identity resolution", "unified customer profile"],
     sourceSignals: [/saas/i, /collaboration/i, /productivity/i, /workspace/i, /slack/i, /microsoft teams/i, /zoom/i, /notion/i],
     competitorSignals: [/microsoft teams/i, /slack/i, /zoom/i, /notion/i, /asana/i, /monday/i, /google workspace/i],
     compliance: ["SOC2", "privacy", "security review"],
@@ -160,7 +178,7 @@ export const REPORT_TEMPLATES: Record<ReportType, ReportTemplate> = {
     titleSignals: [/enterprise software/i, /management platform/i],
     industrySignals: [/enterprise/i, /software/i, /it/i],
     coreTerms: ["procurement", "integrations", "security", "implementation", "customer success", "renewals"],
-    bannedTerms: [],
+    bannedTerms: ["cloud collaboration SaaS"],
     sourceSignals: [/enterprise/i, /software/i, /security/i, /implementation/i],
     competitorSignals: [/salesforce/i, /servicenow/i, /oracle/i, /sap/i, /snowflake/i, /databricks/i],
     compliance: ["SOC2", "SSO", "audit logs", "data privacy", "enterprise security review"],
@@ -180,9 +198,9 @@ function countMatches(patterns: RegExp[], text: string) {
 export function detectReportType(inputs: ConceptInputs, report: FeasibilityReport): ReportType {
   const title = `${inputs.projectName}`.toLowerCase();
   const industry = `${inputs.industry} ${inputs.location}`.toLowerCase();
-  const body = `${inputs.description} ${inputs.businessModel} ${inputs.revenueModel} ${report.executiveSummary}`.toLowerCase();
+  const body = `${inputs.description} ${inputs.businessModel} ${inputs.revenueModel} ${inputs.assumptions} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${report.executiveSummary}`.toLowerCase();
   const ranked = Object.values(REPORT_TEMPLATES)
-    .map((template) => ({ type: template.type, score: countMatches(template.titleSignals, title) * 12 + countMatches(template.industrySignals, industry) * 5 + countMatches(template.titleSignals, body) * 3 + countMatches(template.industrySignals, body) }))
+    .map((template) => ({ type: template.type, score: countMatches(template.titleSignals, title) * 14 + countMatches(template.industrySignals, industry) * 5 + countMatches(template.titleSignals, body) * 4 + countMatches(template.industrySignals, body) * 2 }))
     .sort((a, b) => b.score - a.score);
   return ranked[0]?.score > 0 ? ranked[0].type : "generic_saas";
 }
@@ -192,7 +210,7 @@ export function getReportTemplate(inputs: ConceptInputs, report: FeasibilityRepo
 }
 
 export function getRecommendation(overallScore: number, riskScore: number, type: ReportType): Verdict {
-  if (type === "healthcare_rpm" || type === "enterprise_data_insights") return "Conditional Proceed";
+  if (type === "healthcare_rpm" || type === "enterprise_data_insights" || type === "customer_data_platform") return "Conditional Proceed";
   const highRisk = riskScore < 7;
   if (overallScore >= 8.5 && !highRisk) return "Proceed";
   if (overallScore >= 7) return "Conditional Proceed";
@@ -202,9 +220,9 @@ export function getRecommendation(overallScore: number, riskScore: number, type:
 
 export function sourceQuality(source = "", title = ""): SourceQuality {
   const text = `${source} ${title}`.toLowerCase();
-  if (/cms|fda|hhs|\.gov|sec|annual report|10-k|official|company|microsoft|tableau|google|qlik|thoughtspot|domo|sigma|mode/.test(text)) return "Primary";
+  if (/cms|fda|hhs|\.gov|sec|annual report|10-k|official|company|microsoft|tableau|google|qlik|thoughtspot|domo|sigma|mode|twilio|segment|salesforce|adobe|tealium|mparticle|treasure data|hightouch|rudderstack|actioniq|blueconic/.test(text)) return "Primary";
   if (/mckinsey|bcg|bain|deloitte|gartner|forrester|academic|journal|nih|jama|nejm|idc/.test(text)) return "Expert";
-  if (/market|research|insights|grand view|marketsandmarkets|statista|mordor|researchandmarkets|tavily/.test(text)) return "Market";
+  if (/market|research|insights|grand view|marketsandmarkets|statista|mordor|researchandmarkets|tavily|martech/.test(text)) return "Market";
   return "Weak";
 }
 
@@ -238,10 +256,28 @@ export function sanitizeForTemplate(text: string, template: ReportTemplate) {
       [/shared knowledge/gi, "shared metric definitions"],
     );
   }
+  if (template.type === "customer_data_platform") {
+    replacements.push(
+      [/cloud collaboration SaaS/gi, "customer data platform"],
+      [/team collaboration/gi, "customer data activation"],
+      [/document collaboration/gi, "customer profile governance"],
+      [/workspace as core product/gi, "customer 360 profile as core product"],
+      [/shared knowledge/gi, "shared customer attributes"],
+    );
+  }
   replacements.forEach(([pattern, replacement]) => {
     output = output.replace(pattern, replacement);
   });
   return output;
+}
+
+function countRequiredTerms(template: ReportTemplate, text: string) {
+  return template.coreTerms.filter((term) => text.includes(term.toLowerCase())).length;
+}
+
+function isWeakSourceOnly(report: FeasibilityReport) {
+  const citations = report.research?.citations ?? [];
+  return citations.length > 0 && citations.every((c) => sourceQuality(c.source, c.title) === "Weak");
 }
 
 export function validateTemplateIntegrity(inputs: ConceptInputs, report: FeasibilityReport): TemplateValidationResult {
@@ -251,7 +287,8 @@ export function validateTemplateIntegrity(inputs: ConceptInputs, report: Feasibi
   const industry = inputs.industry || "";
   const competitorText = (report.competitors || []).map((c) => `${c.name} ${c.model} ${c.edge} ${c.weakness}`).join(" ");
   const sourceText = (report.research?.citations || []).map((c) => `${c.source} ${c.title} ${c.takeaway}`).join(" ");
-  const assumptionText = `${inputs.description} ${inputs.assumptions} ${inputs.constraints} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.dependencies} ${report.executiveSummary} ${report.recommendations.join(" ")} ${report.nextSteps.join(" ")}`;
+  const financialText = `${report.financials?.investmentRange ?? ""} ${report.financials?.breakEvenSummary ?? ""} ${report.financials?.ltvCacRatio ?? ""} ${(report.financials?.scenarios ?? []).map((s) => `${s.subscribersYr1} ${s.annualRevenue} ${s.breakEven}`).join(" ")}`;
+  const assumptionText = `${inputs.description} ${inputs.assumptions} ${inputs.constraints} ${inputs.knownRisks} ${inputs.regulatoryConsiderations} ${inputs.dependencies} ${report.executiveSummary} ${report.recommendations.join(" ")} ${report.nextSteps.join(" ")} ${financialText}`;
   const fullText = `${title} ${industry} ${competitorText} ${sourceText} ${assumptionText}`.toLowerCase();
   const issues: TemplateValidationIssue[] = [];
 
@@ -261,20 +298,36 @@ export function validateTemplateIntegrity(inputs: ConceptInputs, report: Feasibi
   template.bannedTerms.forEach((term) => {
     if (fullText.includes(term.toLowerCase())) issues.push({ severity: "error", field: "bannedTerms", message: `Banned ${template.label} term found: ${term}` });
   });
-  if ((report.research?.citations?.length || 0) > 0 && countMatches(template.sourceSignals, sourceText.toLowerCase()) === 0) {
-    issues.push({ severity: "warning", field: "sources", message: `Sources do not clearly match ${template.label}.` });
+  if ((report.research?.citations?.length || 0) === 0) {
+    issues.push({ severity: "error", field: "sources", message: "Source Notes are empty. Add ranked citations before export." });
+  } else if (countMatches(template.sourceSignals, sourceText.toLowerCase()) === 0) {
+    issues.push({ severity: "error", field: "sources", message: `Sources do not clearly match ${template.label}.` });
   }
-  if ((report.competitors?.length || 0) > 0 && countMatches(template.competitorSignals, competitorText.toLowerCase()) === 0) {
-    issues.push({ severity: "warning", field: "competitors", message: `Competitors do not clearly match ${template.label}.` });
+  if (isWeakSourceOnly(report)) {
+    issues.push({ severity: "error", field: "sources", message: "Only weak sources are present. Add primary, expert or market sources before export." });
+  }
+  if ((report.competitors?.length || 0) === 0) {
+    issues.push({ severity: "error", field: "competitors", message: "Competitor set is empty." });
+  } else if (countMatches(template.competitorSignals, competitorText.toLowerCase()) === 0) {
+    issues.push({ severity: "error", field: "competitors", message: `Competitors do not clearly match ${template.label}.` });
+  }
+  if (countRequiredTerms(template, fullText) < Math.min(4, template.coreTerms.length)) {
+    issues.push({ severity: "error", field: "requiredTerms", message: `Required ${template.label} terms are missing from the report.` });
+  }
+  if ((report.financials?.scenarios?.length || 0) < 3 || /derived from scenario revenue|track first 10 customers|target >3:1/i.test(financialText)) {
+    issues.push({ severity: "error", field: "financials", message: "Financial model contains placeholders or incomplete scenarios." });
   }
   if (template.type === "healthcare_rpm" && /cloud collaboration|team workspace|slack|microsoft teams/i.test(title + assumptionText)) {
     issues.push({ severity: "error", field: "crossTemplate", message: "Cloud collaboration terms found inside healthcare/RPM report." });
   }
-  if (template.type === "generic_saas" && /patient|hipaa|reimbursement|ehr|clinician|post-discharge/i.test(assumptionText + sourceText)) {
-    issues.push({ severity: "error", field: "crossTemplate", message: "Healthcare/RPM terms found inside cloud collaboration/generic SaaS report." });
+  if (template.type === "generic_saas" && /patient|hipaa|reimbursement|ehr|clinician|post-discharge|customer data platform|identity resolution|unified customer profile/i.test(assumptionText + sourceText)) {
+    issues.push({ severity: "error", field: "crossTemplate", message: "Non-generic SaaS terms found inside cloud collaboration/generic SaaS report." });
   }
   if (template.type === "enterprise_data_insights" && /slack|notion|asana|monday|microsoft teams|team chat|video meetings|cloud collaboration SaaS/i.test(competitorText + assumptionText)) {
     issues.push({ severity: "error", field: "crossTemplate", message: "Cloud collaboration terms found inside enterprise data insights report." });
+  }
+  if (template.type === "customer_data_platform" && /slack|notion|asana|monday|microsoft teams|team chat|video meetings|cloud collaboration SaaS|remote patient monitoring|inter-agency/i.test(competitorText + assumptionText)) {
+    issues.push({ severity: "error", field: "crossTemplate", message: "Non-CDP terms found inside customer data platform report." });
   }
   return { reportType: template.type, template, recommendation, issues, hasBlockingIssues: issues.some((issue) => issue.severity === "error") };
 }
