@@ -53,6 +53,46 @@ export const initialInputs: ConceptInputs = {
 };
 
 // ============================================================
+// AI-inferred use-case profile
+// ============================================================
+export interface UseCaseProfileRow {
+  label: string;
+  value: string;
+}
+
+export interface UseCaseWorkflowStep {
+  step: string;
+  input: string;
+  activity: string;
+  output: string;
+  control: string;
+}
+
+export interface UseCaseProfile {
+  reportTypeLabel: string;
+  businessArchetype: string;
+  useCase: string;
+  buyer: string;
+  users: string;
+  jobToBeDone: string;
+  workflowReplaced: string;
+  monetizationLogic: string;
+  marketFrame: string;
+  complianceFrame: string;
+  riskFrame: string;
+  competitorFrame: string;
+  gtmMotion: string;
+  researchQueries: string[];
+  likelyCompetitors: string[];
+  keyRisks: string[];
+  complianceNeeds: string[];
+  forbiddenAssumptions: string[];
+  workflowSteps: UseCaseWorkflowStep[];
+  architectureLayers: UseCaseProfileRow[];
+  validationGates: UseCaseProfileRow[];
+}
+
+// ============================================================
 // FMART scoring
 // ============================================================
 export interface FMARTScores {
@@ -371,6 +411,7 @@ export interface FeasibilityReport {
   classification: string;
   preparedBy: string;
   methodology: string;
+  useCaseProfile?: UseCaseProfile;
 
   narrative?: NarrativeArchitecture;
   actionTitles?: ActionTitles;
