@@ -6,17 +6,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { PageLoader } from "@/components/PageLoader";
 import Index from "./pages/Index";
 
 const Analyze = lazy(() => import("./pages/Analyze"));
-const Results = lazy(() => import("./pages/Results"));
+const Results = lazy(() => import("./pages/ResultsV2"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
 const Compare = lazy(() => import("./pages/Compare"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -25,7 +34,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={null}>
+          <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
@@ -44,4 +53,3 @@ const App = () => (
 );
 
 export default App;
-

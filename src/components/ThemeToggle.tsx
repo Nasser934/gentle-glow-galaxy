@@ -5,8 +5,14 @@ const STORAGE_KEY = "concept-ai-theme";
 
 function getInitialTheme(): "dark" | "light" {
   if (typeof window === "undefined") return "dark";
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "dark" || stored === "light") return stored;
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {
+    // Ignore storage access errors (e.g., strict privacy contexts).
+  }
+
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
@@ -21,7 +27,11 @@ export const ThemeToggle = () => {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem(STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      // Ignore storage access errors (e.g., strict privacy contexts).
+    }
   }, [theme]);
 
   return (

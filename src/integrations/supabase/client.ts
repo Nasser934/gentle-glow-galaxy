@@ -5,13 +5,37 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+const missingEnvMessage =
+  'Missing Supabase environment variables. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.';
+
+const createUnavailableClient = () =>
+  new Proxy({} as ReturnType<typeof createClient<Database>>, {
+    get(target, prop) {
+      if (typeof prop === "symbol" || prop === "then" || prop === "toJSON") {
+        return Reflect.get(target, prop);
+      }
+
+      throw new Error(missingEnvMessage);
+    },
+  });
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
+const hasBrowserStorage = () => {
+  try {
+    return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  } catch {
+    return false;
   }
-});
+};
+
+export const supabase = SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
+  ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        ...(hasBrowserStorage() ? { storage: localStorage } : {}),
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  : createUnavailableClient();

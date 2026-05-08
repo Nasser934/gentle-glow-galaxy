@@ -1,0 +1,76 @@
+name: Supabase Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_functions:
+        description: "Deploy Edge Functions"
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      push_migrations:
+        description: "Apply database migrations"
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: read
+
+jobs:
+  supabase-deploy:
+    name: Apply migrations and deploy Edge Functions
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || (echo "Missing SUPABASE_ACCESS_TOKEN" && exit 1)
+          test -n "$SUPABASE_PROJECT_REF" || (echo "Missing SUPABASE_PROJECT_REF" && exit 1)
+          test -n "$LOVABLE_API_KEY" || (echo "Missing LOVABLE_API_KEY" && exit 1)
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing SUPABASE_SERVICE_ROLE_KEY" && exit 1)
+          test -n "$ALLOWED_ORIGINS" || (echo "Missing ALLOWED_ORIGINS" && exit 1)
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Apply database migrations
+        if: ${{ inputs.push_migrations == 'true' }}
+        run: supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Configure Edge Function secrets
+        run: |
+          supabase secrets set \
+            LOVABLE_API_KEY="$LOVABLE_API_KEY" \
+            SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
+            ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy analyze-concept-v2
+        if: ${{ inputs.deploy_functions == 'true' }}
+        run: supabase functions deploy analyze-concept-v2 --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy autofill-brief
+        if: ${{ inputs.deploy_functions == 'true' }}
+        run: supabase functions deploy autofill-brief --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy complete-field
+        if: ${{ inputs.deploy_functions == 'true' }}
+        run: supabase functions deploy complete-field --project-ref "$SUPABASE_PROJECT_REF"

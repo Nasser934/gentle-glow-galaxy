@@ -8,9 +8,17 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
+    "quality": "npm run lint && npm run typecheck && npm test && npm run build",
+    "quality:strict": "npm run lint && npm run typecheck:strict && npm test && npm run build",
+    "audit": "npm audit --audit-level=high",
+    "analyze:bundle": "npx vite-bundle-visualizer --open=false",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

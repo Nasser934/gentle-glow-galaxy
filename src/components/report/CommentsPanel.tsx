@@ -8,8 +8,21 @@ import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 
 interface Comment {
-  id: string; report_id: string; user_id: string; section: string | null; body: string; created_at: string;
+  id: string;
+  report_id: string;
+  user_id: string;
+  section: string | null;
+  body: string;
+  created_at: string;
 }
+
+type Profile = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
+type ProfileMap = Record<string, Omit<Profile, "user_id">>;
 
 export const CommentsPanel = ({ reportId, section }: { reportId: string; section?: string }) => {
   const { user } = useAuth();
@@ -17,7 +30,7 @@ export const CommentsPanel = ({ reportId, section }: { reportId: string; section
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [profiles, setProfiles] = useState<Record<string, { display_name: string | null; avatar_url: string | null }>>({});
+  const [profiles, setProfiles] = useState<ProfileMap>({});
 
   const load = async () => {
     setLoading(true);
@@ -25,13 +38,20 @@ export const CommentsPanel = ({ reportId, section }: { reportId: string; section
     if (section) q = q.eq("section", section);
     const { data, error } = await q;
     if (error) { toast.error(error.message); setLoading(false); return; }
-    setComments((data ?? []) as Comment[]);
-    const ids = Array.from(new Set((data ?? []).map((c: any) => c.user_id)));
+
+    const rows = (data ?? []) as Comment[];
+    setComments(rows);
+
+    const ids = Array.from(new Set(rows.map((c) => c.user_id)));
     if (ids.length) {
       const { data: profs } = await supabase.from("profiles").select("user_id, display_name, avatar_url").in("user_id", ids);
-      const map: any = {};
-      (profs ?? []).forEach((p: any) => { map[p.user_id] = p; });
+      const map: ProfileMap = {};
+      ((profs ?? []) as Profile[]).forEach((p) => {
+        map[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
+      });
       setProfiles(map);
+    } else {
+      setProfiles({});
     }
     setLoading(false);
   };
