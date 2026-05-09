@@ -16,6 +16,7 @@ import {
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
+import { useOptionalTenant } from "@/contexts/TenantContext";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 
@@ -26,6 +27,8 @@ type EssayField =
 
 const Analyze = () => {
   const navigate = useNavigate();
+  const tenantCtx = useOptionalTenant();
+  const tenant = tenantCtx?.tenant;
   const [step, setStep] = useState(0);
   const [inputs, setInputs] = useState<ConceptInputs>(initialInputs);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -34,6 +37,10 @@ const Analyze = () => {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [showBrief, setShowBrief] = useState(true);
   const [completing, setCompleting] = useState<EssayField | null>(null);
+
+  const tenantBody = tenant ? { tenantId: tenant.id } : {};
+  const dashboardPath = tenant ? `/t/${tenant.slug}/dashboard` : "/";
+  const resultsPath = tenant ? `/t/${tenant.slug}/results` : "/results";
 
   const set = (field: keyof ConceptInputs, value: string) =>
     setInputs((prev) => ({ ...prev, [field]: value }));
@@ -45,7 +52,10 @@ const Analyze = () => {
     }
     setIsAutoFilling(true);
     try {
-      const { data, error } = await supabase.functions.invoke("autofill-brief", { body: { brief } });
+      const { data, error } = await supabase.functions.invoke("autofill-brief", {
+        body: { brief, ...tenantBody },
+        headers: { "x-idempotency-key": crypto.randomUUID() },
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setInputs(data.draft);
@@ -62,7 +72,8 @@ const Analyze = () => {
     setCompleting(field);
     try {
       const { data, error } = await supabase.functions.invoke("complete-field", {
-        body: { field, partial: inputs[field], inputs },
+        body: { field, partial: inputs[field], inputs, ...tenantBody },
+        headers: { "x-idempotency-key": crypto.randomUUID() },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -95,7 +106,10 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
+      const { data, error } = await supabase.functions.invoke("analyze-concept", {
+        body: { inputs, ...tenantBody },
+        headers: { "x-idempotency-key": crypto.randomUUID() },
+      });
       if (error) {
         // FunctionsHttpError exposes the response body via .context
         let detail = error.message;
@@ -107,7 +121,7 @@ const Analyze = () => {
         throw new Error(detail);
       }
       if (data?.error) throw new Error(data.error);
-      navigate("/results", { state: { report: data, inputs } });
+      navigate(resultsPath, { state: { report: data, inputs, tenantId: tenant?.id } });
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
     } finally {
@@ -131,17 +145,19 @@ const Analyze = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-          </button>
-          <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
-        </div>
-      </nav>
+      {!tenant && (
+        <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+          <div className="container mx-auto flex h-14 items-center justify-between px-6">
+            <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
+                <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
+            </button>
+            <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
+          </div>
+        </nav>
+      )}
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
         {/* Brief auto-fill */}
@@ -334,8 +350,8 @@ const Analyze = () => {
         </AnimatePresence>
 
         <div className="mt-10 flex items-center justify-between">
-          <Button variant="outline" onClick={step === 0 ? () => navigate("/") : prev} className="gap-2">
-            <ArrowLeft className="h-4 w-4" /> {step === 0 ? "Home" : "Back"}
+          <Button variant="outline" onClick={step === 0 ? () => navigate(dashboardPath) : prev} className="gap-2">
+            <ArrowLeft className="h-4 w-4" /> {step === 0 ? (tenant ? "Dashboard" : "Home") : "Back"}
           </Button>
           {step < 3 ? (
             <Button onClick={next} className="gap-2">Next <ArrowRight className="h-4 w-4" /></Button>
