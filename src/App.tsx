@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 
 const Analyze = lazy(() => import("./pages/Analyze"));
 const Results = lazy(() => import("./pages/Results"));
+const TenantResults = lazy(() => import("./pages/TenantResults"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
@@ -44,7 +45,7 @@ const App = () => (
               <Route path="/t/:tenantSlug" element={<ProtectedRoute><TenantLayout /></ProtectedRoute>}>
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="analyze" element={<Analyze />} />
-                <Route path="results" element={<Results />} />
+                <Route path="results" element={<TenantResults />} />
                 <Route path="reports/:reportId" element={<ReportDetails />} />
                 <Route path="compare" element={<Compare />} />
               </Route>
