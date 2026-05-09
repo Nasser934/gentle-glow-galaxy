@@ -69,11 +69,12 @@ const Analyze = () => {
     }
     setIsAutoFilling(true);
     try {
-      const { data, error } = await supabase.functions.invoke("autofill-brief", {
+      const functionName = tenant ? "autofill-brief-v2" : "autofill-brief";
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { brief, ...tenantBody },
         headers: { "x-idempotency-key": crypto.randomUUID() },
       });
-      if (error) throw error;
+      if (error) throw new Error(await readFunctionError(error));
       if (data?.error) throw new Error(data.error);
       setInputs(data.draft);
       setShowBrief(false);
@@ -88,11 +89,12 @@ const Analyze = () => {
   const completeField = async (field: EssayField) => {
     setCompleting(field);
     try {
-      const { data, error } = await supabase.functions.invoke("complete-field", {
+      const functionName = tenant ? "complete-field-v2" : "complete-field";
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { field, partial: inputs[field], inputs, ...tenantBody },
         headers: { "x-idempotency-key": crypto.randomUUID() },
       });
-      if (error) throw error;
+      if (error) throw new Error(await readFunctionError(error));
       if (data?.error) throw new Error(data.error);
       if (data?.text) set(field, data.text);
       toast.success("Field completed by AI.");
