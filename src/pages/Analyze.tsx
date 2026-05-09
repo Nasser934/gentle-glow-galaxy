@@ -45,6 +45,23 @@ const Analyze = () => {
   const set = (field: keyof ConceptInputs, value: string) =>
     setInputs((prev) => ({ ...prev, [field]: value }));
 
+  const readFunctionError = async (error: unknown) => {
+    let detail = error instanceof Error ? error.message : "Request failed";
+    try {
+      const ctx: any = (error as any)?.context;
+      if (ctx?.json) {
+        const json = await ctx.json();
+        if (json?.error) detail = json.error;
+      } else if (ctx?.text) {
+        const text = await ctx.text();
+        if (text) detail = text;
+      }
+    } catch (_) {
+      // Keep original error message.
+    }
+    return detail;
+  };
+
   const handleAutoFill = async () => {
     if (brief.trim().length < 10) {
       toast.error("Describe your idea in a sentence or two first.");
@@ -106,22 +123,32 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept", {
+      const functionName = tenant ? "analyze-concept-v2" : "analyze-concept";
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { inputs, ...tenantBody },
         headers: { "x-idempotency-key": crypto.randomUUID() },
       });
-      if (error) {
-        // FunctionsHttpError exposes the response body via .context
-        let detail = error.message;
-        try {
-          const ctx: any = (error as any).context;
-          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
-          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
-        } catch (_) { /* ignore */ }
-        throw new Error(detail);
-      }
+
+      if (error) throw new Error(await readFunctionError(error));
       if (data?.error) throw new Error(data.error);
-      navigate(resultsPath, { state: { report: data, inputs, tenantId: tenant?.id } });
+
+      if (tenant) {
+        if (!data?.report || !data?.reportRow?.id || !data?.reportRow?.slug) {
+          throw new Error("The server did not save the report. Please try again.");
+        }
+        navigate(resultsPath, {
+          state: {
+            report: data.report,
+            reportRow: data.reportRow,
+            inputs,
+            tenantId: tenant.id,
+            slug: data.reportRow.slug,
+          },
+        });
+        return;
+      }
+
+      navigate(resultsPath, { state: { report: data, inputs } });
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
     } finally {
@@ -160,7 +187,6 @@ const Analyze = () => {
       )}
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
-        {/* Brief auto-fill */}
         {showBrief && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -185,7 +211,6 @@ const Analyze = () => {
           </motion.div>
         )}
 
-        {/* Progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
             {STEPS.map((s, i) => (
