@@ -11,6 +11,13 @@ function corsHeaders(req: Request) {
   };
 }
 
+function jsonResponse(req: Request, body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+  });
+}
+
 const MAX_FIELD_LEN = 3000;
 const MAX_TOTAL_LEN = 18000;
 
@@ -28,6 +35,11 @@ function sanitizeInputs(raw: Record<string, unknown>) {
   }
 
   return { ok: true as const, inputs: cleaned };
+}
+
+function estimateTokens(value: unknown) {
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 function buildReport(parsed: any, inputs: Record<string, string>) {
@@ -107,19 +119,34 @@ serve(async (req) => {
     const { body, tenantId, user, adminClient } = await requireTenantAccess(req, ["owner", "admin", "member"]);
 
     const sanitized = sanitizeInputs((body.inputs ?? {}) as Record<string, unknown>);
-    if (!sanitized.ok) {
-      return new Response(JSON.stringify({ error: sanitized.error }), {
-        status: 413,
-        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-      });
-    }
+    if (!sanitized.ok) return jsonResponse(req, { error: sanitized.error }, 413);
 
     const inputs = sanitized.inputs;
     if (!inputs.projectName || !inputs.industry || !inputs.description) {
-      return new Response(JSON.stringify({ error: "Missing required project fields" }), {
-        status: 400,
-        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { error: "Missing required project fields" }, 400);
+    }
+
+    const idempotencyKey = req.headers.get("x-idempotency-key") ?? crypto.randomUUID();
+    const { data: usage, error: usageError } = await adminClient.rpc("consume_usage_event", {
+      p_tenant_id: tenantId,
+      p_event_type: "analysis_run",
+      p_quantity: 1,
+      p_idempotency_key: idempotencyKey,
+      p_metadata: {
+        function: "analyze-concept-v2",
+        user_id: user.id,
+        project_name: inputs.projectName,
+        industry: inputs.industry,
+      },
+    });
+
+    if (usageError) {
+      const isLimit = String(usageError.message || "").toLowerCase().includes("usage limit");
+      return jsonResponse(req, {
+        error: isLimit
+          ? "This workspace has reached its monthly analysis limit."
+          : "Could not reserve usage for this analysis.",
+      }, isLimit ? 402 : 400);
     }
 
     const gatewayKey = Deno.env.get("LOVABLE_" + "API_KEY");
@@ -149,10 +176,7 @@ serve(async (req) => {
     if (!aiResponse.ok) {
       const message = await aiResponse.text();
       console.error("AI gateway failed", aiResponse.status, message);
-      return new Response(JSON.stringify({ error: "AI analysis failed. Please try again." }), {
-        status: aiResponse.status,
-        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { error: "AI analysis failed. Please try again." }, aiResponse.status);
     }
 
     const aiData = await aiResponse.json();
@@ -161,6 +185,19 @@ serve(async (req) => {
 
     const parsed = JSON.parse(args);
     const report = buildReport(parsed, inputs);
+    const estimatedTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt) + estimateTokens(args);
+
+    await adminClient.rpc("consume_usage_event", {
+      p_tenant_id: tenantId,
+      p_event_type: "ai_tokens",
+      p_quantity: estimatedTokens,
+      p_idempotency_key: `${idempotencyKey}:tokens`,
+      p_metadata: {
+        function: "analyze-concept-v2",
+        user_id: user.id,
+        estimate: true,
+      },
+    });
 
     const { data: reportRow, error: insertError } = await adminClient
       .from("reports")
@@ -177,9 +214,7 @@ serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    return new Response(JSON.stringify({ report, reportRow }), {
-      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-    });
+    return jsonResponse(req, { report, reportRow, usage, usageEstimate: { ai_tokens: estimatedTokens } });
   } catch (err) {
     if (err instanceof Response) {
       return new Response(err.body, {
@@ -189,9 +224,6 @@ serve(async (req) => {
     }
 
     console.error("analyze-concept-v2 failed", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-    });
+    return jsonResponse(req, { error: "Internal server error" }, 500);
   }
 });
