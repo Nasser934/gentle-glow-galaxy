@@ -10,7 +10,6 @@ import { TenantLayout } from "@/layouts/TenantLayout";
 import Index from "./pages/Index";
 
 const Analyze = lazy(() => import("./pages/Analyze"));
-const Results = lazy(() => import("./pages/Results"));
 const TenantResults = lazy(() => import("./pages/TenantResults"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
