@@ -16,7 +16,6 @@ import {
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
-import { useOptionalTenant } from "@/contexts/TenantContext";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 
@@ -27,8 +26,6 @@ type EssayField =
 
 const Analyze = () => {
   const navigate = useNavigate();
-  const tenantCtx = useOptionalTenant();
-  const tenant = tenantCtx?.tenant;
   const [step, setStep] = useState(0);
   const [inputs, setInputs] = useState<ConceptInputs>(initialInputs);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -38,29 +35,8 @@ const Analyze = () => {
   const [showBrief, setShowBrief] = useState(true);
   const [completing, setCompleting] = useState<EssayField | null>(null);
 
-  const tenantBody = tenant ? { tenantId: tenant.id } : {};
-  const dashboardPath = tenant ? `/t/${tenant.slug}/dashboard` : "/";
-  const resultsPath = tenant ? `/t/${tenant.slug}/results` : "/results";
-
   const set = (field: keyof ConceptInputs, value: string) =>
     setInputs((prev) => ({ ...prev, [field]: value }));
-
-  const readFunctionError = async (error: unknown) => {
-    let detail = error instanceof Error ? error.message : "Request failed";
-    try {
-      const ctx: any = (error as any)?.context;
-      if (ctx?.json) {
-        const json = await ctx.json();
-        if (json?.error) detail = json.error;
-      } else if (ctx?.text) {
-        const text = await ctx.text();
-        if (text) detail = text;
-      }
-    } catch (_) {
-      // Keep original error message.
-    }
-    return detail;
-  };
 
   const handleAutoFill = async () => {
     if (brief.trim().length < 10) {
@@ -69,12 +45,8 @@ const Analyze = () => {
     }
     setIsAutoFilling(true);
     try {
-      const functionName = tenant ? "autofill-brief-v2" : "autofill-brief";
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { brief, ...tenantBody },
-        headers: { "x-idempotency-key": crypto.randomUUID() },
-      });
-      if (error) throw new Error(await readFunctionError(error));
+      const { data, error } = await supabase.functions.invoke("autofill-brief", { body: { brief } });
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setInputs(data.draft);
       setShowBrief(false);
@@ -89,12 +61,10 @@ const Analyze = () => {
   const completeField = async (field: EssayField) => {
     setCompleting(field);
     try {
-      const functionName = tenant ? "complete-field-v2" : "complete-field";
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { field, partial: inputs[field], inputs, ...tenantBody },
-        headers: { "x-idempotency-key": crypto.randomUUID() },
+      const { data, error } = await supabase.functions.invoke("complete-field", {
+        body: { field, partial: inputs[field], inputs },
       });
-      if (error) throw new Error(await readFunctionError(error));
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.text) set(field, data.text);
       toast.success("Field completed by AI.");
@@ -125,32 +95,19 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
     try {
-      const functionName = tenant ? "analyze-concept-v2" : "analyze-concept";
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { inputs, ...tenantBody },
-        headers: { "x-idempotency-key": crypto.randomUUID() },
-      });
-
-      if (error) throw new Error(await readFunctionError(error));
-      if (data?.error) throw new Error(data.error);
-
-      if (tenant) {
-        if (!data?.report || !data?.reportRow?.id || !data?.reportRow?.slug) {
-          throw new Error("The server did not save the report. Please try again.");
-        }
-        navigate(resultsPath, {
-          state: {
-            report: data.report,
-            reportRow: data.reportRow,
-            inputs,
-            tenantId: tenant.id,
-            slug: data.reportRow.slug,
-          },
-        });
-        return;
+      const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
+      if (error) {
+        // FunctionsHttpError exposes the response body via .context
+        let detail = error.message;
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
+          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
+        } catch (_) { /* ignore */ }
+        throw new Error(detail);
       }
-
-      navigate(resultsPath, { state: { report: data, inputs } });
+      if (data?.error) throw new Error(data.error);
+      navigate("/results", { state: { report: data, inputs } });
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
     } finally {
@@ -174,21 +131,20 @@ const Analyze = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {!tenant && (
-        <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto flex h-14 items-center justify-between px-6">
-            <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-                <BarChart3 className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-            </button>
-            <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
-          </div>
-        </nav>
-      )}
+      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+        <div className="container mx-auto flex h-14 items-center justify-between px-6">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
+          </button>
+          <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
+        </div>
+      </nav>
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
+        {/* Brief auto-fill */}
         {showBrief && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -213,6 +169,7 @@ const Analyze = () => {
           </motion.div>
         )}
 
+        {/* Progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
             {STEPS.map((s, i) => (
@@ -377,8 +334,8 @@ const Analyze = () => {
         </AnimatePresence>
 
         <div className="mt-10 flex items-center justify-between">
-          <Button variant="outline" onClick={step === 0 ? () => navigate(dashboardPath) : prev} className="gap-2">
-            <ArrowLeft className="h-4 w-4" /> {step === 0 ? (tenant ? "Dashboard" : "Home") : "Back"}
+          <Button variant="outline" onClick={step === 0 ? () => navigate("/") : prev} className="gap-2">
+            <ArrowLeft className="h-4 w-4" /> {step === 0 ? "Home" : "Back"}
           </Button>
           {step < 3 ? (
             <Button onClick={next} className="gap-2">Next <ArrowRight className="h-4 w-4" /></Button>
