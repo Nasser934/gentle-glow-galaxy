@@ -428,7 +428,7 @@ const Results = () => {
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Company</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Model</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Weakness</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Your Edge</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Competitor Strength / Gap</th>
               </tr>
             </thead>
             <tbody>
