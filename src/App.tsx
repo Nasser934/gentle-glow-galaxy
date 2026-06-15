@@ -35,6 +35,7 @@ const App = () => (
               <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
+              <Route path="/decision-room/:reportId" element={<DecisionRoom />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
