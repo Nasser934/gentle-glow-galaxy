@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { formatConfidence, isInternalProject } from "@/lib/format";
 
 /* --------------------------------------------------------------------------
  * Native-text PDF exporter
