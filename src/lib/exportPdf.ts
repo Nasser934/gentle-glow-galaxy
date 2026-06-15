@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { formatConfidence, isInternalProject } from "@/lib/format";
 
 /* --------------------------------------------------------------------------
  * Native-text PDF exporter
@@ -79,7 +80,7 @@ function pageHeader(ctx: PdfCtx) {
   setColor(pdf, COLORS.muted);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
-  pdf.text(`${ctx.projectName} · Page ${ctx.pageNum}`, PAGE_W - M, 32, { align: "right" });
+  pdf.text(ctx.projectName, PAGE_W - M, 32, { align: "right" });
 
   setDraw(pdf, COLORS.primary);
   pdf.setLineWidth(1.4);
@@ -446,7 +447,7 @@ export async function exportReportToPdf(
       body: ["financial","market","achievability","risk","timing","operational"].map(k => [
         k.charAt(0).toUpperCase() + k.slice(1),
         w ? `${Math.round((w[k] ?? 0) * 100)}%` : "—",
-        c ? `${Math.round((c[k] ?? 0) * 100)}%` : "—",
+        c ? formatConfidence(c[k]) : "—",
         rat ? (rat[k] ?? "—") : "—",
       ]),
       styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
@@ -457,7 +458,7 @@ export async function exportReportToPdf(
     ctx.y = (pdf as any).lastAutoTable.finalY + 8;
   }
 
-  subTitle(ctx, "FMART 5-Dimension Score Radar");
+  subTitle(ctx, "FMART 6-Dimension Weighted Scoring");
   await placeChart(ctx, repRadar, 220);
 
   // 3. Market
@@ -507,7 +508,7 @@ export async function exportReportToPdf(
     autoTable(pdf, {
       startY: ctx.y,
       margin: { left: M, right: M },
-      head: [["Competitor", "Model", "Weakness", "Our Edge"]],
+      head: [["Competitor", "Model", "Weakness", "Competitor Strength / Gap"]],
       body: report.competitors.map(c => [c.name, c.model, c.weakness, c.edge]),
       styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
       headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
@@ -599,10 +600,13 @@ export async function exportReportToPdf(
   ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
   subTitle(ctx, "4.3 Revenue Scenarios");
+  const _internal = isInternalProject(report);
+  const _custLabel = _internal ? "Internal Users" : "Yr 1 Customers";
+  const _revLabel  = _internal ? "Annual Savings / Value Realized" : "Annual Revenue";
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
-    head: [["Scenario", "Probability", "Yr 1 Subscribers", "Annual Revenue", "Break-Even"]],
+    head: [["Scenario", "Probability", _custLabel, _revLabel, "Break-Even"]],
     body: report.financials.scenarios.map(s => [s.scenario, s.probability, s.subscribersYr1, s.annualRevenue, s.breakEven]),
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },

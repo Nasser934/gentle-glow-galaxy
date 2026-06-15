@@ -172,24 +172,26 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <CardHeader><CardTitle className="text-base">FMART Radar</CardTitle></CardHeader>
               <CardContent><FMARTRadar scores={report.scores} /></CardContent>
             </Card>
-            <Card>
-              <CardHeader><CardTitle className="text-base">Score Distribution</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                      <YAxis domain={[0, 10]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                      <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-                        {scoreData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+            {scoreData.some((d) => d.score > 0) ? (
+              <Card>
+                <CardHeader><CardTitle className="text-base">Score Distribution</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                        <YAxis domain={[0, 10]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                        <Bar dataKey="score" radius={[6, 6, 0, 0]}>
+                          {scoreData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
           <Card>
             <CardHeader><CardTitle className="text-base">Dimension Findings</CardTitle></CardHeader>
@@ -257,7 +259,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                   <div className="mt-1 text-xs text-muted-foreground">{competitor.model}</div>
                   <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
                     <p><span className="font-semibold text-destructive">Weakness:</span> {competitor.weakness}</p>
-                    <p><span className="font-semibold text-primary">Your edge:</span> {competitor.edge}</p>
+                    <p><span className="font-semibold text-primary">Market position / gap:</span> {competitor.edge}</p>
                   </div>
                 </div>
               ))}

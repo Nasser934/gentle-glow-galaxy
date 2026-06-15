@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
 import type { FMARTScores } from "@/types/analysis";
+import { confidencePercent, formatConfidence } from "@/lib/format";
 
 const labels: Record<string, string> = {
   financial: "Financial",
@@ -30,7 +31,8 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
   const r = scores.rationale;
   const dims = ["financial", "market", "achievability", "risk", "timing", "operational"] as const;
 
-  const avgConf = c ? Math.round(dims.reduce((a, d) => a + (c[d] || 0), 0) / dims.length) : null;
+  const confs = c ? dims.map((d) => confidencePercent(c[d])).filter((v): v is number => v != null) : [];
+  const avgConf = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null;
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/40 backdrop-blur">
@@ -39,7 +41,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
         <div className="flex items-center gap-2.5">
           <Info className="h-4 w-4 text-primary" />
           <div>
-            <div className="font-display text-[14px] font-medium tracking-tight">FMART methodology & confidence</div>
+            <div className="font-display text-[14px] font-medium tracking-tight">FMART 6-Dimension Weighted Scoring</div>
             <div className="text-[12px] text-muted-foreground">
               Weighted overall: <span className="font-mono text-foreground">{scores.overall.toFixed(1)}</span>
               {avgConf != null && <> · Average analyst confidence: <span className="font-mono text-foreground">{avgConf}%</span></>}
@@ -99,7 +101,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
               <tbody className="divide-y divide-border/60">
                 {dims.map((d) => {
                   const score = scores[d] as number;
-                  const conf = c?.[d];
+                  const conf = confidencePercent(c?.[d]);
                   const rat = r?.[d];
                   return (
                     <tr key={d}>
@@ -108,7 +110,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
                       <td className="px-3 py-2 text-right font-mono text-muted-foreground">{((w[d] || 0) * 100).toFixed(0)}%</td>
                       <td className="px-3 py-2 text-right">
                         {conf != null ? (
-                          <span className={`font-mono ${conf >= 70 ? "text-emerald-600" : conf >= 40 ? "text-amber-600" : "text-rose-600"}`}>{conf}%</span>
+                          <span className={`font-mono ${conf >= 70 ? "text-emerald-600" : conf >= 40 ? "text-amber-600" : "text-rose-600"}`}>{formatConfidence(c?.[d])}</span>
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-muted-foreground">{rat || "—"}</td>

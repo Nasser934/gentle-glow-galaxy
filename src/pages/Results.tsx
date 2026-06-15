@@ -18,6 +18,7 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
+import { isInternalProject } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
@@ -165,6 +166,9 @@ const Results = () => {
 
   const totalPages = 9; // 1 dashboard snapshot + 8 report pages
   const cur = report.financials.currency;
+  const internal = isInternalProject(report, inputs);
+  const customersLabel = internal ? "Internal Users" : "Yr 1 Customers";
+  const revenueLabel = internal ? "Annual Savings / Value Realized" : "Annual Revenue";
 
   return (
     <div className="min-h-screen bg-[#eef2f7]">
@@ -322,7 +326,7 @@ const Results = () => {
             </tbody>
           </table>
 
-          <SubTitle>Figure 1 — FMART 5-Dimension Score Radar (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
+          <SubTitle>Figure 1 — FMART 6-Dimension Weighted Scoring (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
           <FMARTRadar scores={report.scores} />
         </ReportPage>
 
@@ -424,7 +428,7 @@ const Results = () => {
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Company</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Model</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Weakness</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Your Edge</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Competitor Strength / Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -503,8 +507,8 @@ const Results = () => {
               <tr className="bg-[#1f4ed8] text-white">
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Scenario</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Probability</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Yr 1 Customers</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Annual Revenue</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">{customersLabel}</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">{revenueLabel}</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Break-Even</th>
               </tr>
             </thead>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BarChart3, Plus, ExternalLink, Trash2, Loader2 } from "lucide-react";
+import { BarChart3, Plus, ExternalLink, Trash2, Loader2, Gauge, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -55,7 +55,12 @@ const Dashboard = () => {
             <h1 className="font-display text-2xl font-medium tracking-tight">My Analyses</h1>
             <p className="text-sm text-muted-foreground">All saved feasibility reports for your account.</p>
           </div>
-          <Button onClick={() => navigate("/analyze")} className="gap-2"><Plus className="h-4 w-4" /> New analysis</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => navigate("/decision-room/demo")} className="gap-2">
+              <Sparkles className="h-4 w-4" /> Load Demo Case
+            </Button>
+            <Button onClick={() => navigate("/analyze")} className="gap-2"><Plus className="h-4 w-4" /> New analysis</Button>
+          </div>
         </div>
 
         {loading ? (
@@ -90,7 +95,8 @@ const Dashboard = () => {
                     <td className="px-4 py-3 text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" asChild><Link to={`/r/${r.slug}`}><ExternalLink className="h-4 w-4" /></Link></Button>
+                        <Button size="sm" variant="ghost" asChild title="Open Decision Room"><Link to={`/decision-room/${r.id}`}><Gauge className="h-4 w-4" /></Link></Button>
+                        <Button size="sm" variant="ghost" asChild title="Open full report"><Link to={`/r/${r.slug}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                         <Button size="sm" variant="ghost" onClick={() => onDelete(r.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
                       </div>
                     </td>

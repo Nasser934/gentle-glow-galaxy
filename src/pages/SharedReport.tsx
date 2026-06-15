@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock } from "lucide-react";
+import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
@@ -57,6 +57,10 @@ const SharedReport = () => {
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button variant="outline" size="sm" onClick={() => navigate(`/decision-room/${row.id}`)}
+              className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
+              <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: row.output, inputs: row.inputs } })}
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Download className="mr-1.5 h-3.5 w-3.5" /> Open full report

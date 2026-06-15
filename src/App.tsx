@@ -14,6 +14,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
 const Compare = lazy(() => import("./pages/Compare"));
+const DecisionRoom = lazy(() => import("./pages/DecisionRoom"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
               <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
+              <Route path="/decision-room/:reportId" element={<DecisionRoom />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
