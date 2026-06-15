@@ -31,7 +31,8 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
   const r = scores.rationale;
   const dims = ["financial", "market", "achievability", "risk", "timing", "operational"] as const;
 
-  const avgConf = c ? Math.round(dims.reduce((a, d) => a + (c[d] || 0), 0) / dims.length) : null;
+  const confs = c ? dims.map((d) => confidencePercent(c[d])).filter((v): v is number => v != null) : [];
+  const avgConf = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null;
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/40 backdrop-blur">
