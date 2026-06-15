@@ -324,8 +324,8 @@ const DecisionRoom = () => {
             ))}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {!demo && (
-              <Button variant="outline" size="sm" onClick={() => navigate(`/r/${reportId}`)} className="gap-1.5">
+            {!demo && slug && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/r/${slug}`)} className="gap-1.5">
                 Open full dashboard <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             )}
