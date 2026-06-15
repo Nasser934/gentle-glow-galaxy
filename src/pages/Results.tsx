@@ -166,6 +166,9 @@ const Results = () => {
 
   const totalPages = 9; // 1 dashboard snapshot + 8 report pages
   const cur = report.financials.currency;
+  const internal = isInternalProject(report, inputs);
+  const customersLabel = internal ? "Internal Users" : "Yr 1 Customers";
+  const revenueLabel = internal ? "Annual Savings / Value Realized" : "Annual Revenue";
 
   return (
     <div className="min-h-screen bg-[#eef2f7]">
