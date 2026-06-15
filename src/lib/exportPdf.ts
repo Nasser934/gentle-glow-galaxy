@@ -600,10 +600,13 @@ export async function exportReportToPdf(
   ctx.y = (pdf as any).lastAutoTable.finalY + 6;
 
   subTitle(ctx, "4.3 Revenue Scenarios");
+  const _internal = isInternalProject(report);
+  const _custLabel = _internal ? "Internal Users" : "Yr 1 Customers";
+  const _revLabel  = _internal ? "Annual Savings / Value Realized" : "Annual Revenue";
   autoTable(pdf, {
     startY: ctx.y,
     margin: { left: M, right: M },
-    head: [["Scenario", "Probability", "Yr 1 Subscribers", "Annual Revenue", "Break-Even"]],
+    head: [["Scenario", "Probability", _custLabel, _revLabel, "Break-Even"]],
     body: report.financials.scenarios.map(s => [s.scenario, s.probability, s.subscribersYr1, s.annualRevenue, s.breakEven]),
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
