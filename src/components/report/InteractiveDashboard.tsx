@@ -257,7 +257,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                   <div className="mt-1 text-xs text-muted-foreground">{competitor.model}</div>
                   <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
                     <p><span className="font-semibold text-destructive">Weakness:</span> {competitor.weakness}</p>
-                    <p><span className="font-semibold text-primary">Your edge:</span> {competitor.edge}</p>
+                    <p><span className="font-semibold text-primary">Market position / gap:</span> {competitor.edge}</p>
                   </div>
                 </div>
               ))}
