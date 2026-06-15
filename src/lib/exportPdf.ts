@@ -508,7 +508,7 @@ export async function exportReportToPdf(
     autoTable(pdf, {
       startY: ctx.y,
       margin: { left: M, right: M },
-      head: [["Competitor", "Model", "Weakness", "Our Edge"]],
+      head: [["Competitor", "Model", "Weakness", "Competitor Strength / Gap"]],
       body: report.competitors.map(c => [c.name, c.model, c.weakness, c.edge]),
       styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
       headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: "bold" },
