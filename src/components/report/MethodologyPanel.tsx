@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
 import type { FMARTScores } from "@/types/analysis";
+import { confidencePercent, formatConfidence } from "@/lib/format";
 
 const labels: Record<string, string> = {
   financial: "Financial",
