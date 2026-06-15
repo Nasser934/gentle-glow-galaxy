@@ -92,7 +92,7 @@ const DecisionRoom = () => {
     );
   }
 
-  const { inputs, output: report, title, demo } = row;
+  const { inputs, output: report, title, demo, slug } = row;
   const overallConfPct = confidencePercent(
     report.scores.confidence
       ? Object.values(report.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6
