@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BarChart3, Plus, ExternalLink, Trash2, Loader2 } from "lucide-react";
+import { BarChart3, Plus, ExternalLink, Trash2, Loader2, Gauge, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
