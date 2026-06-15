@@ -49,7 +49,7 @@ const Section = ({ title, icon: Icon, children, hint }: any) => (
 const DecisionRoom = () => {
   const { reportId = "" } = useParams();
   const navigate = useNavigate();
-  const [row, setRow] = useState<{ inputs: ConceptInputs; output: FeasibilityReport; title: string; demo: boolean } | null>(null);
+  const [row, setRow] = useState<{ inputs: ConceptInputs; output: FeasibilityReport; title: string; slug: string | null; demo: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
