@@ -447,7 +447,7 @@ export async function exportReportToPdf(
       body: ["financial","market","achievability","risk","timing","operational"].map(k => [
         k.charAt(0).toUpperCase() + k.slice(1),
         w ? `${Math.round((w[k] ?? 0) * 100)}%` : "—",
-        c ? `${Math.round((c[k] ?? 0) * 100)}%` : "—",
+        c ? formatConfidence(c[k]) : "—",
         rat ? (rat[k] ?? "—") : "—",
       ]),
       styles: { font: "helvetica", fontSize: 8, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
