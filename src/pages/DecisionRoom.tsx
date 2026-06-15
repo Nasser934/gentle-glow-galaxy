@@ -60,12 +60,12 @@ const DecisionRoom = () => {
     (async () => {
       try {
         if (reportId === DEMO_REPORT_ID) {
-          if (!cancelled) setRow({ inputs: demoInputs, output: demoReport, title: demoInputs.projectName, demo: true });
+          if (!cancelled) setRow({ inputs: demoInputs, output: demoReport, title: demoInputs.projectName, slug: null, demo: true });
           return;
         }
         const r: ReportRow | null = await getReportById(reportId);
         if (!r) { if (!cancelled) setNotFound(true); return; }
-        if (!cancelled) setRow({ inputs: r.inputs, output: r.output, title: r.title, demo: false });
+        if (!cancelled) setRow({ inputs: r.inputs, output: r.output, title: r.title, slug: r.slug, demo: false });
       } catch (e: any) {
         toast.error(e?.message || "Could not load report");
         if (!cancelled) setNotFound(true);
