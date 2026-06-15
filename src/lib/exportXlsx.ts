@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { formatConfidence } from "@/lib/format";
 
 const PRIMARY = "FF1F4ED8";
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: PRIMARY } };
@@ -62,7 +63,7 @@ export async function exportReportToXlsx(report: FeasibilityReport, inputs: Conc
       labels[k],
       report.scores[k],
       report.scores.weights?.[k] ?? "",
-      report.scores.confidence?.[k] ? `${Math.round((report.scores.confidence[k] as number) * 100)}%` : "",
+      formatConfidence(report.scores.confidence?.[k]),
       (report.scores as any)[`${k}Finding`] ?? "",
       report.scores.rationale?.[k] ?? "",
     ]);
