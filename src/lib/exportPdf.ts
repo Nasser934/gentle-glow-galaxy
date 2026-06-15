@@ -525,7 +525,7 @@ export async function exportReportToPdf(
     autoTable(pdf, {
       startY: ctx.y,
       margin: { left: M, right: M },
-      body: [["Confidence", formatConfidence(r.confidence)], ["Sentiment", r.sentiment]],
+      body: [["Confidence", r.confidence], ["Sentiment", r.sentiment]],
       styles: { font: "helvetica", fontSize: 9, cellPadding: 4, textColor: COLORS.text, lineColor: COLORS.border, lineWidth: 0.4 },
       columnStyles: { 0: { fontStyle: "bold", cellWidth: 120, fillColor: COLORS.surface } },
       didDrawPage: () => { pageHeader(ctx); pageFooter(ctx); },
