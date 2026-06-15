@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { formatConfidence } from "@/lib/format";
 
 const PRIMARY = "FF1F4ED8";
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: PRIMARY } };
