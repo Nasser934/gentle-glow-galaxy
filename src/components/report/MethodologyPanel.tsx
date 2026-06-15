@@ -101,7 +101,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
               <tbody className="divide-y divide-border/60">
                 {dims.map((d) => {
                   const score = scores[d] as number;
-                  const conf = c?.[d];
+                  const conf = confidencePercent(c?.[d]);
                   const rat = r?.[d];
                   return (
                     <tr key={d}>
@@ -110,7 +110,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
                       <td className="px-3 py-2 text-right font-mono text-muted-foreground">{((w[d] || 0) * 100).toFixed(0)}%</td>
                       <td className="px-3 py-2 text-right">
                         {conf != null ? (
-                          <span className={`font-mono ${conf >= 70 ? "text-emerald-600" : conf >= 40 ? "text-amber-600" : "text-rose-600"}`}>{conf}%</span>
+                          <span className={`font-mono ${conf >= 70 ? "text-emerald-600" : conf >= 40 ? "text-amber-600" : "text-rose-600"}`}>{formatConfidence(c?.[d])}</span>
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-muted-foreground">{rat || "—"}</td>
