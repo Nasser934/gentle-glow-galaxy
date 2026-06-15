@@ -507,8 +507,8 @@ const Results = () => {
               <tr className="bg-[#1f4ed8] text-white">
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Scenario</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Probability</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Yr 1 Customers</th>
-                <th className="border border-[#1f4ed8] px-3 py-2 text-left">Annual Revenue</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">{customersLabel}</th>
+                <th className="border border-[#1f4ed8] px-3 py-2 text-left">{revenueLabel}</th>
                 <th className="border border-[#1f4ed8] px-3 py-2 text-left">Break-Even</th>
               </tr>
             </thead>
