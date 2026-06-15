@@ -79,7 +79,7 @@ function pageHeader(ctx: PdfCtx) {
   setColor(pdf, COLORS.muted);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
-  pdf.text(`${ctx.projectName} · Page ${ctx.pageNum}`, PAGE_W - M, 32, { align: "right" });
+  pdf.text(ctx.projectName, PAGE_W - M, 32, { align: "right" });
 
   setDraw(pdf, COLORS.primary);
   pdf.setLineWidth(1.4);
