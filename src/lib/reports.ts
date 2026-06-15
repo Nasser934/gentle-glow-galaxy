@@ -43,6 +43,16 @@ export async function getReportBySlug(slug: string) {
   return (data as unknown) as ReportRow | null;
 }
 
+export async function getReportById(id: string) {
+  const { data, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as unknown) as ReportRow | null;
+}
+
 export async function listMyReports() {
   const { data, error } = await supabase
     .from("reports")
