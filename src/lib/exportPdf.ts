@@ -458,7 +458,7 @@ export async function exportReportToPdf(
     ctx.y = (pdf as any).lastAutoTable.finalY + 8;
   }
 
-  subTitle(ctx, "FMART 5-Dimension Score Radar");
+  subTitle(ctx, "FMART 6-Dimension Weighted Scoring");
   await placeChart(ctx, repRadar, 220);
 
   // 3. Market
