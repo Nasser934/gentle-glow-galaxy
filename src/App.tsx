@@ -14,6 +14,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
 const Compare = lazy(() => import("./pages/Compare"));
+const DecisionRoom = lazy(() => import("./pages/DecisionRoom"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
