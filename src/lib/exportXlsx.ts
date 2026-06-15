@@ -63,7 +63,7 @@ export async function exportReportToXlsx(report: FeasibilityReport, inputs: Conc
       labels[k],
       report.scores[k],
       report.scores.weights?.[k] ?? "",
-      report.scores.confidence?.[k] ? `${Math.round((report.scores.confidence[k] as number) * 100)}%` : "",
+      formatConfidence(report.scores.confidence?.[k]),
       (report.scores as any)[`${k}Finding`] ?? "",
       report.scores.rationale?.[k] ?? "",
     ]);
