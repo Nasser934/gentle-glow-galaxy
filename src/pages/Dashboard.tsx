@@ -95,7 +95,8 @@ const Dashboard = () => {
                     <td className="px-4 py-3 text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" asChild><Link to={`/r/${r.slug}`}><ExternalLink className="h-4 w-4" /></Link></Button>
+                        <Button size="sm" variant="ghost" asChild title="Open Decision Room"><Link to={`/decision-room/${r.id}`}><Gauge className="h-4 w-4" /></Link></Button>
+                        <Button size="sm" variant="ghost" asChild title="Open full report"><Link to={`/r/${r.slug}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                         <Button size="sm" variant="ghost" onClick={() => onDelete(r.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
                       </div>
                     </td>
