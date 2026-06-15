@@ -118,24 +118,26 @@ export const DashboardSnapshot = ({
           <FMARTRadar scores={report.scores} />
         </div>
 
-        <div className="rounded-xl border p-3" style={{ borderColor: PALETTE.border, background: PALETTE.card }}>
-          <div className="mb-1 font-display text-[12px] font-semibold uppercase tracking-wide" style={{ color: PALETTE.text }}>
-            Score Distribution
+        {scoreData.some((d) => d.score > 0) && (
+          <div className="rounded-xl border p-3" style={{ borderColor: PALETTE.border, background: PALETTE.card }}>
+            <div className="mb-1 font-display text-[12px] font-semibold uppercase tracking-wide" style={{ color: PALETTE.text }}>
+              Score Distribution
+            </div>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.border} />
+                  <XAxis dataKey="name" tick={{ fill: PALETTE.muted, fontSize: 10 }} />
+                  <YAxis domain={[0, 10]} tick={{ fill: PALETTE.muted, fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: PALETTE.card, border: `1px solid ${PALETTE.border}`, borderRadius: 8 }} />
+                  <Bar dataKey="score" radius={[6, 6, 0, 0]}>
+                    {scoreData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={PALETTE.border} />
-                <XAxis dataKey="name" tick={{ fill: PALETTE.muted, fontSize: 10 }} />
-                <YAxis domain={[0, 10]} tick={{ fill: PALETTE.muted, fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: PALETTE.card, border: `1px solid ${PALETTE.border}`, borderRadius: 8 }} />
-                <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-                  {scoreData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Strategic recommendations */}
