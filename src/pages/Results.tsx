@@ -18,6 +18,7 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
+import { isInternalProject } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
