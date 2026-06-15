@@ -326,7 +326,7 @@ const Results = () => {
             </tbody>
           </table>
 
-          <SubTitle>Figure 1 — FMART 5-Dimension Score Radar (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
+          <SubTitle>Figure 1 — FMART 6-Dimension Weighted Scoring (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
           <FMARTRadar scores={report.scores} />
         </ReportPage>
 
