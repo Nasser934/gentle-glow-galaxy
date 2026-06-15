@@ -41,7 +41,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
         <div className="flex items-center gap-2.5">
           <Info className="h-4 w-4 text-primary" />
           <div>
-            <div className="font-display text-[14px] font-medium tracking-tight">FMART methodology & confidence</div>
+            <div className="font-display text-[14px] font-medium tracking-tight">FMART 6-Dimension Weighted Scoring</div>
             <div className="text-[12px] text-muted-foreground">
               Weighted overall: <span className="font-mono text-foreground">{scores.overall.toFixed(1)}</span>
               {avgConf != null && <> · Average analyst confidence: <span className="font-mono text-foreground">{avgConf}%</span></>}
