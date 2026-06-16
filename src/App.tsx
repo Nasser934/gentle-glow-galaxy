@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,14 +8,33 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 
-const Analyze = lazy(() => import("./pages/Analyze"));
-const Results = lazy(() => import("./pages/Results"));
-const Auth = lazy(() => import("./pages/Auth"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const SharedReport = lazy(() => import("./pages/SharedReport"));
-const Compare = lazy(() => import("./pages/Compare"));
-const DecisionRoom = lazy(() => import("./pages/DecisionRoom"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+// Retry dynamic imports once, then force a hard reload on the second failure.
+// Prevents blank screens when a lazy chunk 404s after a redeploy.
+const lazyWithRetry = <T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+) =>
+  lazy(async () => {
+    const reloadKey = "lovable:chunk-reloaded";
+    try {
+      return await factory();
+    } catch (err) {
+      if (typeof window !== "undefined" && !sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+        return await new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    }
+  });
+
+const Analyze = lazyWithRetry(() => import("./pages/Analyze"));
+const Results = lazyWithRetry(() => import("./pages/Results"));
+const Auth = lazyWithRetry(() => import("./pages/Auth"));
+const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
+const SharedReport = lazyWithRetry(() => import("./pages/SharedReport"));
+const Compare = lazyWithRetry(() => import("./pages/Compare"));
+const DecisionRoom = lazyWithRetry(() => import("./pages/DecisionRoom"));
+const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
