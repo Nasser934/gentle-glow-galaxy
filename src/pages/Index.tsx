@@ -58,14 +58,11 @@ const Index = () => {
       {/* ---------- Nav ---------- */}
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-            <span className="ml-2 hidden rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:inline-block">
-              Beta
-            </span>
+          <Logo to="/" size={20} />
+          <div className="hidden items-center gap-6 text-[13px] text-muted-foreground md:flex">
+            <a href="#features" className="hover:text-foreground">Product</a>
+            <a href="#industries" className="hover:text-foreground">Solutions</a>
+            <a href="#features" className="hover:text-foreground">Evidence</a>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
