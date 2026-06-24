@@ -35,7 +35,7 @@ const features = [
     description: "A defensible recommendation with the reasoning, assumptions and trade-offs surfaced inline.",
   },
   {
-    icon: Sparkles,
+    icon: FileSearch,
     title: "Public Research",
     description: "Reddit, HN and Wikipedia signals fused into the report with citations — no API keys required.",
   },
