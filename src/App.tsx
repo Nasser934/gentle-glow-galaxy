@@ -38,6 +38,12 @@ const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
+import { AppShell } from "@/components/AppShell";
+
+const Shelled = ({ children }: { children: React.ReactNode }) => (
+  <AppShell>{children}</AppShell>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -52,9 +58,9 @@ const App = () => (
               <Route path="/r/:slug" element={<SharedReport />} />
               <Route path="/analyze" element={<ProtectedRoute><Analyze /></ProtectedRoute>} />
               <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
               <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
-              <Route path="/decision-room/:reportId" element={<DecisionRoom />} />
+              <Route path="/decision-room/:reportId" element={<Shelled><DecisionRoom /></Shelled>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

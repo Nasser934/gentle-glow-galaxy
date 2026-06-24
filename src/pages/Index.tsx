@@ -4,18 +4,18 @@ import {
   ArrowRight,
   BarChart3,
   Shield,
-  Zap,
   Target,
   Building2,
   Cpu,
   Landmark,
   Globe,
   Briefcase,
-  Sparkles,
+  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
+import { Logo } from "@/components/Logo";
 
 const features = [
   {
@@ -35,7 +35,7 @@ const features = [
     description: "A defensible recommendation with the reasoning, assumptions and trade-offs surfaced inline.",
   },
   {
-    icon: Sparkles,
+    icon: FileSearch,
     title: "Public Research",
     description: "Reddit, HN and Wikipedia signals fused into the report with citations — no API keys required.",
   },
@@ -58,14 +58,11 @@ const Index = () => {
       {/* ---------- Nav ---------- */}
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-            <span className="ml-2 hidden rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:inline-block">
-              Beta
-            </span>
+          <Logo to="/" size={20} />
+          <div className="hidden items-center gap-6 text-[13px] text-muted-foreground md:flex">
+            <a href="#features" className="hover:text-foreground">Product</a>
+            <a href="#industries" className="hover:text-foreground">Solutions</a>
+            <a href="#features" className="hover:text-foreground">Evidence</a>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -228,7 +225,7 @@ const Index = () => {
       </section>
 
       {/* ---------- Industries ---------- */}
-      <section className="border-t border-border/60 bg-card/30">
+      <section id="industries" className="border-t border-border/60 bg-card/30">
         <div className="container mx-auto px-6 py-14">
           <p className="mb-8 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Trusted patterns for project-driven industries

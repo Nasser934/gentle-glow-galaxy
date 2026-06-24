@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BarChart3, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Logo, LogoMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,61 +74,98 @@ const AuthPage = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+      <nav className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-          </Link>
+          <Logo to="/" size={20} />
           <ThemeToggle />
         </div>
       </nav>
 
-      <div className="container mx-auto flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-6 py-10">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-          className="w-full max-w-sm rounded-xl border border-border/70 bg-card/60 p-6 shadow-2xl shadow-primary/5 backdrop-blur"
-        >
-          <h1 className="text-center font-display text-xl font-medium tracking-tight">Welcome back</h1>
-          <p className="mt-1 text-center text-[13px] text-muted-foreground">Save and share your feasibility reports.</p>
+      <div className="grid min-h-[calc(100vh-3.5rem)] lg:grid-cols-2">
+        {/* Left — form */}
+        <div className="flex items-center justify-center px-6 py-10">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-sm"
+          >
+            <h1 className="text-[22px] font-semibold tracking-tight">Welcome back</h1>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Sign in to your Concept AI workspace.
+            </p>
 
-          <Button type="button" onClick={handleGoogle} disabled={busy}
-            className="mt-6 h-10 w-full justify-center gap-2 rounded-md border border-border/70 bg-background text-[13px] font-medium text-foreground hover:bg-card">
-            <GoogleIcon /> Continue with Google
-          </Button>
+            <Button
+              type="button"
+              onClick={handleGoogle}
+              disabled={busy}
+              className="mt-6 h-10 w-full justify-center gap-2 rounded-md border border-border bg-card text-[13px] font-medium text-foreground hover:bg-muted"
+            >
+              <GoogleIcon /> Continue with Google
+            </Button>
 
-          <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
-            <div className="h-px flex-1 bg-border/60" /> or <div className="h-px flex-1 bg-border/60" />
+            <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign in</TabsTrigger>
+                <TabsTrigger value="signup">Sign up</TabsTrigger>
+              </TabsList>
+              <TabsContent value="signin" className="mt-4">
+                <form onSubmit={handleEmail} className="space-y-3">
+                  <div>
+                    <Label htmlFor="e1">Email address</Label>
+                    <Input id="e1" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+                  </div>
+                  <div>
+                    <Label htmlFor="p1">Password</Label>
+                    <Input id="p1" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                  </div>
+                  <Button type="submit" disabled={busy} className="w-full">
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
+                  </Button>
+                </form>
+              </TabsContent>
+              <TabsContent value="signup" className="mt-4">
+                <form onSubmit={handleEmail} className="space-y-3">
+                  <div><Label htmlFor="n2">Name</Label><Input id="n2" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" /></div>
+                  <div><Label htmlFor="e2">Email address</Label><Input id="e2" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                  <div><Label htmlFor="p2">Password</Label><Input id="p2" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                  <Button type="submit" disabled={busy} className="w-full">
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            <p className="mt-5 text-[11px] text-muted-foreground">
+              Secure workspace for your ideas, reports, and decisions. Not financial advice.
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Right — brand panel */}
+        <div className="relative hidden overflow-hidden border-l border-border bg-[hsl(var(--primary-dark))] lg:flex lg:items-center lg:justify-center">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,hsl(var(--primary)/0.4),transparent_60%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_40%_30%_at_80%_80%,hsl(var(--accent)/0.18),transparent_60%)]" />
+          <div className="relative flex flex-col items-center gap-6 text-primary-foreground">
+            <div className="rounded-2xl bg-primary-foreground/10 p-5 ring-1 ring-inset ring-primary-foreground/20">
+              <LogoMark size={72} className="text-primary-foreground" />
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-semibold tracking-tight">Concept AI</div>
+              <div className="mt-1 text-[11px] font-medium uppercase tracking-[0.2em] text-primary-foreground/70">
+                Feasibility Intelligence
+              </div>
+            </div>
+            <p className="max-w-xs text-center text-[13px] leading-relaxed text-primary-foreground/80">
+              Turn ideas into confident decisions — structured FMART scoring, sourced research,
+              and exportable reports.
+            </p>
           </div>
-
-          <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
-            </TabsList>
-            <TabsContent value="signin" className="mt-4">
-              <form onSubmit={handleEmail} className="space-y-3">
-                <div><Label htmlFor="e1">Email</Label><Input id="e1" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-                <div><Label htmlFor="p1">Password</Label><Input id="p1" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-                <Button type="submit" disabled={busy} className="w-full">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}</Button>
-              </form>
-            </TabsContent>
-            <TabsContent value="signup" className="mt-4">
-              <form onSubmit={handleEmail} className="space-y-3">
-                <div><Label htmlFor="n2">Name</Label><Input id="n2" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" /></div>
-                <div><Label htmlFor="e2">Email</Label><Input id="e2" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-                <div><Label htmlFor="p2">Password</Label><Input id="p2" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-                <Button type="submit" disabled={busy} className="w-full">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}</Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-
-          <p className="mt-5 text-center text-[11px] text-muted-foreground">
-            By continuing you agree to a single-tenant, AI-generated feasibility tool. Not financial advice.
-          </p>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

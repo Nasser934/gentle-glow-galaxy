@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  ArrowLeft, BarChart3, CheckCircle2, ChevronRight, ExternalLink,
+  ArrowLeft, CheckCircle2, ChevronRight, ExternalLink,
   Gauge, Loader2, MessageSquare, ShieldAlert, Sparkles, Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { UserMenu } from "@/components/UserMenu";
 import { getReportById, type ReportRow } from "@/lib/reports";
 import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/format";
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
@@ -120,26 +118,15 @@ const DecisionRoom = () => {
   const evidenceItems = (report.research?.citations || []).slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")} className="h-8 gap-1.5">
-              <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
-            </Button>
-            <UserMenu />
-          </div>
-        </div>
-      </nav>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="h-8 gap-1.5 text-muted-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        </Button>
+      </div>
 
-      <div className="container mx-auto max-w-6xl px-6 py-8 space-y-6">
+      <div className="space-y-6">
+
         {/* Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
