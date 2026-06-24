@@ -56,10 +56,10 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/r/:slug" element={<SharedReport />} />
-              <Route path="/analyze" element={<ProtectedRoute><Shelled><Analyze /></Shelled></ProtectedRoute>} />
-              <Route path="/results" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
+              <Route path="/analyze" element={<ProtectedRoute><Analyze /></ProtectedRoute>} />
+              <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
-              <Route path="/compare" element={<ProtectedRoute><Shelled><Compare /></Shelled></ProtectedRoute>} />
+              <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
               <Route path="/decision-room/:reportId" element={<Shelled><DecisionRoom /></Shelled>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
