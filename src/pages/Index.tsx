@@ -225,7 +225,7 @@ const Index = () => {
       </section>
 
       {/* ---------- Industries ---------- */}
-      <section className="border-t border-border/60 bg-card/30">
+      <section id="industries" className="border-t border-border/60 bg-card/30">
         <div className="container mx-auto px-6 py-14">
           <p className="mb-8 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Trusted patterns for project-driven industries
