@@ -147,13 +147,18 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Inter var', 'Inter', system-ui, sans-serif;
     font-feature-settings: "cv01", "ss03", "cv11";
-    font-weight: 510;
+    font-weight: 590;
+    letter-spacing: -0.011em;
   }
 
-  /* Linear's compressed display tracking */
-  .text-display-xl { font-size: 4.5rem; line-height: 1; letter-spacing: -0.099em; font-weight: 510; }
-  .text-display-lg { font-size: 3rem; line-height: 1.05; letter-spacing: -0.044em; font-weight: 510; }
-  .text-display    { font-size: 2rem; line-height: 1.13; letter-spacing: -0.022em; font-weight: 510; }
+  /* Tabular numerals for metrics, scoring, financials */
+  .tabular-nums, table, .metric, [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .text-display-xl { font-size: 4rem; line-height: 1.02; letter-spacing: -0.044em; font-weight: 600; }
+  .text-display-lg { font-size: 2.75rem; line-height: 1.05; letter-spacing: -0.032em; font-weight: 600; }
+  .text-display    { font-size: 1.875rem; line-height: 1.13; letter-spacing: -0.022em; font-weight: 600; }
 }
 
 @layer utilities {
