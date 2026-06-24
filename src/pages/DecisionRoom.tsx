@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  ArrowLeft, BarChart3, CheckCircle2, ChevronRight, ExternalLink,
+  ArrowLeft, CheckCircle2, ChevronRight, ExternalLink,
   Gauge, Loader2, MessageSquare, ShieldAlert, Sparkles, Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { UserMenu } from "@/components/UserMenu";
 import { getReportById, type ReportRow } from "@/lib/reports";
 import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/format";
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
