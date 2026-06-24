@@ -4,18 +4,18 @@ import {
   ArrowRight,
   BarChart3,
   Shield,
-  Zap,
   Target,
   Building2,
   Cpu,
   Landmark,
   Globe,
   Briefcase,
-  Sparkles,
+  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
+import { Logo } from "@/components/Logo";
 
 const features = [
   {
