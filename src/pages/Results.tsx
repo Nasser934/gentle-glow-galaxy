@@ -171,7 +171,7 @@ const Results = () => {
   const revenueLabel = internal ? "Annual Savings / Value Realized" : "Annual Revenue";
 
   return (
-    <div className="min-h-screen bg-[#eef2f7]">
+    <div className="min-h-screen bg-background">
       {/* Top toolbar */}
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl no-print">
         <div className="container mx-auto flex h-14 items-center justify-between px-6">
@@ -242,7 +242,7 @@ const Results = () => {
         </div>
 
         {/* Scaled-to-fit wrapper so the 794px-wide A4 preview fits any viewport (incl. mobile) */}
-        <div className="report-preview-wrap overflow-hidden rounded-xl border border-border bg-[#eef2f7] p-3 sm:p-6">
+        <div className="report-preview-wrap overflow-hidden rounded-xl border border-border bg-muted/40 p-3 sm:p-6 dark:bg-slate-950/60">
           <div className="report-preview-scale mx-auto" style={{ width: "794px" }}>
             <div ref={pdfRootRef} className="space-y-6 bg-transparent">
 
