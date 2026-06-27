@@ -484,25 +484,25 @@ export async function exportReportToPdf(
     });
   }
 
-  // Curated citations (cleaned + capped to 5; confidence inferred when missing)
-  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 5);
+  // Curated citations — cap to top 4 to keep the table breathable.
+  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 4);
   if (curated.length) {
     subTitle(doc, "Top curated sources");
     placeTable(doc, {
-      head: [["Source", "Title", "Takeaway", "Confidence"]],
+      head: [["Source", "Title", "Takeaway", "Conf."]],
       body: curated.map((c) => [
-        { content: s(c.source).replace(/\s+/g, ""), styles: { fontStyle: "bold" as const } },
+        { content: s(c.source), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
         inferCitationConfidence(c),
       ]),
       columnStyles: {
-        0: { cellWidth: 90 },
-        1: { cellWidth: 140 },
-        2: { cellWidth: CONTENT_W - 90 - 140 - 60 },
-        3: { cellWidth: 60, halign: "center" },
+        0: { cellWidth: 100 },
+        1: { cellWidth: 130 },
+        2: { cellWidth: CONTENT_W - 100 - 130 - 50 },
+        3: { cellWidth: 50, halign: "center" },
       },
-      styles: { fontSize: 8.5 },
+      styles: { fontSize: 8.6, cellPadding: 6 },
     });
     paragraph(
       doc,
@@ -578,22 +578,23 @@ export async function exportReportToPdf(
     order.forEach((g) => {
       const rows = groups.get(g);
       if (!rows || !rows.length) return;
-      // Keep group heading with at least 2 rows together.
-      reserveBlock(doc, 110);
+      // Keep the whole group together when possible: ~26pt per row + heading.
+      const capped = rows.slice(0, 8);
+      reserveBlock(doc, Math.min(560, 60 + capped.length * 34));
       subTitle(doc, g);
       placeTable(doc, {
-        head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
-        body: rows.slice(0, 10).map((r) => [
+        head: [["Assumption", "Source", "Conf.", "Risk if wrong", "What to add"]],
+        body: capped.map((r) => [
           s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
         ]),
         columnStyles: {
           0: { cellWidth: 150, fontStyle: "bold" },
           1: { cellWidth: 60, halign: "center" },
-          2: { cellWidth: 56, halign: "center" },
+          2: { cellWidth: 44, halign: "center" },
           3: { cellWidth: 110 },
-          4: { cellWidth: CONTENT_W - 376 },
+          4: { cellWidth: CONTENT_W - 364 },
         },
-        styles: { fontSize: 8.6 },
+        styles: { fontSize: 8.6, cellPadding: 6 },
       });
     });
   }
@@ -631,7 +632,7 @@ export async function exportReportToPdf(
   ]);
   subTitle(doc, "Recommendation thresholds");
   bulletList(doc, [
-    "≥ 7.5 — Proceed",
+    ">= 7.5 — Proceed",
     "6.0 – 7.4 — Conditional Proceed",
     "4.5 – 5.9 — Revise",
     "< 4.5 — Do Not Proceed",
