@@ -404,7 +404,7 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
     rowPageBreak: "avoid",
     columnStyles: opts.columnStyles,
     styles: {
-      font: "helvetica", fontSize: 8.5, cellPadding: 4,
+      font: "helvetica", fontSize: 8.5, cellPadding: 5,
       textColor: C.text, lineColor: C.border, lineWidth: 0.4,
       overflow: "linebreak", valign: "top", minCellHeight: 14,
       ...opts.styles,
