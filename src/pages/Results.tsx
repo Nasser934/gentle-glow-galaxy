@@ -508,7 +508,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 3 — Startup Cost Breakdown</SubTitle>
-          <CapExBarChart data={report.financials.capEx} currency={cur} />
+          <div data-pdf-chart="capex"><CapExBarChart data={report.financials.capEx} currency={cur} /></div>
         </ReportPage>
 
         {/* ============== PAGE 7 — OPEX + SCENARIOS ============== */}
