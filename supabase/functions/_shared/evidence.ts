@@ -478,10 +478,17 @@ export function ensureEvidenceFields(report: any, inputs: any): any {
     ? Object.values(r.scores.confidence).reduce((a: number, b: any) => a + (Number(b) || 0), 0) / 6
     : 50;
   const overallConfPct = Math.max(0, Math.min(100, confidencePercent(confAvg) ?? 50));
-  const marketEvidenceWeak = (r.research?.citations?.length ?? 0) < 3 || (r.scores?.market ?? 0) < 6;
-  const financialsMissing = !inputs.revenueModel || !inputs.budgetRange || (r.scores?.financial ?? 0) < 5;
+  const marketEvidenceWeak = getCitations(r).length < 3 || (r.scores?.market ?? 0) < 6;
+  const assumptionsThin = !(inputs?.assumptions && String(inputs.assumptions).trim().split(/\s+/).length >= 8);
+  const financialsMissing =
+    !inputs?.revenueModel ||
+    !inputs?.budgetRange ||
+    assumptionsThin ||
+    !r.financials?.breakEvenSummary ||
+    !r.financials?.ltvCacRatio ||
+    (r.scores?.financial ?? 0) < 5;
   const criticalRisksWithoutMitigation = (r.risks || []).some(
-    (rk: any) => rk.level === "High" && (!rk.mitigation || rk.mitigation.trim().length < 8),
+    (rk: any) => isHighRisk(rk) && hasWeakMitigation(rk),
   );
 
   const decision = computeVerdict({
