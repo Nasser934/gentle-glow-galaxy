@@ -401,16 +401,24 @@ export function computeVerdict(args: {
     blockers.push("Analysis confidence is below 50% — validation required before any commitment.");
   }
   if (args.criticalRisksWithoutMitigation) {
-    if (verdict === "PROCEED") verdict = "CONDITIONAL PROCEED WITH VALIDATION";
-    blockers.push("Critical risks have no mitigation. Address before proceeding.");
+    // Never show Proceed when a critical/high risk lacks mitigation.
+    if (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED") {
+      verdict = "CONDITIONAL PROCEED WITH VALIDATION";
+    }
+    blockers.push("Critical/high risk has no mitigation. Address before proceeding.");
   }
 
   let nextStepHint = "Refine assumptions and validate with stakeholders.";
-  if (args.marketEvidenceWeak) nextStepHint = "Run market validation (customer interviews, sizing sources) before any launch decision.";
-  if (args.financialsMissing) nextStepHint = "Complete financial validation (pricing, CAC, break-even) before execution.";
+  if (args.marketEvidenceWeak) nextStepHint = "Validate market demand (customer interviews, sizing sources) before any launch decision.";
+  if (args.financialsMissing) nextStepHint = "Complete financial validation (pricing, CAC, churn, gross margin, break-even) before execution.";
 
   let recommendationLabel = verdict.charAt(0) + verdict.slice(1).toLowerCase();
-  if (args.aiAssumptionPct > 40) recommendationLabel += " · Needs validation";
+  if (args.aiAssumptionPct > 40 && !/Needs validation/i.test(recommendationLabel)) {
+    recommendationLabel += " · Needs validation";
+  }
+  if (args.criticalRisksWithoutMitigation && !/Needs validation/i.test(recommendationLabel)) {
+    recommendationLabel += " · Needs validation";
+  }
 
   return {
     verdict, recommendationLabel, nextStepHint, blockers,
