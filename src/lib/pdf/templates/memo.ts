@@ -1,10 +1,31 @@
-// Phase 1 — Executive Decision Memo (stub).
-// Real implementation lands in Phase 2 when the new page order is wired.
-// Exported as a stub so call sites can switch over without conditional imports.
-import { type Doc } from "../engine";
-import type { FeasibilityReport } from "@/types/analysis";
+// =============================================================================
+// Phase 2 — Executive Decision Memo template
+// -----------------------------------------------------------------------------
+// One-page memo with 6 labeled blocks (Recommendation, Why this can work,
+// Why this can fail, Money logic, Validation required, Next 30 days).
+// Bullets only — no AI paragraphs.
+// =============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function placeExecutiveMemo(_doc: Doc, _report: FeasibilityReport) {
-  // Intentionally empty in Phase 1. Phase 2 will render the 6-row memo here.
+import { type Doc, subTitle, bulletList, paragraph, C } from "../engine";
+import type { MemoSections } from "../derive";
+
+export function placeExecutiveMemo(doc: Doc, sections: MemoSections) {
+  paragraph(
+    doc,
+    "Read in under 60 seconds. Each block answers a single executive question.",
+    { size: 9, italic: true, color: C.muted },
+  );
+
+  const block = (label: string, items: string[]) => {
+    if (!items.length) return;
+    subTitle(doc, label);
+    bulletList(doc, items, { size: 9.5 });
+  };
+
+  block("Recommendation", sections.recommendation);
+  block("Why this can work", sections.whyCanWork);
+  block("Why this can fail", sections.whyCanFail);
+  block("Money logic", sections.moneyLogic);
+  block("Validation required", sections.validation);
+  block("Next 30 days", sections.next30Days);
 }
