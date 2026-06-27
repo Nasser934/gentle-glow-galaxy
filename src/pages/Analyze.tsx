@@ -243,6 +243,11 @@ const Analyze = () => {
                     ? "Loading previous inputs…"
                     : `Previous inputs are loaded. ${quality.missing.length + quality.weak.length} field(s) need detail. Edit them and re-run — a new version will be created.`}
                 </p>
+                {focusField && !loadingPrevious && (
+                  <p className="mt-1 text-xs font-medium text-warning">
+                    Editing field: {quality.fields.find((f) => f.key === (focusField as any))?.label || focusField}
+                  </p>
+                )}
               </div>
             </div>
           </div>
