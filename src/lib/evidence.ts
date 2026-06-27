@@ -487,6 +487,286 @@ export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptI
   return r;
 }
 
+/* ---------------- Assumption Register ---------------- */
+export type AssumptionSourceType =
+  | "User input" | "Web research" | "AI assumption" | "Mixed" | "Needs validation";
+
+export interface AssumptionRow {
+  assumption: string;
+  section: string;
+  sourceType: AssumptionSourceType;
+  evidenceBasis: string;
+  confidence: "High" | "Medium" | "Low";
+  riskIfWrong: string;
+  howToValidate: string;
+  whatToAdd: string;
+  expectedImpact: string;
+}
+
+const presentTrim = (v: string | undefined) => (v || "").trim();
+const hasText = (v: string | undefined, min = 6) => presentTrim(v).length >= min;
+
+export function deriveAssumptionRegister(
+  report: FeasibilityReport, inputs: ConceptInputs,
+): AssumptionRow[] {
+  const rows: AssumptionRow[] = [];
+  const cites = getCitations(report);
+  const hasCites = cites.length > 0;
+  const conf = (n: number | undefined): AssumptionRow["confidence"] =>
+    (n ?? 50) >= 70 ? "High" : (n ?? 50) >= 45 ? "Medium" : "Low";
+  const mConf = confidencePercent(report.scores.confidence?.market) ?? 50;
+  const fConf = confidencePercent(report.scores.confidence?.financial) ?? 50;
+  const rConf = confidencePercent(report.scores.confidence?.risk) ?? 50;
+  const oConf = confidencePercent(report.scores.confidence?.operational) ?? 50;
+  const tConf = confidencePercent(report.scores.confidence?.timing) ?? 50;
+
+  // ---- Market ----
+  if (report.market?.tamValue) {
+    rows.push({
+      assumption: `Total addressable market is approximately ${report.market.tamValue}.`,
+      section: "Market Analysis",
+      sourceType: hasCites ? "Mixed" : "AI assumption",
+      evidenceBasis: hasCites
+        ? "Derived from public market signals and AI inference."
+        : "Inferred by AI from industry and location.",
+      confidence: conf(mConf),
+      riskIfWrong: "Over- or under-stating opportunity changes investment thesis.",
+      howToValidate: "Cross-check with an analyst report or government statistics.",
+      whatToAdd: "Cite a recent market-sizing source for your geography and segment.",
+      expectedImpact: "Raises Market confidence and reduces AI assumption ratio.",
+    });
+  }
+  if (report.market?.tamCagr) {
+    rows.push({
+      assumption: `Market is growing at ${report.market.tamCagr} CAGR.`,
+      section: "Market Analysis",
+      sourceType: hasCites ? "Web research" : "AI assumption",
+      evidenceBasis: hasCites ? "Public sources captured during research." : "AI-inferred from industry norms.",
+      confidence: conf(mConf),
+      riskIfWrong: "Growth shortfall delays break-even and erodes returns.",
+      howToValidate: "Compare with 2+ independent forecasts.",
+      whatToAdd: "Add a credible CAGR source (analyst note, regulator, trade body).",
+      expectedImpact: "Improves Market and Timing confidence.",
+    });
+  }
+  rows.push({
+    assumption: `Target customer demand exists as described in the brief.`,
+    section: "Customer Profile",
+    sourceType: hasText(inputs.description, 60) ? "Mixed" : "AI assumption",
+    evidenceBasis: hasText(inputs.description, 60)
+      ? "Based on the brief, with AI generalisation where details are thin."
+      : "Largely AI-inferred from category norms.",
+    confidence: conf(mConf),
+    riskIfWrong: "Weak demand collapses revenue forecasts.",
+    howToValidate: "Run 8–15 customer interviews or a paid pilot.",
+    whatToAdd: "Add customer interview notes, survey data, or pilot results.",
+    expectedImpact: "Strongest single improvement to Market confidence.",
+  });
+  rows.push({
+    assumption: `Customers are willing to pay at the modeled price point.`,
+    section: "Customer Profile",
+    sourceType: hasText(inputs.revenueModel, 8) ? "Mixed" : "Needs validation",
+    evidenceBasis: hasText(inputs.revenueModel, 8)
+      ? "Anchored to the revenue model you provided."
+      : "Not directly supported by input or research.",
+    confidence: conf(fConf),
+    riskIfWrong: "Price/value mismatch breaks unit economics.",
+    howToValidate: "Run pricing tests or willingness-to-pay surveys.",
+    whatToAdd: "Add actual pricing tiers, contract sizes, or pilot pricing data.",
+    expectedImpact: "Improves Financial confidence and break-even reliability.",
+  });
+  rows.push({
+    assumption: `Competitive intensity is ${(report.competitors?.length || 0) >= 4 ? "moderate to strong" : "limited or weakly mapped"}.`,
+    section: "Competitive Landscape",
+    sourceType: presentTrim(inputs.competitorUrls) ? "Mixed" : "AI assumption",
+    evidenceBasis: presentTrim(inputs.competitorUrls)
+      ? "Based on the URLs you provided plus AI inference."
+      : "AI-inferred — no competitor URLs supplied.",
+    confidence: conf(mConf),
+    riskIfWrong: "Mis-reading competition leads to wrong positioning and CAC.",
+    howToValidate: "Build a side-by-side feature/price matrix of 3–5 competitors.",
+    whatToAdd: "Paste 2–4 competitor URLs and note their pricing and positioning.",
+    expectedImpact: "Sharpens Market score and lowers AI assumption ratio.",
+  });
+
+  // ---- Financial ----
+  rows.push({
+    assumption: `Customer acquisition cost (CAC) is within a healthy range.`,
+    section: "Financial Plan",
+    sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "Needs validation",
+    evidenceBasis: hasText(inputs.assumptions, 25)
+      ? "Partly grounded in your stated assumptions."
+      : "Not supported by direct input — based on category norms.",
+    confidence: conf(fConf),
+    riskIfWrong: "Higher CAC erodes margin and pushes break-even out.",
+    howToValidate: "Run a small paid pilot or use industry CAC benchmarks.",
+    whatToAdd: "Add channel CAC benchmarks or pilot acquisition data.",
+    expectedImpact: "Materially improves Financial confidence.",
+  });
+  rows.push({
+    assumption: `Churn / retention is acceptable for the modeled LTV.`,
+    section: "Financial Plan",
+    sourceType: "AI assumption",
+    evidenceBasis: "Not supplied — estimated from category norms.",
+    confidence: conf(fConf - 10),
+    riskIfWrong: "High churn collapses LTV and turns LTV:CAC negative.",
+    howToValidate: "Track cohort retention for at least 90 days post-launch.",
+    whatToAdd: "Add expected monthly logo churn and revenue churn assumptions.",
+    expectedImpact: "Improves Financial confidence and revenue scenario realism.",
+  });
+  rows.push({
+    assumption: `Gross margin supports the financial scenarios.`,
+    section: "Financial Plan",
+    sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "AI assumption",
+    evidenceBasis: hasText(inputs.assumptions, 25) ? "Inferred from your assumptions." : "AI-inferred from business model.",
+    confidence: conf(fConf),
+    riskIfWrong: "Margin compression invalidates break-even analysis.",
+    howToValidate: "Build a bottoms-up COGS model with supplier quotes.",
+    whatToAdd: "Add target gross margin % and key COGS line items.",
+    expectedImpact: "Improves Financial confidence and funding-mix realism.",
+  });
+  if (report.financials?.breakEvenSummary) {
+    rows.push({
+      assumption: `Break-even occurs around ${report.financials.breakEvenSummary}.`,
+      section: "Financial Plan",
+      sourceType: hasText(inputs.budgetRange) && hasText(inputs.revenueModel) ? "Mixed" : "AI assumption",
+      evidenceBasis: "Derived from budget, revenue model, and AI projections.",
+      confidence: conf(fConf),
+      riskIfWrong: "Misses runway requirements and funding sizing.",
+      howToValidate: "Build a monthly cash-flow model with pessimistic scenarios.",
+      whatToAdd: "Add pricing, customer ramp, and OpEx detail.",
+      expectedImpact: "Reduces runway risk and improves funding plan.",
+    });
+  }
+  if (report.financials?.capExTotal?.mid) {
+    rows.push({
+      assumption: `CapEx mid-estimate is ${report.financials.currency} ${report.financials.capExTotal.mid.toLocaleString()}.`,
+      section: "Financial Plan",
+      sourceType: hasText(inputs.budgetRange) ? "Mixed" : "AI assumption",
+      evidenceBasis: "Estimated from category norms and your budget signal.",
+      confidence: conf(fConf),
+      riskIfWrong: "Under-budgeting CapEx delays go-live or blows the plan.",
+      howToValidate: "Get 2–3 vendor quotes for major line items.",
+      whatToAdd: "Add supplier/vendor quotes or comparable past projects.",
+      expectedImpact: "Tightens CapEx range and Financial confidence.",
+    });
+  }
+  if (report.financials?.ltvCacRatio) {
+    rows.push({
+      assumption: `LTV:CAC of ${report.financials.ltvCacRatio} is achievable.`,
+      section: "Financial Plan",
+      sourceType: "Mixed",
+      evidenceBasis: "Computed from pricing, retention, and CAC assumptions.",
+      confidence: conf(fConf),
+      riskIfWrong: "Negative unit economics make growth unfundable.",
+      howToValidate: "Validate each input (price, retention, CAC) independently.",
+      whatToAdd: "Add real cohort data once available.",
+      expectedImpact: "Strongly improves Financial confidence.",
+    });
+  }
+
+  // ---- Operational ----
+  rows.push({
+    assumption: `The team can deliver within the proposed timeline.`,
+    section: "Operational Readiness",
+    sourceType: hasText(inputs.founderExperience, 20) && presentTrim(inputs.teamSize) ? "User input" : "AI assumption",
+    evidenceBasis: hasText(inputs.founderExperience, 20) ? "Based on the team detail you provided." : "AI-inferred from team-size proxies.",
+    confidence: conf(oConf),
+    riskIfWrong: "Delivery slip pushes out revenue and burns runway.",
+    howToValidate: "Stress-test the plan with an experienced delivery lead.",
+    whatToAdd: "Add key roles, prior wins, and a high-level delivery plan.",
+    expectedImpact: "Improves Achievability and Operational confidence.",
+  });
+  rows.push({
+    assumption: `Technology readiness (${presentTrim(inputs.technologyReadiness) || "not specified"}) is sufficient for launch.`,
+    section: "Operational Readiness",
+    sourceType: presentTrim(inputs.technologyReadiness) ? "User input" : "Needs validation",
+    evidenceBasis: presentTrim(inputs.technologyReadiness) ? "Selected during intake." : "Not provided — assumed mature.",
+    confidence: conf(oConf),
+    riskIfWrong: "Immature tech adds R&D risk and timeline slip.",
+    howToValidate: "Run a technical spike or proof-of-concept.",
+    whatToAdd: "Add architecture overview and key technology choices.",
+    expectedImpact: "Improves Achievability confidence.",
+  });
+  rows.push({
+    assumption: `Critical dependencies and vendors will be available on time.`,
+    section: "Operational Readiness",
+    sourceType: hasText(inputs.dependencies, 12) ? "User input" : "AI assumption",
+    evidenceBasis: hasText(inputs.dependencies, 12) ? "From the dependencies you listed." : "AI-inferred — none listed.",
+    confidence: conf(oConf - 5),
+    riskIfWrong: "Single-vendor failure can stall the entire plan.",
+    howToValidate: "Confirm SLAs and identify backup providers.",
+    whatToAdd: "List external dependencies with status and SLA.",
+    expectedImpact: "Improves Operational and Timing confidence.",
+  });
+  if (presentTrim(inputs.timeline)) {
+    rows.push({
+      assumption: `Launch timeline (${inputs.timeline}) is realistic.`,
+      section: "Timing",
+      sourceType: "User input",
+      evidenceBasis: "Selected during intake.",
+      confidence: conf(tConf),
+      riskIfWrong: "Missed window can favour competitors or close the opportunity.",
+      howToValidate: "Build a milestone plan with critical-path analysis.",
+      whatToAdd: "Add milestone dates and dependency map.",
+      expectedImpact: "Improves Timing confidence.",
+    });
+  }
+
+  // ---- Risk & compliance ----
+  const regRisk = report.risks?.find((r) => /regulat|complian|legal/i.test(r.name));
+  rows.push({
+    assumption: `Regulatory complexity is ${regRisk?.level || "manageable"}.`,
+    section: "Risk Assessment",
+    sourceType: presentTrim(inputs.regulatoryConsiderations) ? "Mixed" : "AI assumption",
+    evidenceBasis: presentTrim(inputs.regulatoryConsiderations)
+      ? "Anchored to your regulatory notes." : "AI-inferred — no compliance detail supplied.",
+    confidence: conf(rConf),
+    riskIfWrong: "Unanticipated licensing or compliance work delays launch.",
+    howToValidate: "Engage a local legal/compliance advisor early.",
+    whatToAdd: "Name the regulators, licences, or standards that apply.",
+    expectedImpact: "Reduces Risk and Timing surprises.",
+  });
+  const weakMitigation = (report.risks || []).some((rk: any) => isHighRisk(rk) && hasWeakMitigation(rk));
+  rows.push({
+    assumption: `Risk mitigations are effective enough to keep risks at the stated levels.`,
+    section: "Risk Assessment",
+    sourceType: weakMitigation ? "Needs validation" : "Mixed",
+    evidenceBasis: weakMitigation
+      ? "At least one high risk has no mitigation."
+      : "Each material risk has a mitigation noted.",
+    confidence: weakMitigation ? "Low" : conf(rConf),
+    riskIfWrong: "A high risk with weak mitigation can sink the plan.",
+    howToValidate: "Pressure-test mitigations with an independent risk reviewer.",
+    whatToAdd: "Add concrete mitigation owners, triggers, and contingency budget.",
+    expectedImpact: "Improves Risk score and overall confidence.",
+  });
+  rows.push({
+    assumption: `Security and privacy obligations can be met within plan.`,
+    section: "Risk Assessment",
+    sourceType: presentTrim(inputs.regulatoryConsiderations) ? "Mixed" : "AI assumption",
+    evidenceBasis: presentTrim(inputs.regulatoryConsiderations)
+      ? "Partly anchored to regulatory notes."
+      : "Inferred — no security/privacy detail supplied.",
+    confidence: conf(rConf - 5),
+    riskIfWrong: "Security incidents trigger fines and reputational damage.",
+    howToValidate: "Run a lightweight threat model and gap-assess against the relevant standard.",
+    whatToAdd: "Add applicable data classifications and security controls.",
+    expectedImpact: "Improves Risk confidence.",
+  });
+
+  // Cap to 15 and sanitize text fields for safety
+  return rows.slice(0, 15).map((r) => ({
+    ...r,
+    assumption: sanitizeForConsumer(r.assumption),
+    evidenceBasis: sanitizeForConsumer(r.evidenceBasis),
+    riskIfWrong: sanitizeForConsumer(r.riskIfWrong),
+    howToValidate: sanitizeForConsumer(r.howToValidate),
+    whatToAdd: sanitizeForConsumer(r.whatToAdd),
+    expectedImpact: sanitizeForConsumer(r.expectedImpact),
+  }));
+}
+
 /* ---------------- Versioning ---------------- */
 export function buildVersionEntry(
   previous: FeasibilityReport, next: FeasibilityReport,
