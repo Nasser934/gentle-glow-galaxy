@@ -8,6 +8,7 @@
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { assessInputQuality, sanitizeForConsumer } from "@/lib/evidence";
+import { isInternalProject, projectLabels } from "./project";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
