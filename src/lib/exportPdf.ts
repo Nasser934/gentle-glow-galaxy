@@ -385,14 +385,22 @@ export async function exportReportToPdf(
     });
   }
 
+  // Always present a complete 30 / 60 / 90 plan, even when data is sparse.
   const roadmap = deriveRoadmap(report);
-  if (roadmap.length) {
-    subTitle(doc, "30 / 60 / 90 day plan");
-    roadmap.forEach((p) => {
-      subTitle(doc, p.window);
-      bulletList(doc, p.items);
-    });
-  }
+  const windows: Array<"Next 30 days" | "Days 31 – 60" | "Days 61 – 90"> = [
+    "Next 30 days", "Days 31 – 60", "Days 61 – 90",
+  ];
+  // Force section break — roadmap should breathe after the validations table.
+  reserveBlock(doc, 200);
+  subTitle(doc, "30 / 60 / 90 day plan");
+  windows.forEach((w) => {
+    subTitle(doc, w);
+    const phase = roadmap.find((p) => p.window === w);
+    const items = phase?.items?.length
+      ? phase.items
+      : ["Define owner, evidence and success criteria for this window."];
+    bulletList(doc, items);
+  });
 
   /* ===== 9. Evidence & Source Quality ===== */
   startSection(doc, "Evidence & Source Quality");
@@ -430,17 +438,17 @@ export async function exportReportToPdf(
     });
   }
 
-  // Curated citations (cleaned + capped)
-  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 7);
+  // Curated citations (cleaned + capped to 5; confidence inferred when missing)
+  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 5);
   if (curated.length) {
     subTitle(doc, "Top curated sources");
     placeTable(doc, {
       head: [["Source", "Title", "Takeaway", "Confidence"]],
       body: curated.map((c) => [
-        { content: s(c.source), styles: { fontStyle: "bold" as const } },
+        { content: s(c.source).replace(/\s+/g, ""), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
-        s(c.confidence || "—"),
+        inferCitationConfidence(c),
       ]),
       columnStyles: {
         0: { cellWidth: 90 },
