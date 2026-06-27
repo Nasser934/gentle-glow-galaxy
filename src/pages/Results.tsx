@@ -77,6 +77,7 @@ const fmtNum = (n: number) => n.toLocaleString("en-US");
 const Results = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const pdfRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
@@ -88,26 +89,43 @@ const Results = () => {
   const inputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
   const existingId = location.state?.reportId as string | undefined;
+  const stateOwnerId = location.state?.ownerId as string | undefined;
+  const readOnlyFlag = location.state?.readOnly === true;
   const report = useMemo(
     () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
     [rawReport, inputs],
   );
 
+  // Refresh-safe ownership: trust the DB, not just route state.
+  const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
   useEffect(() => {
     if (existingSlug) setShareSlug(existingSlug);
     if (existingId) setReportId(existingId);
   }, [existingSlug, existingId]);
-
-  // Auto-save once on first load
   useEffect(() => {
+    if (!existingId || ownerId) return;
+    let cancelled = false;
+    getReportWithOwnership(existingId)
+      .then((row) => { if (!cancelled && row) setOwnerId(row.user_id); })
+      .catch(() => { /* non-fatal — canEdit stays false */ });
+    return () => { cancelled = true; };
+  }, [existingId, ownerId]);
+
+  // canEdit ONLY when: not explicitly read-only AND (fresh in-memory report OR signed-in user owns the saved row).
+  const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
+
+  // Auto-save once on first load — never in read-only/shared view.
+  useEffect(() => {
+    if (readOnlyFlag) return;
     if (!report || !inputs || existingSlug || shareSlug) return;
     let cancelled = false;
     saveReport(inputs, report)
-      .then((d) => { if (!cancelled) { setShareSlug(d.slug); setReportId(d.id); } })
+      .then((d) => { if (!cancelled) { setShareSlug(d.slug); setReportId(d.id); setOwnerId(user?.id ?? null); } })
       .catch((e) => console.warn("auto-save failed", e));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   if (!report || !inputs) {
     return (
