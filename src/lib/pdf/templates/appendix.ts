@@ -24,6 +24,6 @@ export function startAppendix(doc: Doc, title: string): string {
   setDraw(pdf, C.primary); pdf.setLineWidth(0.8);
   pdf.line(MARGIN, doc.y + 4, MARGIN + 28, doc.y + 4);
   doc.y += 20;
-  doc.toc.push({ number: 100 + appendixCounter, title: `Appendix ${letter} — ${title}`, page: pdf.getCurrentPageInfo().pageNumber });
+  doc.toc.push({ number: 0, title: `Appendix ${letter} — ${title}`, page: pdf.getCurrentPageInfo().pageNumber });
   return letter;
 }
