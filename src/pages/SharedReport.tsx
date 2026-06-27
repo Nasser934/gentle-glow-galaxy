@@ -46,6 +46,7 @@ const SharedReport = () => {
   }
 
   const isOwner = user?.id === row.user_id;
+  const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
 
   return (
     <div className="min-h-screen bg-background">
