@@ -296,9 +296,9 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((r) => (
-                <tr key={r.claimId}>
-                  <td className="px-3 py-2 font-medium text-foreground">{r.claimText}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.reportSection}</td>
+                <tr key={r.claimId} className="align-top">
+                  <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 font-medium text-foreground">{r.claimText}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">{r.reportSection}</td>
                   <td className="px-3 py-2 text-right font-mono">{r.userInputPercent}%</td>
                   <td className="px-3 py-2 text-right font-mono">{r.webResearchPercent}%</td>
                   <td className={`px-3 py-2 text-right font-mono ${r.aiAssumptionPercent > 40 ? "text-warning" : ""}`}>
@@ -307,7 +307,7 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={confidenceTone(r.confidence)}>{r.confidence}</Badge>
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.userCanImproveBy}</td>
+                  <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 text-xs text-muted-foreground">{r.userCanImproveBy}</td>
                 </tr>
               ))}
             </tbody>
