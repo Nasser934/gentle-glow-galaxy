@@ -91,7 +91,8 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
         <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />
 
         <div className="mt-8">
-          <EvidenceSections report={enrichedReport} reportId={row.id} canEdit={isOwner} />
+          {/* Shared/public view is strictly read-only — no edit, no re-run, no owner controls. */}
+          <EvidenceSections report={enrichedReport} reportId={row.id} canEdit={false} />
         </div>
 
 

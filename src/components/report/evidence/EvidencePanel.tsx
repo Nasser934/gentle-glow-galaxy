@@ -143,15 +143,17 @@ export const InputQualityPanel = ({
   const navigate = useNavigate();
   const overall = report.inputQualityScore ?? 0;
   const overallStatus: InputStatus = overall >= 80 ? "complete" : overall >= 60 ? "needs_improvement" : overall >= 30 ? "weak" : "missing";
-  // Reconstruct field list from inputCompleteness OR scoreExplanation fallback
   const fields: InputFieldAssessment[] = (report as any)._inputFields || [];
+  const problemFields = fields.filter((f) => f.status !== "complete");
+  const contradictions = report.inputCompleteness?.contradictoryFields || [];
+
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <FileWarning className="h-4 w-4 text-primary" /> Input quality
         </CardTitle>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-2">
           <Badge variant="outline" className={STATUS_TONE[overallStatus]}>
             {STATUS_LABEL[overallStatus]} · {overall}%
           </Badge>
@@ -161,36 +163,49 @@ export const InputQualityPanel = ({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-1">
-          {[...(report.inputCompleteness?.missingFields || []).map((l) => ({ label: l, status: "missing" as InputStatus })),
-            ...(report.inputCompleteness?.weakFields || []).map((l) => ({ label: l, status: "weak" as InputStatus })),
-          ].map((row, i) => (
-            <div key={i} className="flex items-center justify-between gap-2 rounded border border-border bg-muted/20 px-3 py-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{row.label}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {row.status === "missing"
-                    ? "Field is empty — analysis is relying on AI assumptions."
-                    : "Field has limited detail — confidence is reduced."}
+        {problemFields.length === 0 ? (
+          <div className="rounded border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+            All key input fields are complete.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {problemFields.map((f) => (
+              <div key={String(f.key)} className="rounded-md border border-border bg-muted/20 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-foreground">{f.label}</div>
+                    <p className="mt-1 break-words text-[11px] leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">Impact:</strong> {f.impact || "Needs validation."}
+                    </p>
+                    <p className="mt-1 break-words text-[11px] leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">Suggestion:</strong> {f.suggestion || "Needs validation."}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <Badge variant="outline" className={STATUS_TONE[f.status]}>{STATUS_LABEL[f.status]}</Badge>
+                    {canEdit && reportId && (
+                      <Button
+                        size="sm" variant="outline"
+                        onClick={() => navigate(`/analyze?reportId=${reportId}&field=${String(f.key)}`)}
+                        className="h-7 gap-1 px-2 text-[11px]"
+                      >
+                        <Edit3 className="h-3 w-3" /> Edit field
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
-              <Badge variant="outline" className={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
-            </div>
-          ))}
-          {(!report.inputCompleteness?.missingFields?.length && !report.inputCompleteness?.weakFields?.length) && (
-            <div className="rounded border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-              All key input fields are complete.
-            </div>
-          )}
-          {report.inputCompleteness?.contradictoryFields?.length ? (
-            <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-              <strong>Potential contradictions:</strong>{" "}
-              {report.inputCompleteness.contradictoryFields.join(" ")}
-            </div>
-          ) : null}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {canEdit && reportId && (
+        {contradictions.length > 0 && (
+          <div className="mt-3 rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            <strong>Potential contradictions:</strong> {contradictions.join(" ")}
+          </div>
+        )}
+
+        {canEdit && reportId && problemFields.length > 0 && (
           <div className="mt-4 flex justify-end">
             <Button size="sm" onClick={() => navigate(`/analyze?reportId=${reportId}`)} className="gap-1.5">
               <Edit3 className="h-3.5 w-3.5" /> Improve report inputs
@@ -281,9 +296,9 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((r) => (
-                <tr key={r.claimId}>
-                  <td className="px-3 py-2 font-medium text-foreground">{r.claimText}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.reportSection}</td>
+                <tr key={r.claimId} className="align-top">
+                  <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 font-medium text-foreground">{r.claimText}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">{r.reportSection}</td>
                   <td className="px-3 py-2 text-right font-mono">{r.userInputPercent}%</td>
                   <td className="px-3 py-2 text-right font-mono">{r.webResearchPercent}%</td>
                   <td className={`px-3 py-2 text-right font-mono ${r.aiAssumptionPercent > 40 ? "text-warning" : ""}`}>
@@ -292,7 +307,7 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={confidenceTone(r.confidence)}>{r.confidence}</Badge>
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.userCanImproveBy}</td>
+                  <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 text-xs text-muted-foreground">{r.userCanImproveBy}</td>
                 </tr>
               ))}
             </tbody>
