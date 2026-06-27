@@ -28,12 +28,12 @@ import {
 import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
   startSection, subTitle, paragraph, bulletList, notice, placeTable,
-  drawKpiGrid, type KpiItem,
-  C, CONTENT_W, MARGIN, setColor, setFill, setDraw, ensureSpace,
+  drawKpiGrid, placeChartImage, type KpiItem,
+  C, CONTENT_W, MARGIN, ensureSpace,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
 import { drawCover } from "./pdf/templates/cover";
-import { placeScorecard, resetScorecardGuards } from "./pdf/templates/scorecard";
+import { resetScorecardGuards } from "./pdf/templates/scorecard";
 import { placeChartCommentary } from "./pdf/templates/chartCommentary";
 import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
 import { placeExecutiveMemo } from "./pdf/templates/memo";
