@@ -361,15 +361,6 @@ export interface PlaceTableOpts {
   caption?: string;
 }
 
-function paintTableContinuationChrome(doc: Doc, pageNumber: number) {
-  if (pageNumber === doc.pdf.getCurrentPageInfo().pageNumber) {
-    // The continuation band is painted by the autoTable margin reservation.
-    // We only need to ensure header + footer chrome (autoTable repaints on each page via this hook).
-    paintHeader(doc); paintFooterChrome(doc);
-    if (doc.currentSection) paintContinuationBand(doc);
-  }
-}
-
 export function placeTable(doc: Doc, opts: PlaceTableOpts) {
   const cap = opts.maxCols ?? 5;
   const colCount = (opts.head?.[0] as unknown[] | undefined)?.length ?? (opts.body[0] as unknown[] | undefined)?.length ?? 0;
@@ -384,12 +375,18 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
   if (opts.caption) subTitle(doc, opts.caption);
   beginBlock(doc, ORPHAN_GUARD);
 
-  // Top margin = continuation band reservation when in a section, otherwise normal.
-  const topMargin = HEADER_Y + 4 + (doc.currentSection ? CONT_BAND_H + 14 : 14);
+  // Continuation pages of a split table get an extra reserved strip at the top
+  // for the band. The FIRST page of the table uses the standard top margin so
+  // the band never overlays the section heading or paragraph above.
+  const firstPageTop = BODY_TOP;
+  const continuationTop = HEADER_Y + 4 + CONT_BAND_H + 14;
 
   autoTable(doc.pdf, {
     startY: doc.y,
-    margin: { left: MARGIN, right: MARGIN, top: topMargin, bottom: 56 },
+    // Margin top is used by autoTable for continuation pages only; first page
+    // uses startY directly. We set top to continuationTop so the band on
+    // subsequent pages has reserved space.
+    margin: { left: MARGIN, right: MARGIN, top: continuationTop, bottom: 56 },
     head: opts.head,
     body: opts.body,
     showHead: "everyPage",
@@ -405,21 +402,29 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
     alternateRowStyles: { fillColor: C.surface, ...opts.alternateRowStyles },
     didDrawPage: (data: CellHookData) => {
       const pn = doc.pdf.getCurrentPageInfo().pageNumber;
-      // Register continuation pages for tables that split.
+      // Track page meta if autoTable created a brand-new page we didn't see.
       if (!doc.pages[pn - 1]) {
         doc.pages.push({
           sectionNumber: doc.currentSection?.number ?? null,
           sectionTitle: doc.currentSection?.title ?? null,
-          isContinuation: !!doc.currentSection,
-          contentTop: topMargin,
+          isContinuation: data.pageNumber > 1,
+          contentTop: data.pageNumber > 1 ? continuationTop : firstPageTop,
         });
-      } else if (doc.currentSection && data.pageNumber > 1) {
-        // mark continuation flag if this isn't the first page of the table
-        doc.pages[pn - 1].isContinuation = true;
-        doc.pages[pn - 1].sectionNumber = doc.currentSection.number;
-        doc.pages[pn - 1].sectionTitle = doc.currentSection.title;
       }
-      paintTableContinuationChrome(doc, pn);
+      // ONLY paint the continuation band on TRUE continuation pages of a
+      // split table. The first page of the table must never have the band —
+      // it would overlay the section heading or preceding paragraph.
+      if (data.pageNumber > 1 && doc.currentSection) {
+        // Header/footer already exist on the page (autoTable triggered addPage
+        // which we don't own; repaint chrome to be safe, then add the band).
+        paintHeader(doc); paintFooterChrome(doc);
+        paintContinuationBand(doc);
+        if (doc.pages[pn - 1]) {
+          doc.pages[pn - 1].isContinuation = true;
+          doc.pages[pn - 1].sectionNumber = doc.currentSection.number;
+          doc.pages[pn - 1].sectionTitle = doc.currentSection.title;
+        }
+      }
     },
   });
 
