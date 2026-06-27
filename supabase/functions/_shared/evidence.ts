@@ -61,10 +61,28 @@ export function confidencePercent(raw: unknown): number | null {
   let n = typeof raw === "string" ? parseFloat(raw.replace(/[%,\s]/g, "")) : Number(raw);
   if (!Number.isFinite(n)) return null;
   if (n < 0) n = 0;
-  if (n <= 1) n = n * 100;
+  if (n > 0 && n <= 1) n = n * 100;
+  else if (n > 1 && n <= 10) n = n * 10;
   while (n > 100) n = n / 10;
   return Math.round(n);
 }
+
+const getCitations = (report: any): any[] => {
+  if (!report) return [];
+  if (Array.isArray(report.research?.citations)) return report.research.citations;
+  if (Array.isArray(report.sources)) return report.sources;
+  if (Array.isArray(report.research?.sources)) return report.research.sources;
+  if (Array.isArray(report.citations)) return report.citations;
+  return [];
+};
+const isHighRisk = (rk: any): boolean => {
+  const vals = [rk?.level, rk?.severity, rk?.impact, rk?.riskLevel, rk?.priority];
+  return vals.some((v) => typeof v === "string" && /^(high|critical|severe)$/i.test(v.trim()));
+};
+const hasWeakMitigation = (rk: any): boolean => {
+  const m = (rk?.mitigation || rk?.mitigationPlan || "").toString().trim();
+  return m.length < 8;
+};
 
 const wordCount = (s: string | undefined) => (s || "").trim().split(/\s+/).filter(Boolean).length;
 const pickStatus = (wc: number, strong = 25, ok = 10): InputStatus =>
