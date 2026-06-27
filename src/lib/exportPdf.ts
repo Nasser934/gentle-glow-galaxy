@@ -586,30 +586,17 @@ export async function exportReportToPdf(
 
 /* ----------------------------- helpers ------------------------------------- */
 
-/**
- * Lightweight radar-only placement for the new Scorecard section.
- * Avoids re-rendering the full scorecard table (we already drew a compact one).
- */
+/** Lightweight radar-only placement for the Scorecard section. */
 function placeScorecardRadarOnly(
   doc: ReturnType<typeof createDoc>,
-  report: FeasibilityReport,
+  _report: FeasibilityReport,
   fmartRadarUrl: string | null,
 ) {
-  // Use the existing scorecard template for the radar + guarded single-render.
-  // We bypass its own table rendering by calling it AFTER the compact table —
-  // but the template prints its own table too. Instead, render only the radar
-  // ourselves to avoid table duplication.
   if (!fmartRadarUrl) return;
   subTitle(doc, "FMART 6-Dimension Radar");
-  // Defer to engine via temporary import — keep small inline import.
-  // Lazy require to avoid circular import noise.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const engine = require("./pdf/engine") as typeof import("./pdf/engine");
-  engine.placeChartImage(doc, fmartRadarUrl, 200);
-  // Suppress unused import lint on placeScorecard (kept exported for tests).
-  void placeScorecard;
-  void setColor; void setFill; void setDraw;
+  placeChartImage(doc, fmartRadarUrl, 200);
 }
+
 
 async function safeCapture(rootEl: HTMLElement | null) {
   try { return await captureActiveCharts(rootEl); }
