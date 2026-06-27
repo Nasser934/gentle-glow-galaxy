@@ -625,7 +625,7 @@ function placeScorecardRadarOnly(
   fmartRadarUrl: string | null,
 ) {
   if (!fmartRadarUrl) return;
-  subTitle(doc, "FMART 6-Dimension Radar");
+  subTitle(doc, "FMART-O 6-Dimension Radar");
   placeChartImage(doc, fmartRadarUrl, 200);
 }
 
