@@ -221,7 +221,7 @@ export function assessInputQuality(inputs: any) {
 /* ---------------- Evidence Mix ---------------- */
 export function deriveEvidenceMix(report: any, inputs: any) {
   const iq = assessInputQuality(inputs);
-  const citations = report?.research?.citations?.length || 0;
+  const citations = getCitations(report).length;
   const confAvg = report?.scores?.confidence
     ? Object.values(report.scores.confidence).reduce((a: number, b: any) => a + (Number(b) || 0), 0) / 6
     : 50;
@@ -264,9 +264,9 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
     } else if (dim === "market") {
       if (report?.market?.tamValue) positives.push(`TAM estimated at ${report.market.tamValue}.`);
       if (inputs?.location) positives.push(`Geography specified (${inputs.location}).`);
-      if ((report?.research?.citations?.length ?? 0) > 4) positives.push("Multiple public sources support market context.");
+      if (getCitations(report).length > 4) positives.push("Multiple public sources support market context.");
       if (!inputs?.location) negatives.push("No geography provided.");
-      if ((report?.research?.citations?.length ?? 0) < 3) negatives.push("Limited public evidence captured.");
+      if (getCitations(report).length < 3) negatives.push("Limited public evidence captured.");
       if (allWeak.includes("Competitors")) negatives.push("Few competitors supplied.");
     } else if (dim === "achievability") {
       if (inputs?.technologyReadiness) positives.push(`Technology readiness: ${inputs.technologyReadiness}.`);
@@ -317,7 +317,7 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
 /* ---------------- Claim Evidence Map ---------------- */
 export function deriveClaimEvidenceMap(report: any, inputs: any): ClaimEvidenceRow[] {
   const mix = deriveEvidenceMix(report, inputs);
-  const cites = (report?.research?.citations || []).map((c: any) => c.source || c.title).filter(Boolean) as string[];
+  const cites = getCitations(report).map((c: any) => c?.source || c?.title || c?.url).filter(Boolean) as string[];
   const conf = (n: number): ClaimEvidenceRow["confidence"] => n >= 70 ? "High" : n >= 45 ? "Medium" : "Low";
   const rows: ClaimEvidenceRow[] = [
     {
