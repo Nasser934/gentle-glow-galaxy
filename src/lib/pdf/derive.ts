@@ -128,7 +128,7 @@ export function deriveMemoSections(
 
   const moneyLogic: string[] = [];
   const fin = report.financials;
-  if (fin.investmentRange) moneyLogic.push(`Investment range: ${s(fin.investmentRange)} ${fin.currency || ""}.`.trim());
+  if (fin.investmentRange) moneyLogic.push(`Investment range: ${withCurrency(fin.investmentRange, fin.currency)}.`);
   if (fin.breakEvenSummary) moneyLogic.push(`Break-even (base): ${s(fin.breakEvenSummary)}.`);
   if (fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
   const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
