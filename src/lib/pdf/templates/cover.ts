@@ -168,7 +168,7 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
   const labels = projectLabels(inputs);
   const beValue = shortenBreakEven(report.financials.breakEvenSummary);
   const fourth = labels.isInternal
-    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
     : { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined };
 
   const kpis: KpiItem[] = [
