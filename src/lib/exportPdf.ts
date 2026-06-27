@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { formatConfidence, isInternalProject } from "@/lib/format";
+import { ensureEvidenceFields, sanitizeForConsumer } from "@/lib/evidence";
 
 /* --------------------------------------------------------------------------
  * Native-text PDF exporter
