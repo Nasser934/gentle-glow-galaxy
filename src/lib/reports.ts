@@ -11,6 +11,7 @@ export interface ReportRow {
   output: FeasibilityReport;
   status: "draft" | "in_review" | "approved" | "rejected";
   is_public: boolean;
+  parent_report_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,38 +34,85 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
   return data;
 }
 
-/** Save as a new version (separate row) carrying version history forward. */
-export async function saveReportVersion(
-  inputs: ConceptInputs,
-  output: FeasibilityReport,
-) {
+/**
+ * Save a re-run as a NEW row linked to the original/root report.
+ * If the supplied parent is itself a child version, we walk up to the root so
+ * the version chain stays flat (root -> v2, root -> v3, …).
+ */
+export async function saveRerunReport(params: {
+  parentReportId: string;
+  inputs: ConceptInputs;
+  report: FeasibilityReport;
+}) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+  const rootId = await getReportRootId(params.parentReportId);
+  const { data, error } = await supabase
+    .from("reports")
+    .insert({
+      user_id: user.id,
+      title: params.inputs.projectName || "Untitled analysis",
+      industry: params.inputs.industry || null,
+      inputs: params.inputs as any,
+      output: params.report as any,
+      parent_report_id: rootId,
+    } as any)
+    .select("id, slug")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Back-compat shim. */
+export async function saveReportVersion(inputs: ConceptInputs, output: FeasibilityReport) {
   return saveReport(inputs, output);
 }
 
 export async function getReportBySlug(slug: string) {
   const { data, error } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
+    .from("reports").select("*").eq("slug", slug).maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
 }
 
 export async function getReportById(id: string) {
   const { data, error } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+    .from("reports").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
+}
+
+/** Returns ownership info without leaking the full payload — safe to call for permission checks. */
+export async function getReportWithOwnership(id: string) {
+  const { data, error } = await supabase
+    .from("reports").select("id, user_id, parent_report_id, slug, is_public").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data as { id: string; user_id: string; parent_report_id: string | null; slug: string; is_public: boolean } | null;
+}
+
+/** Walk to the root of the version chain. If id has no parent it IS the root. */
+export async function getReportRootId(reportId: string): Promise<string> {
+  const row = await getReportWithOwnership(reportId);
+  if (!row) return reportId;
+  return row.parent_report_id ?? row.id;
+}
+
+/** List the root and every child version, ordered oldest -> newest. */
+export async function listReportVersions(reportId: string) {
+  const rootId = await getReportRootId(reportId);
+  const { data, error } = await supabase
+    .from("reports")
+    .select("id, slug, title, created_at, parent_report_id, user_id")
+    .or(`id.eq.${rootId},parent_report_id.eq.${rootId}`)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function listMyReports() {
   const { data, error } = await supabase
     .from("reports")
-    .select("id, slug, title, industry, status, created_at, updated_at")
+    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
