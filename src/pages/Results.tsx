@@ -227,6 +227,22 @@ const Results = () => {
           <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
         <InteractiveDashboard report={report} inputs={inputs} />
+
+        {/* Consumer Evidence & Improvement Layer */}
+        <div className="mt-8 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
+              <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
+            </div>
+            {reportId && (
+              <Button size="sm" onClick={() => navigate(`/analyze?reportId=${reportId}`)} className="gap-1.5">
+                <Edit3 className="h-3.5 w-3.5" /> Improve report inputs
+              </Button>
+            )}
+          </div>
+          <EvidenceSections report={report} reportId={reportId || undefined} canEdit />
+        </div>
       </section>
 
       {/* Divider between the two on-screen pages */}
