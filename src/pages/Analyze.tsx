@@ -162,19 +162,19 @@ const Analyze = () => {
       // Enrich with evidence layer
       let enriched = ensureEvidenceFields(data, inputs);
 
-      // If this is a re-run, carry version history forward and append diff
+      // If this is a re-run, carry version history forward, append diff, save linked row.
       if (isReRun && previousReport && previousInputs) {
         const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
         const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
         const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
         try {
-          const saved = await saveReport(inputs, enriched);
-          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug } });
+          const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
+          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
           return;
         } catch (e) {
-          // fall through — still navigate so user sees results
           console.warn("Save new version failed", e);
+          // fall through — still navigate so user sees results
         }
       }
 
