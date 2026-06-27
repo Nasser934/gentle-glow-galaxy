@@ -29,7 +29,7 @@ import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
   startSection, subTitle, paragraph, bulletList, notice, placeTable,
   drawKpiGrid, placeChartImage, type KpiItem,
-  C, CONTENT_W, MARGIN, ensureSpace,
+  C, CONTENT_W, MARGIN, ensureSpace, reserveBlock,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
 import { drawCover } from "./pdf/templates/cover";
@@ -39,8 +39,9 @@ import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
 import { placeExecutiveMemo } from "./pdf/templates/memo";
 import {
   deriveMemoSections, deriveLegacyFinancialSummary, deriveValidationItems,
-  deriveRoadmap, deriveDecisionDrivers,
+  deriveRoadmap, deriveDecisionDrivers, bucketAssumption, inferCitationConfidence,
 } from "./pdf/derive";
+import { projectLabels } from "./pdf/project";
 import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
