@@ -9,6 +9,7 @@ import {
   C, MARGIN, PAGE_W, PAGE_H, CONTENT_W, setColor, setFill, setDraw,
   drawKpiGrid, type KpiItem, type RGB,
 } from "../engine";
+import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 
 const verdictColor = (v: string): RGB => {
   const u = (v || "").toUpperCase();
