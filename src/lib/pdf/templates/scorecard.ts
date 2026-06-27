@@ -32,11 +32,11 @@ export function placeScorecard(
   });
 
   if (!radarPlaced && fmartRadarUrl) {
-    subTitle(doc, "FMART 6-Dimension Radar");
+    subTitle(doc, "FMART-O 6-Dimension Radar");
     placeChartImage(doc, fmartRadarUrl, 220);
     radarPlaced = true;
   } else if (!fmartRadarUrl) {
-    subTitle(doc, "FMART 6-Dimension Radar");
+    subTitle(doc, "FMART-O 6-Dimension Radar");
     // Fallback: small KV summary of the six scores so the page isn't blank.
     placeTable(doc, {
       head: [["Dimension", "Score"]],
