@@ -162,26 +162,36 @@ export async function exportReportToPdf(
     risk: report.scores.riskFinding,
     timing: report.scores.timingFinding,
   };
+  const DIM_NAME: Record<string, string> = {
+    financial: "Financial", market: "Market", achievability: "Achievability",
+    risk: "Risk", timing: "Timing", operational: "Operational",
+  };
   placeTable(doc, {
     head: [["Dimension", "Score", "Driver", "Concern", "Action"]],
     body: sx.slice(0, 6).map((r) => {
       const pos = (r.positiveDrivers || []).filter(Boolean)[0] || findingByDim[r.dimension] || "—";
       const neg = (r.negativeDrivers || []).filter((x) => x && !/no specific issues/i.test(x))[0] || "—";
       const act = (r.improvementActions || []).filter(Boolean)[0] || "—";
+      const dimName = DIM_NAME[String(r.dimension || "").toLowerCase()] || s(r.label);
+      // Prepend the descriptive label (if different) to the driver text so we don't lose it.
+      const lbl = s(r.label).trim();
+      const driver = lbl && lbl.toLowerCase() !== dimName.toLowerCase()
+        ? `${lbl} — ${s(pos)}`
+        : s(pos);
       return [
-        { content: s(r.label), styles: { fontStyle: "bold" as const } },
+        { content: dimName, styles: { fontStyle: "bold" as const } },
         { content: `${(r.score ?? 0).toFixed(1)}`, styles: { halign: "center" as const } },
-        s(pos),
+        driver,
         s(neg),
         s(act),
       ];
     }),
     columnStyles: {
-      0: { cellWidth: 90 },
+      0: { cellWidth: 80 },
       1: { cellWidth: 36, halign: "center" },
-      2: { cellWidth: 130 },
+      2: { cellWidth: 140 },
       3: { cellWidth: 110 },
-      4: { cellWidth: CONTENT_W - 90 - 36 - 130 - 110 },
+      4: { cellWidth: CONTENT_W - 80 - 36 - 140 - 110 },
     },
     styles: { fontSize: 8.8 },
   });
@@ -218,6 +228,20 @@ export async function exportReportToPdf(
         { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
       ];
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
+
+  // Short interpretation narrative — keeps the section from feeling like only cards + tables.
+  const finInterp: string[] = labels.isInternal
+    ? [
+        `Investment range ${s(report.financials.investmentRange) || "Requires validation"} reflects the platform CapEx envelope; payback is driven by converting manual reporting effort, duplicated tooling, and governance risk into measurable cost avoidance.`,
+        "The base case is conditional on adoption across priority departments — it should be validated with current labor cost, license cost, and data-processing effort benchmarks.",
+        "Key financial assumptions to validate: baseline cost per process, expected hours saved, and the share of OpEx that can realistically be redirected.",
+      ]
+    : [
+        `Investment range ${s(report.financials.investmentRange) || "Requires validation"} sizes the funding ask; break-even depends on customer ramp, pricing, and the cost-to-acquire holding to plan.`,
+        "The base case is conditional on the unit-economics — validate pricing, churn, and CAC payback before committing.",
+        "Key financial assumptions to validate: pricing tiers, gross margin, and the conversion curve from pilot to paying customer.",
+      ];
+  bulletList(doc, finInterp, { size: 9.5 });
 
   // Revenue / Savings scenarios — compact 5-col
   if (report.financials.scenarios?.length) {
