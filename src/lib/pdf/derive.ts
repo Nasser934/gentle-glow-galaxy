@@ -11,6 +11,15 @@ import { assessInputQuality, sanitizeForConsumer } from "@/lib/evidence";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
+/** Append a currency code unless `value` already contains it (case-insensitive). */
+const withCurrency = (value: string | undefined, currency: string | undefined): string => {
+  const v = s(value);
+  const c = (currency || "").trim();
+  if (!v) return "";
+  if (!c) return v;
+  return new RegExp(`\\b${c.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i").test(v) ? v : `${v} ${c}`;
+};
+
 const firstSentence = (txt: string): string => {
   const t = (txt || "").trim();
   if (!t) return "";
