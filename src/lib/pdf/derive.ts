@@ -8,6 +8,7 @@
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { assessInputQuality, sanitizeForConsumer } from "@/lib/evidence";
+import { projectLabels } from "./project";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
@@ -135,43 +136,39 @@ export function deriveMemoSections(
   const whyCanWork = deriveDecisionDrivers(report, inputs);
   const whyCanFail = deriveDecisionBlockers(report, inputs);
 
+  const labels = projectLabels(inputs);
   const moneyLogic: string[] = [];
   const fin = report.financials;
-  if (fin.investmentRange) moneyLogic.push(`Investment range: ${withCurrency(fin.investmentRange, fin.currency)}.`);
-  if (fin.breakEvenSummary) moneyLogic.push(`Break-even (base): ${s(fin.breakEvenSummary)}.`);
-  if (fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
+  if (fin.investmentRange) moneyLogic.push(`Investment: ${withCurrency(fin.investmentRange, fin.currency)}.`);
+  if (fin.breakEvenSummary) moneyLogic.push(`Break-even: ${firstSentence(s(fin.breakEvenSummary))}`);
+  if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
   const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
-  if (base) moneyLogic.push(`Base case: ${s(base.annualRevenue)} revenue, ${s(base.subscribersYr1)} customers (Yr 1).`);
+  if (base) moneyLogic.push(labels.baseCaseTemplate(s(base.annualRevenue), s(base.subscribersYr1)));
   if (!moneyLogic.length) {
-    moneyLogic.push("A detailed financial model should be generated and validated against project-specific operating assumptions before funding approval.");
+    moneyLogic.push("Detailed financial model required before funding approval.");
   }
 
   const validation: string[] = [];
   const iq = assessInputQuality(inputs);
   for (const f of [...iq.missing, ...iq.weak].slice(0, 3)) {
-    validation.push(`Validate: ${s(f)}.`);
+    validation.push(`Validate ${s(f).toLowerCase()}.`);
   }
   for (const r of (report.risks || []).filter((x) => /high/i.test(x.level)).slice(0, 2)) {
     validation.push(`Confirm mitigation for ${s(r.name)}.`);
   }
-  if (decision?.nextStepHint && validation.length < 4) {
-    validation.push(firstSentence(s(decision.nextStepHint)));
-  }
-  if (!validation.length) {
-    validation.push("Run a focused validation sprint before funding approval.");
-  }
+  if (!validation.length) validation.push("Run a focused validation sprint before funding approval.");
 
   const next30Days: string[] = [];
   const seed = (report.nextSteps?.length ? report.nextSteps : report.recommendations) || [];
-  for (const item of seed.slice(0, 4)) next30Days.push(firstSentence(s(item)));
+  for (const item of seed.slice(0, 3)) next30Days.push(firstSentence(s(item)));
 
   return {
-    recommendation,
-    whyCanWork: whyCanWork.length ? whyCanWork : ["Strong overall feasibility profile across the FMART dimensions."],
-    whyCanFail: whyCanFail.length ? whyCanFail : ["No material blockers detected — confirm during validation."],
-    moneyLogic: moneyLogic.slice(0, 4),
-    validation: validation.slice(0, 4),
-    next30Days: next30Days.slice(0, 4),
+    recommendation: recommendation.slice(0, 3),
+    whyCanWork: (whyCanWork.length ? whyCanWork : ["Strong overall feasibility profile across the FMART-O dimensions."]).slice(0, 3),
+    whyCanFail: (whyCanFail.length ? whyCanFail : ["No material blockers detected — confirm during validation."]).slice(0, 3),
+    moneyLogic: moneyLogic.slice(0, 3),
+    validation: validation.slice(0, 3),
+    next30Days: next30Days.slice(0, 3),
   };
 }
 
@@ -263,4 +260,38 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
     opExMonthly: opExMonthly > 0 ? `${opExMonthly.toLocaleString("en-US")} ${cur}/mo`.trim() : "Requires validation",
     topFinancialRisks,
   };
+}
+
+/* -------------------------- assumption classification ---------------------- */
+
+const BUCKET_KEYWORDS: Array<[string, RegExp]> = [
+  // Order matters — most specific first.
+  ["Market",            /\b(tam|sam|som|market\s*size|market\s*growth|cagr|customers?|user\s*demand|willing(ness)?\s*to\s*(pay|fund)|adoption\s*rate|target\s*segment|competit(or|ive|ion)|differentiat|positioning|brand)\b/i],
+  ["Financial",         /\b(invest(ment)?|capex|opex|revenue|saving|cost(s)?|cash|funding|payback|break[\s-]?even|roi|ltv|cac|arr|mrr|pricing|margin|burn|runway)\b/i],
+  ["Risk / Compliance", /\b(regulat|complian|legal|policy|security|privacy|gdpr|pdpa|safety|data\s*quality|integration\s*risk|vendor\s*risk)\b/i],
+  ["Operational",       /\b(team|hiring|capacity|timeline|delivery|process|workflow|throughput|stakeholder|vendor|technology\s*read|infrastructure|department|operation|deploy)\b/i],
+];
+
+/** Classify an assumption into Market / Financial / Operational / Risk. */
+export function bucketAssumption(text: string): string {
+  const t = (text || "").toLowerCase();
+  for (const [bucket, re] of BUCKET_KEYWORDS) {
+    if (re.test(t)) return bucket;
+  }
+  return "Operational";
+}
+
+/* -------------------------- citation confidence ---------------------------- */
+
+/** Heuristic confidence for a citation when the model didn't supply one. */
+export function inferCitationConfidence(c: { source?: string; title?: string; takeaway?: string; confidence?: string }): string {
+  const supplied = (c.confidence || "").trim();
+  if (supplied && supplied !== "—") return supplied;
+  const text = `${c.source || ""} ${c.title || ""}`.toLowerCase();
+  const body = (c.takeaway || "").trim();
+  const isOfficial = /(gov|ministry|world\s*bank|imf|oecd|statista|gartner|mckinsey|deloitte|pwc|kpmg|ey|forrester|idc|nielsen|euromonitor|sama|stats|bureau)/i.test(text);
+  const isSpecific = /\d/.test(body) && body.length > 40;
+  if (isOfficial && isSpecific) return "High";
+  if (isOfficial || isSpecific) return "Medium";
+  return "Low";
 }

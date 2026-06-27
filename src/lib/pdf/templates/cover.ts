@@ -10,6 +10,39 @@ import {
   drawKpiGrid, type KpiItem, type RGB,
 } from "../engine";
 import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
+import { projectLabels } from "../project";
+import { sanitizeForConsumer } from "@/lib/evidence";
+
+const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
+
+/** Trim to a single short bullet (≤ ~110 chars), one sentence. */
+function trimBullets(items: string[], max: number): string[] {
+  return (items || []).slice(0, max).map((it) => {
+    const first = (it || "").split(/(?<=[.!?])\s/)[0] || it;
+    return first.length > 110 ? first.slice(0, 107).trimEnd() + "…" : first;
+  }).filter(Boolean);
+}
+
+/** Extract a compact break-even value, e.g. "Month 20". Strips trailing clauses. */
+function shortenBreakEven(raw: string | undefined): string {
+  const t = s(raw).trim();
+  if (!t) return "";
+  const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  // Sentence start clause up to first delimiter
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
+}
+
+function shortenPayback(raw: string | undefined): string {
+  return shortenBreakEven(raw);
+}
+
+function confidenceBand(pct: number): string {
+  if (pct >= 75) return "High";
+  if (pct >= 55) return "Medium";
+  return "Low — strengthen inputs";
+}
 
 const verdictColor = (v: string): RGB => {
   const u = (v || "").toUpperCase();
@@ -131,52 +164,64 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
     y += 4;
   }
 
-  // 3-up KPI grid (no-clip, shrink-to-fit)
-  const kpis: KpiItem[] = [
-    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10` },
-    { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation" },
-    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation" },
-    { label: "Investment range", value: report.financials.investmentRange || "Requires validation" },
-    { label: "Break-even (base)", value: report.financials.breakEvenSummary || "Requires validation" },
-    { label: "LTV : CAC", value: report.financials.ltvCacRatio || "Requires validation" },
-  ];
-  y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 3, rowH: 58, gap: 10 });
-  y += 16;
+  // 4-up KPI grid (no-clip, shrink-to-fit). One row = clear visual hierarchy.
+  const labels = projectLabels(inputs);
+  const beValue = shortenBreakEven(report.financials.breakEvenSummary);
+  const fourth = labels.isInternal
+    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+    : { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined };
 
-  // Two-column drivers / blockers strip
-  const drivers = deriveDecisionDrivers(report, inputs);
-  const blockers = decision?.blockers?.length
-    ? decision.blockers.slice(0, 3).map(String)
-    : deriveDecisionBlockers(report, inputs);
+  const kpis: KpiItem[] = [
+    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
+    { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
+    labels.isInternal
+      ? { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined }
+      : { label: "Break-even (base)", value: beValue || "Requires validation", sub: beValue ? "See Financial Feasibility" : undefined },
+    fourth,
+  ];
+  y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 4, rowH: 70, gap: 10 });
+  y += 22;
+
+  // Two-column drivers / blockers cards
+  const drivers = trimBullets(deriveDecisionDrivers(report, inputs), 3);
+  const blockers = trimBullets(
+    decision?.blockers?.length ? decision.blockers.slice(0, 3).map(String) : deriveDecisionBlockers(report, inputs),
+    3,
+  );
 
   if (drivers.length || blockers.length) {
     const colW = (CONTENT_W - 16) / 2;
-    const startY = y;
-    // Left: drivers
-    let ly = startY;
+    const cardH = 100;
+    // Left card — drivers
+    setFill(pdf, [240, 253, 244]); setDraw(pdf, [187, 247, 208]); pdf.setLineWidth(0.6);
+    pdf.roundedRect(MARGIN, y, colW, cardH, 6, 6, "FD");
     setColor(pdf, C.success);
-    pdf.setFont("helvetica", "bold"); pdf.setFontSize(9);
-    pdf.text("TOP DECISION DRIVERS", MARGIN, ly);
-    ly += 11;
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(8.5);
+    pdf.text("WHY THIS CAN WORK", MARGIN + 10, y + 16);
     pdf.setFont("helvetica", "normal"); setColor(pdf, C.text); pdf.setFontSize(9);
-    drivers.slice(0, 3).forEach((d) => {
-      const lines = pdf.splitTextToSize(`• ${d}`, colW) as string[];
-      lines.slice(0, 2).forEach((ln) => { pdf.text(ln, MARGIN, ly); ly += 12; });
+    let ly = y + 30;
+    drivers.forEach((d) => {
+      const lines = pdf.splitTextToSize(`• ${d}`, colW - 20) as string[];
+      lines.slice(0, 2).forEach((ln) => { if (ly < y + cardH - 6) { pdf.text(ln, MARGIN + 10, ly); ly += 12; } });
+      ly += 2;
     });
-    // Right: blockers
-    let ry = startY;
+    // Right card — blockers
     const rx = MARGIN + colW + 16;
+    setFill(pdf, [255, 247, 237]); setDraw(pdf, [254, 215, 170]); pdf.setLineWidth(0.6);
+    pdf.roundedRect(rx, y, colW, cardH, 6, 6, "FD");
     setColor(pdf, C.warnText);
-    pdf.setFont("helvetica", "bold"); pdf.setFontSize(9);
-    pdf.text("TOP BLOCKERS TO VALIDATE", rx, ry);
-    ry += 11;
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(8.5);
+    pdf.text("WHAT MUST BE VALIDATED", rx + 10, y + 16);
     pdf.setFont("helvetica", "normal"); setColor(pdf, C.text); pdf.setFontSize(9);
-    blockers.slice(0, 3).forEach((b) => {
-      const lines = pdf.splitTextToSize(`• ${b}`, colW) as string[];
-      lines.slice(0, 2).forEach((ln) => { pdf.text(ln, rx, ry); ry += 12; });
+    let ry = y + 30;
+    blockers.forEach((b) => {
+      const lines = pdf.splitTextToSize(`• ${b}`, colW - 20) as string[];
+      lines.slice(0, 2).forEach((ln) => { if (ry < y + cardH - 6) { pdf.text(ln, rx + 10, ry); ry += 12; } });
+      ry += 2;
     });
-    y = Math.max(ly, ry) + 6;
+    y += cardH + 14;
   }
+
 
 
   // Provenance

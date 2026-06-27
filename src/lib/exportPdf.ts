@@ -29,7 +29,7 @@ import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
   startSection, subTitle, paragraph, bulletList, notice, placeTable,
   drawKpiGrid, placeChartImage, type KpiItem,
-  C, CONTENT_W, MARGIN, ensureSpace,
+  C, CONTENT_W, MARGIN, ensureSpace, reserveBlock,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
 import { drawCover } from "./pdf/templates/cover";
@@ -39,8 +39,9 @@ import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
 import { placeExecutiveMemo } from "./pdf/templates/memo";
 import {
   deriveMemoSections, deriveLegacyFinancialSummary, deriveValidationItems,
-  deriveRoadmap, deriveDecisionDrivers,
+  deriveRoadmap, deriveDecisionDrivers, bucketAssumption, inferCitationConfidence,
 } from "./pdf/derive";
+import { projectLabels } from "./pdf/project";
 import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
@@ -105,16 +106,17 @@ export async function exportReportToPdf(
     "Decision-grade KPIs at a glance. Values labelled \"Requires validation\" need stakeholder confirmation before commitment.",
     { size: 9, italic: true, color: C.muted },
   );
+  const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
-    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10` },
-    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation" },
-    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation" },
-    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation" },
-    { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation" },
-    { label: "LTV : CAC", value: s(report.financials.ltvCacRatio) || "Requires validation" },
+    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
+    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
+    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
+    labels.isInternal
+      ? { label: "Payback / Break-even", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+      : { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
   ];
-  ensureSpace(doc, 200);
-  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 3, rowH: 64, gap: 10 }) + 16;
+  reserveBlock(doc, 200);
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
 
   if (mix) {
     const mixNote =
@@ -162,40 +164,51 @@ export async function exportReportToPdf(
     styles: { fontSize: 8.8 },
   });
 
-  // FMART radar (single instance, guarded)
+  // FMART-O radar (single instance, guarded)
   placeScorecardRadarOnly(doc, report, charts["fmart-radar"] ?? null);
 
   /* ===== 4. Financial Feasibility ===== */
   startSection(doc, "Financial Feasibility");
+  // Keep intro + KPI grid + first table together — don't strand the heading.
+  reserveBlock(doc, 330);
   notice(
     doc,
-    "A detailed 24-month financial model should be generated before funding approval. The summary below reflects the current feasibility estimate and should be validated with project-specific operating assumptions.",
+    "The summary below reflects the current feasibility estimate. A detailed financial model should be validated with project-specific operating assumptions before funding approval.",
     "info",
   );
 
   const legacy = deriveLegacyFinancialSummary(report);
-  const finKpis: KpiItem[] = [
-    { label: "Investment range", value: legacy.investmentRange },
-    { label: "Break-even (base)", value: legacy.breakEven },
-    { label: "LTV : CAC", value: legacy.ltvCac },
-    { label: "CapEx (mid)", value: legacy.capExMid },
-    { label: "OpEx", value: legacy.opExMonthly },
-    { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
-  ];
-  ensureSpace(doc, 200);
-  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 58, gap: 10 }) + 12;
+  const finKpis: KpiItem[] = labels.isInternal
+    ? [
+        { label: "Investment range", value: legacy.investmentRange },
+        { label: "Break-even / Payback", value: legacy.breakEven },
+        { label: "CapEx (mid)", value: legacy.capExMid },
+        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+        { label: "Internal ROI", value: "See base case", sub: "Annual savings × Year 1" },
+      ]
+    : [
+        { label: "Investment range", value: legacy.investmentRange },
+        { label: "Break-even (base)", value: legacy.breakEven },
+        { label: "LTV : CAC", value: legacy.ltvCac },
+        { label: "CapEx (mid)", value: legacy.capExMid },
+        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+      ];
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
 
-  // Revenue scenarios — compact 5-col
+  // Revenue / Savings scenarios — compact 5-col
   if (report.financials.scenarios?.length) {
-    subTitle(doc, "Revenue scenarios");
+    subTitle(doc, labels.isInternal ? "Savings scenarios" : "Revenue scenarios");
     placeTable(doc, {
-      head: [["Scenario", "Probability", "Customers / Yr 1", "Annual revenue", "Break-even"]],
+      head: [["Scenario", "Probability", labels.customersYr1Label, labels.annualRevenueLabel, "Break-even"]],
       body: report.financials.scenarios.map((sc) => [
         s(sc.scenario), s(sc.probability), s(sc.subscribersYr1), s(sc.annualRevenue), s(sc.breakEven),
       ]),
       styles: { fontSize: 9 },
     });
   }
+
 
   // CapEx chart commentary if captured
   if (charts["capex-breakdown"]) {
@@ -372,14 +385,22 @@ export async function exportReportToPdf(
     });
   }
 
+  // Always present a complete 30 / 60 / 90 plan, even when data is sparse.
   const roadmap = deriveRoadmap(report);
-  if (roadmap.length) {
-    subTitle(doc, "30 / 60 / 90 day plan");
-    roadmap.forEach((p) => {
-      subTitle(doc, p.window);
-      bulletList(doc, p.items);
-    });
-  }
+  const windows: Array<"Next 30 days" | "Days 31 – 60" | "Days 61 – 90"> = [
+    "Next 30 days", "Days 31 – 60", "Days 61 – 90",
+  ];
+  // Force section break — roadmap should breathe after the validations table.
+  reserveBlock(doc, 200);
+  subTitle(doc, "30 / 60 / 90 day plan");
+  windows.forEach((w) => {
+    subTitle(doc, w);
+    const phase = roadmap.find((p) => p.window === w);
+    const items = phase?.items?.length
+      ? phase.items
+      : ["Define owner, evidence and success criteria for this window."];
+    bulletList(doc, items);
+  });
 
   /* ===== 9. Evidence & Source Quality ===== */
   startSection(doc, "Evidence & Source Quality");
@@ -417,17 +438,17 @@ export async function exportReportToPdf(
     });
   }
 
-  // Curated citations (cleaned + capped)
-  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 7);
+  // Curated citations (cleaned + capped to 5; confidence inferred when missing)
+  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 5);
   if (curated.length) {
     subTitle(doc, "Top curated sources");
     placeTable(doc, {
       head: [["Source", "Title", "Takeaway", "Confidence"]],
       body: curated.map((c) => [
-        { content: s(c.source), styles: { fontStyle: "bold" as const } },
+        { content: s(c.source).replace(/\s+/g, ""), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
-        s(c.confidence || "—"),
+        inferCitationConfidence(c),
       ]),
       columnStyles: {
         0: { cellWidth: 90 },
@@ -490,21 +511,20 @@ export async function exportReportToPdf(
     ["Success factors", inputs.successFactors],
   ]);
 
-  /* Appendix B — Assumption Register (grouped) */
+  /* Appendix B — Assumption Register (grouped, balanced page splits) */
   const register: AssumptionRow[] = deriveAssumptionRegister(report, inputs);
   if (register.length) {
     startAppendix(doc, "Assumption Register");
-    const bucket = (a: AssumptionRow): string => {
-      const t = `${a.assumption} ${a.riskIfWrong || ""}`.toLowerCase();
-      if (/market|tam|sam|demand|competitor|growth/.test(t)) return "Market";
-      if (/financ|revenue|cost|capex|opex|payback|ltv|cac|budget|funding|cash/.test(t)) return "Financial";
-      if (/operation|team|hiring|process|throughput|adoption|delivery/.test(t)) return "Operational";
-      if (/risk|complian|regulator|legal|security|privacy|safety/.test(t)) return "Risk / Compliance";
-      return "Operational";
-    };
+    paragraph(
+      doc,
+      "Assumptions are grouped by domain. Internal-project assumptions use savings / payback metrics rather than SaaS LTV : CAC.",
+      { size: 9, italic: true, color: C.muted, gap: 8 },
+    );
     const groups = new Map<string, AssumptionRow[]>();
     register.forEach((a) => {
-      const g = bucket(a);
+      const g = bucketAssumption(`${a.assumption} ${a.riskIfWrong || ""}`);
+      // Drop LTV/CAC-only assumptions when this is an internal project.
+      if (labels.isInternal && /\b(ltv|cac|churn|arr|mrr|subscriber)\b/i.test(a.assumption) && !/saving|payback|department|workflow/i.test(a.assumption)) return;
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(a);
     });
@@ -512,10 +532,12 @@ export async function exportReportToPdf(
     order.forEach((g) => {
       const rows = groups.get(g);
       if (!rows || !rows.length) return;
+      // Keep group heading with at least 2 rows together.
+      reserveBlock(doc, 110);
       subTitle(doc, g);
       placeTable(doc, {
         head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
-        body: rows.slice(0, 12).map((r) => [
+        body: rows.slice(0, 10).map((r) => [
           s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
         ]),
         columnStyles: {
@@ -530,21 +552,25 @@ export async function exportReportToPdf(
     });
   }
 
-  /* Appendix C — Methodology (short) */
-  startAppendix(doc, "Methodology");
-  paragraph(doc, s(report.methodology) || "FMART 6-Dimension Weighted Scoring with grounded research synthesis.");
+  /* Appendix C — Methodology */
+  startAppendix(doc, "FMART-O Methodology");
+  paragraph(doc, "6-Dimension Weighted Scoring", { size: 11, color: C.muted, gap: 8 });
+  paragraph(
+    doc,
+    s(report.methodology) || "FMART-O 6-Dimension Weighted Scoring blends user inputs, web research and analyst-style synthesis. The 'O' is Operational feasibility — added to the traditional FMART (Financial, Market, Achievability, Risk, Timing) framework so cross-functional execution risk is scored explicitly.",
+  );
   const weights = report.scores.weights;
   if (weights) {
-    subTitle(doc, "FMART weights");
+    subTitle(doc, "FMART-O weights");
     placeTable(doc, {
       head: [["Dimension", "Weight"]],
       body: [
-        ["Financial", `${Math.round((weights.financial || 0) * 100)}%`],
-        ["Market", `${Math.round((weights.market || 0) * 100)}%`],
+        ["Financial",     `${Math.round((weights.financial || 0) * 100)}%`],
+        ["Market",        `${Math.round((weights.market || 0) * 100)}%`],
         ["Achievability", `${Math.round((weights.achievability || 0) * 100)}%`],
-        ["Risk (inverse)", `${Math.round((weights.risk || 0) * 100)}%`],
-        ["Timing", `${Math.round((weights.timing || 0) * 100)}%`],
-        ["Operational", `${Math.round((weights.operational || 0) * 100)}%`],
+        ["Risk (inverse)",`${Math.round((weights.risk || 0) * 100)}%`],
+        ["Timing",        `${Math.round((weights.timing || 0) * 100)}%`],
+        ["Operational",   `${Math.round((weights.operational || 0) * 100)}%`],
       ],
       columnStyles: { 0: { cellWidth: 200, fontStyle: "bold" }, 1: { cellWidth: 80, halign: "center" } },
       styles: { fontSize: 9 },
@@ -557,10 +583,16 @@ export async function exportReportToPdf(
     "Low — primarily AI assumption; requires validation.",
   ]);
   subTitle(doc, "Recommendation thresholds");
+  bulletList(doc, [
+    "≥ 7.5 — Proceed",
+    "6.0 – 7.4 — Conditional Proceed",
+    "4.5 – 5.9 — Revise",
+    "< 4.5 — Do Not Proceed",
+  ]);
   paragraph(
     doc,
-    "Verdict thresholds: ≥ 7.5 PROCEED · 6.0 – 7.4 PROCEED WITH CAUTION · 4.5 – 5.9 REVISE · < 4.5 DO NOT PROCEED.",
-    { size: 9, italic: true, color: C.muted },
+    "This methodology is intended to support structured feasibility judgment, not replace financial, legal or technical due diligence.",
+    { size: 9, italic: true, color: C.muted, gap: 4 },
   );
 
   /* Appendix D — Version History (conditional) */
@@ -593,7 +625,7 @@ function placeScorecardRadarOnly(
   fmartRadarUrl: string | null,
 ) {
   if (!fmartRadarUrl) return;
-  subTitle(doc, "FMART 6-Dimension Radar");
+  subTitle(doc, "FMART-O 6-Dimension Radar");
   placeChartImage(doc, fmartRadarUrl, 200);
 }
 
