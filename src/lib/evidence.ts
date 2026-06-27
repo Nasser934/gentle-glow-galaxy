@@ -23,13 +23,48 @@ const STATUS_SCORE: Record<InputStatus, number> = {
   complete: 100, needs_improvement: 65, weak: 35, missing: 0,
 };
 
-/** Sanitize internal/QA strings before showing to the consumer. */
+/**
+ * Sanitize internal/QA strings before showing to the consumer.
+ * Replaces forbidden developer wording with safe consumer phrasing,
+ * never silently deletes whole sentences.
+ */
+const FORBIDDEN_PATTERNS: Array<[RegExp, string]> = [
+  [/\bqa[ -]?failed\b/gi, "evidence is limited"],
+  [/\bfallback used\b/gi, "needs validation"],
+  [/\btemplate mismatch\b/gi, "input detail is incomplete"],
+  [/\bsource notes? empty\b/gi, "evidence is limited"],
+  [/\braw (edge|function) error\b/gi, "needs validation"],
+  [/\binternal repair attempt\b/gi, "needs validation"],
+  [/\brepair attempt\b/gi, "needs validation"],
+  [/\bdeveloper (diagnostics?|error)\b/gi, "needs validation"],
+  [/\breport quality weak\b/gi, "input detail is incomplete"],
+  [/\bdebug\b/gi, ""],
+];
 export const sanitizeForConsumer = (text: string | undefined | null): string => {
   if (!text) return "";
-  return String(text)
-    .replace(/\b(qa[ -]?failed|fallback used|template mismatch|source notes empty|raw (edge|function) error|internal repair attempt|developer (diagnostics?|error)|report quality weak)\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  let out = String(text);
+  for (const [re, sub] of FORBIDDEN_PATTERNS) out = out.replace(re, sub);
+  return out.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])/g, "$1").trim();
+};
+
+/** Read citations from any of the supported report shapes. */
+const getCitations = (report: any): any[] => {
+  if (!report) return [];
+  if (Array.isArray(report.research?.citations)) return report.research.citations;
+  if (Array.isArray(report.sources)) return report.sources;
+  if (Array.isArray(report.research?.sources)) return report.research.sources;
+  if (Array.isArray(report.citations)) return report.citations;
+  return [];
+};
+
+/** True if a risk row looks "critical/high" across any of its possible fields. */
+const isHighRisk = (rk: any): boolean => {
+  const vals = [rk?.level, rk?.severity, rk?.impact, rk?.riskLevel, rk?.priority];
+  return vals.some((v) => typeof v === "string" && /^(high|critical|severe)$/i.test(v.trim()));
+};
+const hasWeakMitigation = (rk: any): boolean => {
+  const m = (rk?.mitigation || rk?.mitigationPlan || "").toString().trim();
+  return m.length < 8;
 };
 
 /* ---------------- Input Quality ---------------- */
