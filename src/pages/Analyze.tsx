@@ -39,6 +39,8 @@ const Analyze = () => {
   const [loadingPrevious, setLoadingPrevious] = useState(isReRun);
   const [previousReport, setPreviousReport] = useState<any>(null);
   const [previousInputs, setPreviousInputs] = useState<ConceptInputs | null>(null);
+  // Phase 4 hardening: gate the entire re-run flow on ownership + presence of inputs.
+  const [rerunBlocked, setRerunBlocked] = useState<null | { reason: "not_owner" | "no_inputs" | "not_found" | "not_signed_in"; message: string }>(null);
 
   const [brief, setBrief] = useState("");
   const [isAutoFilling, setIsAutoFilling] = useState(false);
@@ -48,21 +50,47 @@ const Analyze = () => {
   const set = (field: keyof ConceptInputs, value: string) =>
     setInputs((prev) => ({ ...prev, [field]: value }));
 
-  // Pre-fill from previous report when ?reportId= is present
+  // Pre-fill from previous report when ?reportId= is present — owner only.
   useEffect(() => {
     if (!isReRun) return;
     let cancelled = false;
     (async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setRerunBlocked({ reason: "not_signed_in", message: "Sign in to improve this report." });
+          return;
+        }
         const row = await getReportById(reportId);
-        if (!row) { toast.error("Previous report not found."); return; }
         if (cancelled) return;
-        setInputs(row.inputs);
-        setPreviousInputs(row.inputs);
+        if (!row) {
+          setRerunBlocked({ reason: "not_found", message: "Previous report not found." });
+          return;
+        }
+        if (row.user_id !== user.id) {
+          // Non-owner: do NOT pre-fill, do NOT allow re-run, even if the row is public/shared.
+          setRerunBlocked({
+            reason: "not_owner",
+            message: "You can view this report, but only the owner can improve its inputs.",
+          });
+          return;
+        }
+        const savedInputs = row.inputs as ConceptInputs | null;
+        const hasUsableInputs = savedInputs && typeof savedInputs === "object"
+          && (savedInputs.projectName?.trim() || savedInputs.description?.trim());
+        if (!hasUsableInputs) {
+          setRerunBlocked({
+            reason: "no_inputs",
+            message: "Original inputs are not available for this report. Create a new analysis to use the improvement flow.",
+          });
+          return;
+        }
+        setInputs(savedInputs);
+        setPreviousInputs(savedInputs);
         setPreviousReport(row.output);
         toast.success("Previous inputs loaded. Edit weak fields, then re-run.");
       } catch (e: any) {
-        toast.error(e?.message || "Could not load previous report.");
+        setRerunBlocked({ reason: "not_found", message: e?.message || "Could not load previous report." });
       } finally {
         if (!cancelled) setLoadingPrevious(false);
       }
