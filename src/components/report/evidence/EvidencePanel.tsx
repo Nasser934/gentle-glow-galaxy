@@ -439,7 +439,12 @@ export const ReportFamilyPanel = ({
                   <div className="text-[11px] text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                 </div>
                 {!isCurrent && (
-                  <Button size="sm" variant="outline" onClick={() => navigate(`/r/${r.slug}`)} className="h-7 px-2 text-[11px]">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(canEdit ? `/decision-room/${r.id}` : `/r/${r.slug}`)}
+                    className="h-7 px-2 text-[11px]"
+                  >
                     Open
                   </Button>
                 )}
