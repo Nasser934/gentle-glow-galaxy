@@ -94,16 +94,24 @@ const STATUS_SCORE: Record<InputStatus, number> = {
   complete: 100, needs_improvement: 65, weak: 35, missing: 0,
 };
 
-/** Strip internal/QA/debug wording from consumer-facing strings. */
+/** Replace internal/QA/debug wording with consumer-safe phrasing. */
+const FORBIDDEN_PATTERNS: Array<[RegExp, string]> = [
+  [/\bqa[ -]?failed\b/gi, "evidence is limited"],
+  [/\bfallback used\b/gi, "needs validation"],
+  [/\btemplate mismatch\b/gi, "input detail is incomplete"],
+  [/\bsource notes? empty\b/gi, "evidence is limited"],
+  [/\braw (edge|function) error\b/gi, "needs validation"],
+  [/\binternal repair attempt\b/gi, "needs validation"],
+  [/\brepair attempt\b/gi, "needs validation"],
+  [/\bdeveloper (diagnostics?|error)\b/gi, "needs validation"],
+  [/\breport quality weak\b/gi, "input detail is incomplete"],
+  [/\bdebug\b/gi, ""],
+];
 export function sanitizeForConsumer(text: unknown): string {
   if (text == null) return "";
-  return String(text)
-    .replace(
-      /\b(qa[ -]?failed|fallback used|template mismatch|source notes empty|raw (edge|function) error|internal repair attempt|developer (diagnostics?|error)|report quality weak|repair attempt|debug)\b/gi,
-      "",
-    )
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  let out = String(text);
+  for (const [re, sub] of FORBIDDEN_PATTERNS) out = out.replace(re, sub);
+  return out.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])/g, "$1").trim();
 }
 
 /** Deep-walk an object and sanitize every string leaf. */
