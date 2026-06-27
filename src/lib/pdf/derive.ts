@@ -254,7 +254,14 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
 
   return {
     investmentRange: fin.investmentRange ? withCurrency(fin.investmentRange, cur) : "Requires validation",
-    breakEven: s(fin.breakEvenSummary) || "Requires validation",
+    breakEven: (() => {
+      const t = s(fin.breakEvenSummary || "").trim();
+      if (!t) return "Requires validation";
+      const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+      if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+      const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+      return head.length > 28 ? head.slice(0, 26) + "…" : head;
+    })(),
     ltvCac: s(fin.ltvCacRatio) || "Requires validation",
     capExMid: fin.capExTotal?.mid != null ? `${fin.capExTotal.mid.toLocaleString("en-US")} ${cur}`.trim() : "Requires validation",
     opExMonthly: opExMonthly > 0 ? `${opExMonthly.toLocaleString("en-US")} ${cur}/mo`.trim() : "Requires validation",
