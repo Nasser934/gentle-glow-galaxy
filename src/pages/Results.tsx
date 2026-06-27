@@ -79,12 +79,14 @@ const Results = () => {
   const pdfRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
   const [savingShare, setSavingShare] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const rawReport = location.state?.report as FeasibilityReport | undefined;
   const inputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
+  const existingId = location.state?.reportId as string | undefined;
   const report = useMemo(
     () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
     [rawReport, inputs],
@@ -92,14 +94,15 @@ const Results = () => {
 
   useEffect(() => {
     if (existingSlug) setShareSlug(existingSlug);
-  }, [existingSlug]);
+    if (existingId) setReportId(existingId);
+  }, [existingSlug, existingId]);
 
   // Auto-save once on first load
   useEffect(() => {
     if (!report || !inputs || existingSlug || shareSlug) return;
     let cancelled = false;
     saveReport(inputs, report)
-      .then((d) => { if (!cancelled) setShareSlug(d.slug); })
+      .then((d) => { if (!cancelled) { setShareSlug(d.slug); setReportId(d.id); } })
       .catch((e) => console.warn("auto-save failed", e));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
