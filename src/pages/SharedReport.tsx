@@ -83,7 +83,12 @@ const SharedReport = () => {
           {isOwner && <StatusControl report={row} onChanged={(s) => setRow({ ...row, status: s })} />}
         </div>
 
-        <InteractiveDashboard report={row.output} inputs={row.inputs} />
+        <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />
+
+        <div className="mt-8">
+          <EvidenceSections report={enrichedReport} reportId={row.id} canEdit={isOwner} />
+        </div>
+
 
         <div className="mt-10 border-t border-border pt-6">
           <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-medium tracking-tight">
