@@ -193,6 +193,7 @@ export type Database = {
           inputs: Json
           is_public: boolean
           output: Json
+          parent_report_id: string | null
           slug: string
           status: Database["public"]["Enums"]["report_status"]
           title: string
@@ -206,6 +207,7 @@ export type Database = {
           inputs: Json
           is_public?: boolean
           output: Json
+          parent_report_id?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["report_status"]
           title: string
@@ -219,13 +221,22 @@ export type Database = {
           inputs?: Json
           is_public?: boolean
           output?: Json
+          parent_report_id?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["report_status"]
           title?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reports_parent_report_id_fkey"
+            columns: ["parent_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
