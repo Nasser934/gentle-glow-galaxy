@@ -164,7 +164,7 @@ const Results = () => {
     let slug = shareSlug;
     if (!slug) {
       setSavingShare(true);
-      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); }
+      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); setReportId(d.id); }
       catch (e: any) { toast.error(e.message); setSavingShare(false); return; }
       setSavingShare(false);
     }
