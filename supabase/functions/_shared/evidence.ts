@@ -392,8 +392,8 @@ export function computeVerdict(args: {
     verdict = "CONDITIONAL PROCEED WITH VALIDATION";
     blockers.push("Analysis confidence is below 50% — validation required before any commitment.");
   }
-  if (args.criticalRisksWithoutMitigation && verdict === "PROCEED") {
-    verdict = "CONDITIONAL PROCEED WITH VALIDATION";
+  if (args.criticalRisksWithoutMitigation) {
+    if (verdict === "PROCEED") verdict = "CONDITIONAL PROCEED WITH VALIDATION";
     blockers.push("Critical risks have no mitigation. Address before proceeding.");
   }
 
