@@ -359,7 +359,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 1 — FMART 6-Dimension Weighted Scoring (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
-          <FMARTRadar scores={report.scores} />
+          <div data-pdf-chart="fmart-radar"><FMARTRadar scores={report.scores} /></div>
         </ReportPage>
 
         {/* ============== PAGE 3 — MARKET ANALYSIS ============== */}
@@ -384,7 +384,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 2 — Market Growth: TAM vs SAM</SubTitle>
-          <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
+          <div data-pdf-chart="market-growth"><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></div>
 
           <SubTitle>2.2 Target Customer Profile</SubTitle>
           <table className="w-full border-collapse text-[11px]">
@@ -508,7 +508,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 3 — Startup Cost Breakdown</SubTitle>
-          <CapExBarChart data={report.financials.capEx} currency={cur} />
+          <div data-pdf-chart="capex"><CapExBarChart data={report.financials.capEx} currency={cur} /></div>
         </ReportPage>
 
         {/* ============== PAGE 7 — OPEX + SCENARIOS ============== */}
