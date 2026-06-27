@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,6 +19,8 @@ import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
 import { isInternalProject } from "@/lib/format";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
