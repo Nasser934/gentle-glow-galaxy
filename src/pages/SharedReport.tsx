@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { CommentsPanel } from "@/components/report/CommentsPanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 const SharedReport = () => {
   const { slug = "" } = useParams();
