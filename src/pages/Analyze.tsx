@@ -249,17 +249,6 @@ const Analyze = () => {
   if (isReRun && rerunBlocked) {
     return (
       <div className="min-h-screen bg-background">
-        <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto flex h-14 items-center justify-between px-6">
-            <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-                <BarChart3 className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-            </button>
-            <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
-          </div>
-        </nav>
         <div className="container mx-auto max-w-xl px-6 py-16">
           <div className="rounded-xl border border-warning/40 bg-warning/10 p-6 text-sm">
             <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
@@ -279,17 +268,8 @@ const Analyze = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-          </button>
-          <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
-        </div>
-      </nav>
+
+
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
         {isReRun && (
