@@ -643,7 +643,7 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
       dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
       classification: "Confidential",
       preparedBy: "AI Feasibility Engine v2.1",
-      methodology: "FMART Framework — 5-Dimension Weighted Scoring",
+      methodology: "FMART-O 6-Dimension Weighted Scoring",
       executiveSummary: parsed.executiveSummary,
       scores: parsed.scores,
       market: parsed.market,

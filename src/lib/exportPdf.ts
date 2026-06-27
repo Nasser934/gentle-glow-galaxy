@@ -46,6 +46,16 @@ import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
+/** Compact a break-even/payback string for KPI cards (e.g. "Month 20"). */
+function shortBE(raw: string | undefined): string {
+  const t = s(raw || "").trim();
+  if (!t) return "";
+  const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
+}
+
 export interface VersionFamilyEntry {
   id: string;
   slug?: string | null;
@@ -112,8 +122,8 @@ export async function exportReportToPdf(
     { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
-      : { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
+      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+      : { label: "Break-even (base)", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
   ];
   reserveBlock(doc, 200);
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
@@ -553,11 +563,12 @@ export async function exportReportToPdf(
   }
 
   /* Appendix C — Methodology */
-  startAppendix(doc, "FMART-O Methodology");
-  paragraph(doc, "6-Dimension Weighted Scoring", { size: 11, color: C.muted, gap: 8 });
+  startAppendix(doc, "Methodology");
+  paragraph(doc, "FMART-O 6-Dimension Weighted Scoring", { size: 11, color: C.muted, gap: 8 });
+  // Always render our canonical copy; ignore any stale "FMART Framework — 5-Dimension" string from older reports.
   paragraph(
     doc,
-    s(report.methodology) || "FMART-O 6-Dimension Weighted Scoring blends user inputs, web research and analyst-style synthesis. The 'O' is Operational feasibility — added to the traditional FMART (Financial, Market, Achievability, Risk, Timing) framework so cross-functional execution risk is scored explicitly.",
+    "FMART-O blends user inputs, web research and analyst-style synthesis across six dimensions. The 'O' is Operational feasibility — added to the traditional FMART (Financial, Market, Achievability, Risk, Timing) framework so cross-functional execution risk is scored explicitly.",
   );
   const weights = report.scores.weights;
   if (weights) {
