@@ -16,9 +16,8 @@ import {
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
-import { getReportById } from "@/lib/reports";
+import { getReportById, saveReport, saveRerunReport } from "@/lib/reports";
 import { assessInputQuality, ensureEvidenceFields, buildVersionEntry } from "@/lib/evidence";
-import { saveReport } from "@/lib/reports";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 
@@ -70,6 +69,21 @@ const Analyze = () => {
     })();
     return () => { cancelled = true; };
   }, [isReRun, reportId]);
+
+  // Map focus field → wizard step, jump there once inputs are loaded.
+  const FOCUS_TO_STEP: Record<string, number> = {
+    projectName: 0, industry: 0, location: 0, description: 0, strategicObjectives: 0,
+    businessModel: 0, revenueModel: 0, founderExperience: 0, competitorUrls: 0,
+    budgetRange: 1, timeline: 1, teamSize: 1, dependencies: 1,
+    assumptions: 2, constraints: 2, successFactors: 2,
+    knownRisks: 3, regulatoryConsiderations: 3, technologyReadiness: 3,
+  };
+  useEffect(() => {
+    if (!focusField || loadingPrevious) return;
+    const target = FOCUS_TO_STEP[focusField];
+    if (typeof target === "number") setStep(target);
+  }, [focusField, loadingPrevious]);
+
 
   // Input quality assessment (live)
   const quality = useMemo(() => assessInputQuality(inputs), [inputs]);
@@ -163,19 +177,19 @@ const Analyze = () => {
       // Enrich with evidence layer
       let enriched = ensureEvidenceFields(data, inputs);
 
-      // If this is a re-run, carry version history forward and append diff
+      // If this is a re-run, carry version history forward, append diff, save linked row.
       if (isReRun && previousReport && previousInputs) {
         const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
         const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
         const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
         try {
-          const saved = await saveReport(inputs, enriched);
-          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug } });
+          const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
+          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
           return;
         } catch (e) {
-          // fall through — still navigate so user sees results
           console.warn("Save new version failed", e);
+          // fall through — still navigate so user sees results
         }
       }
 
@@ -229,6 +243,11 @@ const Analyze = () => {
                     ? "Loading previous inputs…"
                     : `Previous inputs are loaded. ${quality.missing.length + quality.weak.length} field(s) need detail. Edit them and re-run — a new version will be created.`}
                 </p>
+                {focusField && !loadingPrevious && (
+                  <p className="mt-1 text-xs font-medium text-warning">
+                    Editing field: {quality.fields.find((f) => f.key === (focusField as any))?.label || focusField}
+                  </p>
+                )}
               </div>
             </div>
           </div>

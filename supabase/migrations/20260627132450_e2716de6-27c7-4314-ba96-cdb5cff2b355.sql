@@ -1,0 +1,2 @@
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS parent_report_id uuid NULL REFERENCES public.reports(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_reports_parent_report_id ON public.reports(parent_report_id);

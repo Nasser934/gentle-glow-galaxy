@@ -186,7 +186,7 @@ export const InputQualityPanel = ({
                     {canEdit && reportId && (
                       <Button
                         size="sm" variant="outline"
-                        onClick={() => navigate(`/analyze?reportId=${reportId}&field=${String(f.key)}`)}
+                        onClick={() => navigate(`/analyze?reportId=${reportId}&focus=${String(f.key)}`)}
                         className="h-7 gap-1 px-2 text-[11px]"
                       >
                         <Edit3 className="h-3 w-3" /> Edit field
