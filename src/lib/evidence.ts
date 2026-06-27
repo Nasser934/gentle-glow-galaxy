@@ -297,7 +297,7 @@ export function deriveScoreExplanation(report: FeasibilityReport, inputs: Concep
 /* ---------------- Claim Evidence Map ---------------- */
 export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: ConceptInputs): ClaimEvidenceRow[] {
   const mix = deriveEvidenceMix(report, inputs);
-  const cites = (report.research?.citations || []).map((c) => c.source || c.title).filter(Boolean) as string[];
+  const cites = getCitations(report).map((c: any) => c?.source || c?.title || c?.url).filter(Boolean) as string[];
   const conf = (n: number): ClaimEvidenceRow["confidence"] => n >= 70 ? "High" : n >= 45 ? "Medium" : "Low";
 
   const rows: ClaimEvidenceRow[] = [
