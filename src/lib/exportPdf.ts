@@ -432,7 +432,7 @@ export async function exportReportToPdf(
   }
 
   // Always present a complete 30 / 60 / 90 plan, even when data is sparse.
-  const roadmap = deriveRoadmap(report);
+  const roadmap = deriveRoadmap(report, inputs);
   const windows: Array<"Next 30 days" | "Days 31 – 60" | "Days 61 – 90"> = [
     "Next 30 days", "Days 31 – 60", "Days 61 – 90",
   ];
