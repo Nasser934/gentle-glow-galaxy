@@ -137,20 +137,22 @@ function paintContinuationBand(doc: Doc) {
   pdf.text("(continued)", PAGE_W - MARGIN - 8, HEADER_Y + 16, { align: "right" });
 }
 
-/** Add a fresh page. If we're inside a section, treat it as continuation and reserve the band area. */
+/**
+ * Add a fresh page. Header/footer chrome only. The continuation band is
+ * intentionally NOT painted here — it would overlay the first line of body
+ * content when a new section header is about to be drawn. The band is
+ * reserved by `placeTable`'s autoTable continuation pages only.
+ */
 export function addPage(doc: Doc) {
   doc.pdf.addPage();
   paintHeader(doc);
   paintFooterChrome(doc);
-  const continuation = !!doc.currentSection;
-  const contentTop = continuation ? HEADER_Y + 4 + CONT_BAND_H + 14 : BODY_TOP;
-  if (continuation) paintContinuationBand(doc);
-  doc.y = contentTop;
+  doc.y = BODY_TOP;
   doc.pages.push({
     sectionNumber: doc.currentSection?.number ?? null,
     sectionTitle: doc.currentSection?.title ?? null,
-    isContinuation: continuation,
-    contentTop,
+    isContinuation: false,
+    contentTop: BODY_TOP,
   });
 }
 
