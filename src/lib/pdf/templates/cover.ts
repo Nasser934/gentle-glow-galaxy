@@ -9,6 +9,7 @@ import {
   C, MARGIN, PAGE_W, PAGE_H, CONTENT_W, setColor, setFill, setDraw,
   drawKpiGrid, type KpiItem, type RGB,
 } from "../engine";
+import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 
 const verdictColor = (v: string): RGB => {
   const u = (v || "").toUpperCase();
@@ -142,19 +143,41 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
   y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 3, rowH: 58, gap: 10 });
   y += 16;
 
-  // Top blockers
-  if (decision?.blockers?.length) {
+  // Two-column drivers / blockers strip
+  const drivers = deriveDecisionDrivers(report, inputs);
+  const blockers = decision?.blockers?.length
+    ? decision.blockers.slice(0, 3).map(String)
+    : deriveDecisionBlockers(report, inputs);
+
+  if (drivers.length || blockers.length) {
+    const colW = (CONTENT_W - 16) / 2;
+    const startY = y;
+    // Left: drivers
+    let ly = startY;
+    setColor(pdf, C.success);
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(9);
+    pdf.text("TOP DECISION DRIVERS", MARGIN, ly);
+    ly += 11;
+    pdf.setFont("helvetica", "normal"); setColor(pdf, C.text); pdf.setFontSize(9);
+    drivers.slice(0, 3).forEach((d) => {
+      const lines = pdf.splitTextToSize(`• ${d}`, colW) as string[];
+      lines.slice(0, 2).forEach((ln) => { pdf.text(ln, MARGIN, ly); ly += 12; });
+    });
+    // Right: blockers
+    let ry = startY;
+    const rx = MARGIN + colW + 16;
     setColor(pdf, C.warnText);
     pdf.setFont("helvetica", "bold"); pdf.setFontSize(9);
-    pdf.text("TOP BLOCKERS TO VALIDATE", MARGIN, y);
-    y += 11;
+    pdf.text("TOP BLOCKERS TO VALIDATE", rx, ry);
+    ry += 11;
     pdf.setFont("helvetica", "normal"); setColor(pdf, C.text); pdf.setFontSize(9);
-    decision.blockers.slice(0, 3).forEach((b) => {
-      const lines = pdf.splitTextToSize(`• ${b}`, CONTENT_W) as string[];
-      lines.slice(0, 2).forEach((ln) => { pdf.text(ln, MARGIN, y); y += 12; });
+    blockers.slice(0, 3).forEach((b) => {
+      const lines = pdf.splitTextToSize(`• ${b}`, colW) as string[];
+      lines.slice(0, 2).forEach((ln) => { pdf.text(ln, rx, ry); ry += 12; });
     });
-    y += 6;
+    y = Math.max(ly, ry) + 6;
   }
+
 
   // Provenance
   setColor(pdf, C.text);

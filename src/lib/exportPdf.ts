@@ -1,8 +1,22 @@
 // =============================================================================
-// Concept AI — PDF Exporter (Phase 1 orchestrator)
+// Concept AI — PDF Exporter (Phase 2 orchestrator)
 // -----------------------------------------------------------------------------
-// Thin orchestrator on top of `src/lib/pdf/engine.ts` + templates.
-// Phase 1 keeps the current content order; Phase 2 will rewrite the page order.
+// Phase 2 — Executive memo structure. Page order:
+//   1.  Cover (investment memo + drivers + blockers)
+//   2.  TOC (reserved page 2)
+//   3.  Executive Decision Memo
+//   4.  Investment Snapshot
+//   5.  Feasibility Scorecard (compact)
+//   6.  Financial Feasibility (legacy summary — promoted forward)
+//   7.  Market & Customer
+//   8.  Competition & Positioning
+//   9.  Risk & Mitigation
+//   10. Validation Roadmap (formerly Input Quality)
+//   11. Evidence & Source Quality (citations cleaned + capped)
+//   App A — Project Brief (grouped)
+//   App B — Assumption Register (grouped)
+//   App C — Methodology
+//   App D — Version History (conditional)
 // =============================================================================
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -14,13 +28,20 @@ import {
 import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
   startSection, subTitle, paragraph, bulletList, notice, placeTable,
-  C, CONTENT_W,
+  drawKpiGrid, placeChartImage, type KpiItem,
+  C, CONTENT_W, MARGIN, ensureSpace,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
 import { drawCover } from "./pdf/templates/cover";
-import { placeScorecard, resetScorecardGuards } from "./pdf/templates/scorecard";
+import { resetScorecardGuards } from "./pdf/templates/scorecard";
 import { placeChartCommentary } from "./pdf/templates/chartCommentary";
 import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
+import { placeExecutiveMemo } from "./pdf/templates/memo";
+import {
+  deriveMemoSections, deriveLegacyFinancialSummary, deriveValidationItems,
+  deriveRoadmap, deriveDecisionDrivers,
+} from "./pdf/derive";
+import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
@@ -38,13 +59,6 @@ export interface ExportPdfPayload {
   versionFamily?: VersionFamilyEntry[];
 }
 
-/**
- * Primary entrypoint. Signature preserved for callers:
- *   exportReportToPdf(captureRootEl, fileName, { report, inputs, versionFamily? })
- *
- * `captureRootEl` is now used ONLY as the chart-capture root (offscreen mount),
- * not as a source of PDF content. Content is composed natively via engine.
- */
 export async function exportReportToPdf(
   captureRootEl: HTMLElement | null,
   fileName: string,
@@ -59,7 +73,6 @@ export async function exportReportToPdf(
   const report = ensureEvidenceFields(rawReport, inputs);
   const iq = assessInputQuality(inputs);
 
-  // Reset per-export guards
   resetScorecardGuards();
   resetAppendixCounter();
 
@@ -68,146 +81,155 @@ export async function exportReportToPdf(
     reportId: report.reportId,
   });
 
-  // -------- Page 1: Cover --------
+  /* ---------- Page 1: Cover ---------- */
   drawCover(doc.pdf, report, inputs);
 
-  // -------- Page 2: TOC reserved --------
+  /* ---------- Page 2: TOC reserved ---------- */
   reserveTocPage(doc);
 
-  // -------- Page 3+: Body --------
+  /* ---------- Page 3+: Body ---------- */
   addFirstBodyPage(doc);
 
-  // Capture currently active charts (3 today). Failure is non-fatal.
   const charts = await safeCapture(captureRootEl);
-
-  /* 1. Executive Summary */
-  startSection(doc, "Executive Summary");
-  paragraph(doc, s(report.executiveSummary));
-
   const decision = report.decision;
-  if (decision || report.scores.verdict) {
-    const v = decision?.verdict || report.scores.verdict;
-    const conf = decision?.overallConfidencePct;
-    const lines = [
-      `Verdict: ${s(v)}.`,
-      decision?.nextStepHint ? `Next step — ${s(decision.nextStepHint)}.` : "",
-      conf != null ? `Confidence: ${conf}%.` : "",
-    ].filter(Boolean).join(" ");
-    notice(doc, lines, "info");
-  }
-
-  /* 2. Decision Scorecard + FMART radar */
-  placeScorecard(doc, report, charts["fmart-radar"] ?? null);
-
-  /* 3. Why this score? */
-  if (report.scoreExplanation?.length) {
-    startSection(doc, "Why this score?");
-    paragraph(
-      doc,
-      "What helped, what lowered, and the most useful next action per dimension.",
-      { size: 9, italic: true, color: C.muted },
-    );
-    placeTable(doc, {
-      head: [["Dimension", "Score", "Drivers / concerns", "Action"]],
-      body: report.scoreExplanation.flatMap((r) => {
-        const drivers = [
-          ...(r.positiveDrivers || []).slice(0, 2).map((x) => `+ ${x}`),
-          ...(r.negativeDrivers || []).slice(0, 2).map((x) => `– ${x}`),
-        ].join(" · ");
-        const main = [
-          { content: s(r.label), styles: { fontStyle: "bold" as const } },
-          { content: `${(r.score ?? 0).toFixed(1)}`, styles: { halign: "center" as const } },
-          s(drivers),
-          s((r.improvementActions || []).slice(0, 2).join(" · ")),
-        ];
-        const implication = r.decisionImplication
-          ? [{
-              content: `Implication: ${s(r.decisionImplication)}`,
-              colSpan: 4,
-              styles: { fillColor: C.softBlue, textColor: C.primaryDark, fontStyle: "italic" as const, fontSize: 8.5 },
-            }]
-          : null;
-        return implication ? [main, implication] : [main];
-      }),
-      columnStyles: {
-        0: { cellWidth: 110 },
-        1: { cellWidth: 44, halign: "center" },
-        2: { cellWidth: 200 },
-        3: { cellWidth: CONTENT_W - 110 - 44 - 200 },
-      },
-      styles: { fontSize: 8.8 },
-    });
-  }
-
-  /* 4. Input Quality */
-  startSection(doc, "Input Quality");
-  const iqScore = report.inputQualityScore ?? iq.overall;
-  const iqLabel = iqScore >= 80 ? "Strong" : iqScore >= 60 ? "Adequate" : iqScore >= 40 ? "Needs improvement" : "Weak";
-  paragraph(doc, `Input quality score: ${iqScore} / 100 — ${iqLabel}.`, { size: 10 });
-  notice(doc, "Stronger inputs improve confidence. They do not automatically increase the feasibility score.", "info");
-
-  const missing = report.inputCompleteness?.missingFields ?? iq.missing;
-  const weak    = report.inputCompleteness?.weakFields    ?? [...iq.weak, ...iq.needsImprovement];
-  const contra  = report.inputCompleteness?.contradictoryFields ?? iq.contradictions;
-  if (missing?.length) { subTitle(doc, "Missing fields"); bulletList(doc, missing.map(s)); }
-  if (weak?.length)    { subTitle(doc, "Weak / needs improvement"); bulletList(doc, weak.map(s)); }
-  if (contra?.length)  { subTitle(doc, "Possible contradictions"); bulletList(doc, contra.map(s)); }
-
-  const fieldSuggestions = iq.fields.filter((f) => f.status !== "complete").slice(0, 8);
-  if (fieldSuggestions.length) {
-    subTitle(doc, "Top field-level suggestions");
-    placeTable(doc, {
-      head: [["Field", "Status", "Why it matters", "What to add"]],
-      body: fieldSuggestions.map((f) => [s(f.label), s(f.status.replace("_", " ")), s(f.impact), s(f.suggestion)]),
-      columnStyles: { 0: { cellWidth: 110, fontStyle: "bold" }, 1: { cellWidth: 80 } },
-      styles: { fontSize: 8.8 },
-    });
-  }
-
-  /* 5. Evidence Mix */
   const mix = report.evidenceMix;
+
+  /* ===== 1. Executive Decision Memo ===== */
+  startSection(doc, "Executive Decision Memo");
+  placeExecutiveMemo(doc, deriveMemoSections(report, inputs));
+
+  /* ===== 2. Investment Snapshot ===== */
+  startSection(doc, "Investment Snapshot");
+  paragraph(
+    doc,
+    "Decision-grade KPIs at a glance. Values labelled \"Requires validation\" need stakeholder confirmation before commitment.",
+    { size: 9, italic: true, color: C.muted },
+  );
+  const snapshotKpis: KpiItem[] = [
+    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10` },
+    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation" },
+    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation" },
+    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation" },
+    { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation" },
+    { label: "LTV : CAC", value: s(report.financials.ltvCacRatio) || "Requires validation" },
+  ];
+  ensureSpace(doc, 200);
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 3, rowH: 64, gap: 10 }) + 16;
+
   if (mix) {
-    startSection(doc, "Evidence Mix");
-    notice(
-      doc,
-      `User input ${mix.userInputPercent}% · Web research ${mix.webResearchPercent}% · AI assumption ${mix.aiAssumptionPercent}%.`,
-      mix.aiAssumptionPercent > 40 ? "warn" : "info",
-    );
-    notice(
-      doc,
+    const mixNote =
       mix.aiAssumptionPercent > 40
-        ? "High AI assumption dependency — strengthen inputs and validate key assumptions before investment."
+        ? "High AI assumption dependency. Strengthen inputs and validate key assumptions before investment."
         : mix.aiAssumptionPercent > 30
-          ? "Medium AI assumption dependency — validate the key assumptions in the register."
-          : "Low AI assumption dependency — stronger confidence in the analysis.",
-      mix.aiAssumptionPercent > 40 ? "warn" : "info",
-    );
+          ? "Medium AI assumption dependency. Validate the key assumptions in the appendix register."
+          : "Low AI assumption dependency. Stronger confidence in the analysis.";
+    notice(doc, `Evidence mix — User input ${mix.userInputPercent}% · Web research ${mix.webResearchPercent}% · AI assumption ${mix.aiAssumptionPercent}%. ${mixNote}`, mix.aiAssumptionPercent > 40 ? "warn" : "info");
   }
 
-  /* 6. Claim Evidence Map */
-  if (report.claimEvidenceMap?.length) {
-    startSection(doc, "Evidence behind this report");
-    // 7-col table → falls back to card list inside placeTable (max 5 in main).
+  /* ===== 3. Feasibility Scorecard ===== */
+  // Compact scorecard: Dimension / Score / Driver / Concern / Action (5 cols).
+  startSection(doc, "Feasibility Scorecard");
+  const sx = report.scoreExplanation || [];
+  const findingByDim: Record<string, string> = {
+    financial: report.scores.financialFinding,
+    market: report.scores.marketFinding,
+    achievability: report.scores.achievabilityFinding,
+    operational: report.scores.operationalFinding,
+    risk: report.scores.riskFinding,
+    timing: report.scores.timingFinding,
+  };
+  placeTable(doc, {
+    head: [["Dimension", "Score", "Driver", "Concern", "Action"]],
+    body: sx.slice(0, 6).map((r) => {
+      const pos = (r.positiveDrivers || []).filter(Boolean)[0] || findingByDim[r.dimension] || "—";
+      const neg = (r.negativeDrivers || []).filter((x) => x && !/no specific issues/i.test(x))[0] || "—";
+      const act = (r.improvementActions || []).filter(Boolean)[0] || "—";
+      return [
+        { content: s(r.label), styles: { fontStyle: "bold" as const } },
+        { content: `${(r.score ?? 0).toFixed(1)}`, styles: { halign: "center" as const } },
+        s(pos),
+        s(neg),
+        s(act),
+      ];
+    }),
+    columnStyles: {
+      0: { cellWidth: 90 },
+      1: { cellWidth: 36, halign: "center" },
+      2: { cellWidth: 130 },
+      3: { cellWidth: 110 },
+      4: { cellWidth: CONTENT_W - 90 - 36 - 130 - 110 },
+    },
+    styles: { fontSize: 8.8 },
+  });
+
+  // FMART radar (single instance, guarded)
+  placeScorecardRadarOnly(doc, report, charts["fmart-radar"] ?? null);
+
+  /* ===== 4. Financial Feasibility ===== */
+  startSection(doc, "Financial Feasibility");
+  notice(
+    doc,
+    "A detailed 24-month financial model should be generated before funding approval. The summary below reflects the current feasibility estimate and should be validated with project-specific operating assumptions.",
+    "info",
+  );
+
+  const legacy = deriveLegacyFinancialSummary(report);
+  const finKpis: KpiItem[] = [
+    { label: "Investment range", value: legacy.investmentRange },
+    { label: "Break-even (base)", value: legacy.breakEven },
+    { label: "LTV : CAC", value: legacy.ltvCac },
+    { label: "CapEx (mid)", value: legacy.capExMid },
+    { label: "OpEx", value: legacy.opExMonthly },
+    { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+  ];
+  ensureSpace(doc, 200);
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 58, gap: 10 }) + 12;
+
+  // Revenue scenarios — compact 5-col
+  if (report.financials.scenarios?.length) {
+    subTitle(doc, "Revenue scenarios");
     placeTable(doc, {
-      head: [["Claim", "Section", "Mix (U/W/AI)", "Conf.", "How to strengthen"]],
-      body: report.claimEvidenceMap.map((c) => [
-        s(c.claimText), s(c.reportSection),
-        `${c.userInputPercent}/${c.webResearchPercent}/${c.aiAssumptionPercent}`,
-        s(c.confidence), s(c.userCanImproveBy),
+      head: [["Scenario", "Probability", "Customers / Yr 1", "Annual revenue", "Break-even"]],
+      body: report.financials.scenarios.map((sc) => [
+        s(sc.scenario), s(sc.probability), s(sc.subscribersYr1), s(sc.annualRevenue), s(sc.breakEven),
       ]),
-      columnStyles: {
-        0: { cellWidth: 170 },
-        1: { cellWidth: 80 },
-        2: { cellWidth: 60, halign: "center" },
-        3: { cellWidth: 40, halign: "center" },
-        4: { cellWidth: CONTENT_W - 350 },
-      },
-      styles: { fontSize: 8.5 },
+      styles: { fontSize: 9 },
     });
   }
 
-  /* 7. Market */
-  startSection(doc, "Market Analysis");
+  // CapEx chart commentary if captured
+  if (charts["capex-breakdown"]) {
+    placeChartCommentary(doc, {
+      caption: "CapEx breakdown",
+      imageUrl: charts["capex-breakdown"],
+      maxHeight: 180,
+    });
+  }
+
+  // Funding mix folded in
+  if (report.fundingMix?.length) {
+    subTitle(doc, "Funding mix");
+    placeTable(doc, {
+      head: [["Source", "Share", `Amount (${report.financials.currency || ""})`, "Rationale"]],
+      body: report.fundingMix.map((f) => [s(f.source), s(f.share), s(f.amount), s(f.rationale)]),
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: "bold" },
+        1: { cellWidth: 50, halign: "center" },
+        2: { cellWidth: 90 },
+        3: { cellWidth: CONTENT_W - 260 },
+      },
+      styles: { fontSize: 9 },
+    });
+    if (report.fundingAdvisory) notice(doc, `Advisory — ${s(report.fundingAdvisory)}`, "warn");
+  }
+
+  if (legacy.topFinancialRisks.length) {
+    subTitle(doc, "Top financial risks / validation gaps");
+    bulletList(doc, legacy.topFinancialRisks);
+  }
+
+  /* ===== 5. Market & Customer ===== */
+  startSection(doc, "Market & Customer");
   subTitle(doc, "Market sizing (TAM · SAM · SOM)");
   placeTable(doc, {
     head: [["Tier", "Label", "Value", "CAGR"]],
@@ -219,17 +241,21 @@ export async function exportReportToPdf(
     styles: { fontSize: 9 },
   });
 
-  placeChartCommentary(doc, {
-    caption: "Market growth — TAM vs SAM",
-    imageUrl: charts["market-growth"] ?? null,
-    maxHeight: 200,
-    fallbackMessage: "Market growth chart unavailable — verify dashboard rendered before exporting.",
-  });
+  if (charts["market-growth"]) {
+    placeChartCommentary(doc, {
+      caption: "Market growth — TAM vs SAM",
+      imageUrl: charts["market-growth"],
+      maxHeight: 180,
+      interpretation: report.market.tamCagr
+        ? `TAM growing at ${s(report.market.tamCagr)}; SAM expansion at ${s(report.market.samCagr) || "—"}.`
+        : undefined,
+    });
+  }
 
-  subTitle(doc, "Customer profile");
+  subTitle(doc, "Target customer");
   placeTable(doc, {
     body: [
-      ["Age & location", s(report.customer.ageLocation)],
+      ["Profile", s(report.customer.ageLocation)],
       ["Income", s(report.customer.income)],
       ["Goals", s(report.customer.goals)],
       ["Willingness to pay", s(report.customer.willingnessToPay)],
@@ -239,210 +265,277 @@ export async function exportReportToPdf(
     styles: { fontSize: 9 },
   });
 
-  /* 8. Competitive Landscape */
+  if (report.research) {
+    const r = report.research;
+    if (r.keySignals?.length) {
+      subTitle(doc, "Demand signals");
+      bulletList(doc, r.keySignals.slice(0, 4).map(s));
+    }
+    if (r.painPoints?.length) {
+      subTitle(doc, "Pain points");
+      bulletList(doc, r.painPoints.slice(0, 4).map(s));
+    }
+    if (r.overview) {
+      paragraph(doc, s(r.overview), { size: 9, italic: true, color: C.muted });
+    }
+  }
+
+  /* ===== 6. Competition & Positioning ===== */
   if (report.competitors?.length) {
-    startSection(doc, "Competitive Landscape");
+    startSection(doc, "Competition & Positioning");
     placeTable(doc, {
       head: [["Competitor", "Model", "Weakness", "Where they win"]],
       body: report.competitors.map((c) => [s(c.name), s(c.model), s(c.weakness), s(c.edge)]),
       columnStyles: {
-        0: { cellWidth: 100, fontStyle: "bold" },
-        1: { cellWidth: 110 },
+        0: { cellWidth: 110, fontStyle: "bold" },
+        1: { cellWidth: 100 },
         2: { cellWidth: 130 },
         3: { cellWidth: CONTENT_W - 340 },
       },
+      styles: { fontSize: 8.8 },
     });
-  }
 
-  /* 9. Market Research */
-  if (report.research) {
-    const r = report.research;
-    startSection(doc, "Market Research & Signals");
-    paragraph(doc, s(r.overview));
-    placeTable(doc, {
-      body: [["Confidence", s(r.confidence)], ["Sentiment", s(r.sentiment)]],
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 120, fillColor: C.surface } },
-      styles: { fontSize: 9 },
-    });
-    if (r.keySignals?.length)         { subTitle(doc, "Key signals");         bulletList(doc, r.keySignals.map(s)); }
-    if (r.painPoints?.length)         { subTitle(doc, "Pain points");         bulletList(doc, r.painPoints.map(s)); }
-    if (r.competitorMentions?.length) { subTitle(doc, "Competitor mentions"); bulletList(doc, r.competitorMentions.map(s)); }
-    if (r.redditSignals?.length)      { subTitle(doc, "Community signals");   bulletList(doc, r.redditSignals.map(s)); }
-    if (r.webSignals?.length)         { subTitle(doc, "Web signals");         bulletList(doc, r.webSignals.map(s)); }
-    if (r.citations?.length) {
-      subTitle(doc, "Citations");
-      placeTable(doc, {
-        head: [["Source", "Title", "Takeaway"]],
-        body: r.citations.slice(0, 8).map((c) => [s(c.source), s(c.title), s(c.takeaway)]),
-        columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 170 }, 2: { cellWidth: CONTENT_W - 260 } },
-        styles: { fontSize: 8.5 },
-      });
+    const drivers = deriveDecisionDrivers(report, inputs);
+    if (drivers.length) {
+      subTitle(doc, "Where this project can win");
+      bulletList(doc, drivers);
+    }
+    const exposures = (report.risks || [])
+      .filter((rk) => /market|competit|adoption|differentiat/i.test(rk.name))
+      .slice(0, 3)
+      .map((rk) => `${s(rk.name)} — ${s(rk.mitigation) || "needs mitigation."}`);
+    if (exposures.length) {
+      subTitle(doc, "Where this project is exposed");
+      bulletList(doc, exposures);
     }
   }
 
-  /* 10. Financial Plan */
-  startSection(doc, "Financial Plan");
-  const cur = report.financials.currency || "";
-  subTitle(doc, `Startup costs (CapEx) — ${cur}`);
-  placeTable(doc, {
-    head: [["Category", "Low", "High", "Notes"]],
-    body: [
-      ...report.financials.capEx.map((c) => [
-        s(c.category),
-        c.low.toLocaleString("en-US"),
-        c.high.toLocaleString("en-US"),
-        s(c.notes),
-      ]),
-      [{
-        content: "TOTAL",
-        styles: { fontStyle: "bold" as const, fillColor: C.softBlue, textColor: C.primary },
-      }, {
-        content: report.financials.capExTotal.low.toLocaleString("en-US"),
-        styles: { fontStyle: "bold" as const, fillColor: C.softBlue, textColor: C.primary, halign: "right" as const },
-      }, {
-        content: report.financials.capExTotal.high.toLocaleString("en-US"),
-        styles: { fontStyle: "bold" as const, fillColor: C.softBlue, textColor: C.primary, halign: "right" as const },
-      }, {
-        content: `Mid: ${report.financials.capExTotal.mid.toLocaleString("en-US")}`,
-        styles: { fontStyle: "bold" as const, fillColor: C.softBlue, textColor: C.primary },
-      }],
-    ],
-    columnStyles: {
-      0: { cellWidth: 150, fontStyle: "bold" },
-      1: { cellWidth: 70, halign: "right" },
-      2: { cellWidth: 70, halign: "right" },
-      3: { cellWidth: CONTENT_W - 290 },
-    },
-  });
-
-  placeChartCommentary(doc, {
-    caption: "CapEx breakdown",
-    imageUrl: charts["capex-breakdown"] ?? null,
-    maxHeight: 200,
-    fallbackMessage: "CapEx chart unavailable — verify dashboard rendered before exporting.",
-  });
-
-  subTitle(doc, `Monthly operating costs — ${cur}`);
-  placeTable(doc, {
-    head: [["Category", "Monthly", "Annual"]],
-    body: report.financials.opEx.map((o) => [
-      s(o.category),
-      o.monthly.toLocaleString("en-US"),
-      o.annual.toLocaleString("en-US"),
-    ]),
-    columnStyles: {
-      0: { cellWidth: CONTENT_W - 200, fontStyle: "bold" },
-      1: { cellWidth: 100, halign: "right" },
-      2: { cellWidth: 100, halign: "right" },
-    },
-  });
-
-  subTitle(doc, "Revenue scenarios");
-  placeTable(doc, {
-    head: [["Scenario", "Probability", "Customers / Yr 1", "Annual revenue", "Break-even"]],
-    body: report.financials.scenarios.map((sc) => [
-      s(sc.scenario), s(sc.probability), s(sc.subscribersYr1), s(sc.annualRevenue), s(sc.breakEven),
-    ]),
-    styles: { fontSize: 9 },
-  });
-  if (report.financials.ltvCacRatio) {
-    paragraph(doc, `LTV / CAC ratio (base case): ${s(report.financials.ltvCacRatio)}`, { italic: true });
-  }
-
-  /* 11. Risk Assessment */
+  /* ===== 7. Risk & Mitigation ===== */
   if (report.risks?.length) {
-    startSection(doc, "Risk Assessment");
+    startSection(doc, "Risk & Mitigation");
+    const critical = report.risks.filter((r) => /high|critical/i.test(`${r.level} ${r.impact}`));
+    if (critical.length) {
+      notice(
+        doc,
+        `${critical.length} high-severity risk${critical.length > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
+        "warn",
+      );
+    }
     placeTable(doc, {
-      head: [["Risk", "Prob.", "Impact", "Level", "Mitigation"]],
-      body: report.risks.map((r) => [s(r.name), s(r.probability), s(r.impact), s(r.level), s(r.mitigation)]),
-      columnStyles: {
-        0: { cellWidth: 140, fontStyle: "bold" },
-        1: { cellWidth: 50, halign: "center" },
-        2: { cellWidth: 50, halign: "center" },
-        3: { cellWidth: 50, halign: "center" },
-        4: { cellWidth: CONTENT_W - 290 },
-      },
-    });
-  }
-
-  /* 12. Funding Mix */
-  if (report.fundingMix?.length) {
-    startSection(doc, "Funding Mix");
-    placeTable(doc, {
-      head: [["Source", "Share", `Amount (${cur})`, "Rationale"]],
-      body: report.fundingMix.map((f) => [s(f.source), s(f.share), s(f.amount), s(f.rationale)]),
-      columnStyles: {
-        0: { cellWidth: 120, fontStyle: "bold" },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 100 },
-        3: { cellWidth: CONTENT_W - 280 },
-      },
-    });
-    if (report.fundingAdvisory) notice(doc, `Advisory — ${s(report.fundingAdvisory)}`, "warn");
-  }
-
-  /* 13. Strategic Recommendations + Next Steps */
-  if (report.recommendations?.length) {
-    startSection(doc, "Strategic Recommendations");
-    bulletList(doc, report.recommendations.map(s));
-  }
-  if (report.nextSteps?.length) {
-    startSection(doc, "Next Steps");
-    bulletList(doc, report.nextSteps.map(s), { numbered: true });
-  }
-
-  /* Appendix A — Project Brief */
-  startAppendix(doc, "Project Brief");
-  placeTable(doc, {
-    body: [
-      ["Project name", s(inputs.projectName)],
-      ["Industry", s(inputs.industry)],
-      ["Location", s(inputs.location)],
-      ["Description", s(inputs.description)],
-      ["Strategic objectives", s(inputs.strategicObjectives)],
-      ["Business model", s(inputs.businessModel)],
-      ["Revenue model", s(inputs.revenueModel)],
-      ["Founder experience", s(inputs.founderExperience)],
-      ["Budget range", s(inputs.budgetRange)],
-      ["Timeline", s(inputs.timeline)],
-      ["Team size", s(inputs.teamSize)],
-      ["Dependencies", s(inputs.dependencies)],
-      ["Assumptions", s(inputs.assumptions)],
-      ["Constraints", s(inputs.constraints)],
-      ["Success factors", s(inputs.successFactors)],
-      ["Known risks", s(inputs.knownRisks)],
-      ["Regulatory considerations", s(inputs.regulatoryConsiderations)],
-      ["Technology readiness", s(inputs.technologyReadiness)],
-    ].filter((row) => (row[1] || "").trim().length > 0),
-    columnStyles: { 0: { fontStyle: "bold", cellWidth: 150, fillColor: C.surface } },
-    styles: { fontSize: 9 },
-  });
-
-  /* Appendix B — Assumption Register */
-  const register: AssumptionRow[] = deriveAssumptionRegister(report, inputs);
-  if (register.length) {
-    startAppendix(doc, "Assumption Register");
-    placeTable(doc, {
-      head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
-      body: register.slice(0, 20).map((r) => [
-        s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
+      head: [["Risk", "Prob.", "Impact", "Severity", "Mitigation"]],
+      body: report.risks.map((r) => [
+        { content: s(r.name), styles: { fontStyle: "bold" as const } },
+        s(r.probability),
+        s(r.impact),
+        s(r.level),
+        s(r.mitigation),
       ]),
       columnStyles: {
-        0: { cellWidth: 160, fontStyle: "bold" },
-        1: { cellWidth: 70 },
-        2: { cellWidth: 60, halign: "center" },
-        3: { cellWidth: 100 },
-        4: { cellWidth: CONTENT_W - 390 },
+        0: { cellWidth: 140 },
+        1: { cellWidth: 46, halign: "center" },
+        2: { cellWidth: 46, halign: "center" },
+        3: { cellWidth: 56, halign: "center" },
+        4: { cellWidth: CONTENT_W - 288 },
       },
       styles: { fontSize: 8.8 },
     });
   }
 
-  /* Appendix C — Methodology */
+  /* ===== 8. Validation Roadmap ===== */
+  startSection(doc, "Validation Roadmap");
+  paragraph(
+    doc,
+    "What must be validated before funding or launch. Each item lists the assumption it strengthens, the evidence to collect, and the expected impact on decision confidence.",
+    { size: 9.5 },
+  );
+  const iqScore = report.inputQualityScore ?? iq.overall;
+  const iqLabel = iqScore >= 80 ? "Strong" : iqScore >= 60 ? "Adequate" : iqScore >= 40 ? "Needs improvement" : "Weak";
+  notice(doc, `Input quality: ${iqScore} / 100 — ${iqLabel}. Stronger inputs improve confidence; they do not automatically increase the feasibility score.`, "info");
+
+  const validations = deriveValidationItems(report, inputs);
+  if (validations.length) {
+    placeTable(doc, {
+      head: [["What to validate", "Strengthens", "Evidence to collect", "Impact"]],
+      body: validations.map((v) => [
+        { content: s(v.what), styles: { fontStyle: "bold" as const } },
+        s(v.strengthens),
+        s(v.evidence),
+        s(v.impact),
+      ]),
+      columnStyles: {
+        0: { cellWidth: 130 },
+        1: { cellWidth: 130 },
+        2: { cellWidth: CONTENT_W - 130 - 130 - 96 },
+        3: { cellWidth: 96 },
+      },
+      styles: { fontSize: 8.8 },
+    });
+  }
+
+  const roadmap = deriveRoadmap(report);
+  if (roadmap.length) {
+    subTitle(doc, "30 / 60 / 90 day plan");
+    roadmap.forEach((p) => {
+      subTitle(doc, p.window);
+      bulletList(doc, p.items);
+    });
+  }
+
+  /* ===== 9. Evidence & Source Quality ===== */
+  startSection(doc, "Evidence & Source Quality");
+
+  if (mix) {
+    paragraph(
+      doc,
+      `Evidence mix — User input ${mix.userInputPercent}% · Web research ${mix.webResearchPercent}% · AI assumption ${mix.aiAssumptionPercent}%.`,
+      { size: 9.5 },
+    );
+    if (mix.aiAssumptionPercent > 40) {
+      notice(doc, "High AI assumption dependency. Strengthen inputs and validate key assumptions before any investment or launch decision.", "warn");
+    }
+  }
+
+  // Top claims (max 5)
+  const claims = (report.claimEvidenceMap || []).slice(0, 5);
+  if (claims.length) {
+    subTitle(doc, "Top claims and their evidence");
+    placeTable(doc, {
+      head: [["Claim", "Mix (U/W/AI)", "Confidence", "How to strengthen"]],
+      body: claims.map((c) => [
+        { content: s(c.claimText), styles: { fontStyle: "bold" as const } },
+        `${c.userInputPercent}/${c.webResearchPercent}/${c.aiAssumptionPercent}`,
+        s(c.confidence),
+        s(c.userCanImproveBy),
+      ]),
+      columnStyles: {
+        0: { cellWidth: 200 },
+        1: { cellWidth: 70, halign: "center" },
+        2: { cellWidth: 60, halign: "center" },
+        3: { cellWidth: CONTENT_W - 330 },
+      },
+      styles: { fontSize: 8.8 },
+    });
+  }
+
+  // Curated citations (cleaned + capped)
+  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 7);
+  if (curated.length) {
+    subTitle(doc, "Top curated sources");
+    placeTable(doc, {
+      head: [["Source", "Title", "Takeaway", "Confidence"]],
+      body: curated.map((c) => [
+        { content: s(c.source), styles: { fontStyle: "bold" as const } },
+        s(c.title),
+        s(c.takeaway),
+        s(c.confidence || "—"),
+      ]),
+      columnStyles: {
+        0: { cellWidth: 90 },
+        1: { cellWidth: 140 },
+        2: { cellWidth: CONTENT_W - 90 - 140 - 60 },
+        3: { cellWidth: 60, halign: "center" },
+      },
+      styles: { fontSize: 8.5 },
+    });
+    paragraph(
+      doc,
+      `${curated.length} curated source${curated.length > 1 ? "s" : ""} shown. Full source list is available in the supplementary export.`,
+      { size: 8.5, italic: true, color: C.muted },
+    );
+  } else {
+    notice(doc, "No curated external sources met the quality threshold. Add competitor URLs or analyst citations to strengthen the evidence base.", "info");
+  }
+
+  /* ===================== APPENDICES ===================== */
+
+  /* Appendix A — Project Brief (grouped) */
+  startAppendix(doc, "Project Brief");
+  const briefGroup = (label: string, rows: Array<[string, string | undefined]>) => {
+    const filtered = rows.filter((r) => (r[1] || "").trim().length > 0);
+    if (!filtered.length) return;
+    subTitle(doc, label);
+    placeTable(doc, {
+      body: filtered.map(([k, v]) => [k, s(v)]),
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 150, fillColor: C.surface } },
+      styles: { fontSize: 9 },
+    });
+  };
+  briefGroup("Concept", [
+    ["Project name", inputs.projectName],
+    ["Industry", inputs.industry],
+    ["Location", inputs.location],
+    ["Description", inputs.description],
+    ["Strategic objectives", inputs.strategicObjectives],
+  ]);
+  briefGroup("Market", [
+    ["Business model", inputs.businessModel],
+    ["Revenue model", inputs.revenueModel],
+    ["Competitors", inputs.competitorUrls],
+  ]);
+  briefGroup("Resources", [
+    ["Budget range", inputs.budgetRange],
+    ["Timeline", inputs.timeline],
+    ["Team size", inputs.teamSize],
+    ["Founder experience", inputs.founderExperience],
+    ["Dependencies", inputs.dependencies],
+    ["Technology readiness", inputs.technologyReadiness],
+  ]);
+  briefGroup("Risks", [
+    ["Known risks", inputs.knownRisks],
+    ["Regulatory considerations", inputs.regulatoryConsiderations],
+    ["Constraints", inputs.constraints],
+  ]);
+  briefGroup("Assumptions", [
+    ["Assumptions", inputs.assumptions],
+    ["Success factors", inputs.successFactors],
+  ]);
+
+  /* Appendix B — Assumption Register (grouped) */
+  const register: AssumptionRow[] = deriveAssumptionRegister(report, inputs);
+  if (register.length) {
+    startAppendix(doc, "Assumption Register");
+    const bucket = (a: AssumptionRow): string => {
+      const t = `${a.assumption} ${a.riskIfWrong || ""}`.toLowerCase();
+      if (/market|tam|sam|demand|competitor|growth/.test(t)) return "Market";
+      if (/financ|revenue|cost|capex|opex|payback|ltv|cac|budget|funding|cash/.test(t)) return "Financial";
+      if (/operation|team|hiring|process|throughput|adoption|delivery/.test(t)) return "Operational";
+      if (/risk|complian|regulator|legal|security|privacy|safety/.test(t)) return "Risk / Compliance";
+      return "Operational";
+    };
+    const groups = new Map<string, AssumptionRow[]>();
+    register.forEach((a) => {
+      const g = bucket(a);
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g)!.push(a);
+    });
+    const order = ["Market", "Financial", "Operational", "Risk / Compliance"];
+    order.forEach((g) => {
+      const rows = groups.get(g);
+      if (!rows || !rows.length) return;
+      subTitle(doc, g);
+      placeTable(doc, {
+        head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
+        body: rows.slice(0, 12).map((r) => [
+          s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
+        ]),
+        columnStyles: {
+          0: { cellWidth: 150, fontStyle: "bold" },
+          1: { cellWidth: 60, halign: "center" },
+          2: { cellWidth: 56, halign: "center" },
+          3: { cellWidth: 110 },
+          4: { cellWidth: CONTENT_W - 376 },
+        },
+        styles: { fontSize: 8.6 },
+      });
+    });
+  }
+
+  /* Appendix C — Methodology (short) */
   startAppendix(doc, "Methodology");
-  paragraph(doc, s(report.methodology) || "Weighted multi-dimensional analysis (FMART) with grounded research signals.");
+  paragraph(doc, s(report.methodology) || "FMART 6-Dimension Weighted Scoring with grounded research synthesis.");
   const weights = report.scores.weights;
   if (weights) {
+    subTitle(doc, "FMART weights");
     placeTable(doc, {
       head: [["Dimension", "Weight"]],
       body: [
@@ -457,9 +550,20 @@ export async function exportReportToPdf(
       styles: { fontSize: 9 },
     });
   }
-  paragraph(doc, "Verdict thresholds: ≥ 7.5 PROCEED · 6.0–7.4 PROCEED WITH CAUTION · 4.5–5.9 REVISE · < 4.5 DO NOT PROCEED.", { size: 9, italic: true, color: C.muted });
+  subTitle(doc, "Confidence definitions");
+  bulletList(doc, [
+    "High — multiple independent sources or direct evidence.",
+    "Medium — at least one strong source or analogous benchmark.",
+    "Low — primarily AI assumption; requires validation.",
+  ]);
+  subTitle(doc, "Recommendation thresholds");
+  paragraph(
+    doc,
+    "Verdict thresholds: ≥ 7.5 PROCEED · 6.0 – 7.4 PROCEED WITH CAUTION · 4.5 – 5.9 REVISE · < 4.5 DO NOT PROCEED.",
+    { size: 9, italic: true, color: C.muted },
+  );
 
-  /* Appendix D — Version History (only if data exists) */
+  /* Appendix D — Version History (conditional) */
   if (versionFamily && versionFamily.length > 1) {
     startAppendix(doc, "Version History");
     placeTable(doc, {
@@ -473,16 +577,27 @@ export async function exportReportToPdf(
     });
   }
 
-  // -------- Finalize: TOC + page numbers --------
+  /* ---------- Finalize ---------- */
   finalizeTOC(doc);
   stampPageNumbers(doc);
-
-  // Save
   doc.pdf.save(fileName);
   return { fileName };
 }
 
-/** Defensive chart capture — never throws to the caller. */
+/* ----------------------------- helpers ------------------------------------- */
+
+/** Lightweight radar-only placement for the Scorecard section. */
+function placeScorecardRadarOnly(
+  doc: ReturnType<typeof createDoc>,
+  _report: FeasibilityReport,
+  fmartRadarUrl: string | null,
+) {
+  if (!fmartRadarUrl) return;
+  subTitle(doc, "FMART 6-Dimension Radar");
+  placeChartImage(doc, fmartRadarUrl, 200);
+}
+
+
 async function safeCapture(rootEl: HTMLElement | null) {
   try { return await captureActiveCharts(rootEl); }
   catch (e) { console.warn("[pdf] chart capture failed:", e); return {}; }
