@@ -111,6 +111,16 @@ export function deriveDecisionBlockers(
 
 /* ----------------------------- executive memo ------------------------------ */
 
+/** Extract a compact break-even / payback string (e.g. "Month 30"). */
+export function shortBreakEven(raw: string | undefined): string {
+  const t = s(raw || "").trim();
+  if (!t) return "";
+  const m = t.match(/(month\s*\d+(?:\s*[-–—]\s*\d+)?|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
+}
+
 export interface MemoSections {
   recommendation: string[];
   whyCanWork: string[];
@@ -140,7 +150,8 @@ export function deriveMemoSections(
   const moneyLogic: string[] = [];
   const fin = report.financials;
   if (fin.investmentRange) moneyLogic.push(`Investment: ${withCurrency(fin.investmentRange, fin.currency)}.`);
-  if (fin.breakEvenSummary) moneyLogic.push(`Break-even: ${firstSentence(s(fin.breakEvenSummary))}`);
+  const be = shortBreakEven(fin.breakEvenSummary);
+  if (be) moneyLogic.push(labels.isInternal ? `Payback: ${be} (operational savings).` : `Break-even: ${be}.`);
   if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
   const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
   if (base) moneyLogic.push(labels.baseCaseTemplate(s(base.annualRevenue), s(base.subscribersYr1)));
@@ -170,6 +181,75 @@ export function deriveMemoSections(
     validation: validation.slice(0, 3),
     next30Days: next30Days.slice(0, 3),
   };
+}
+
+/* ------------------------- executive summary narrative --------------------- */
+
+/** Build 3–4 short narrative paragraphs for the Executive Summary page. */
+export function deriveExecutiveSummary(
+  report: FeasibilityReport,
+  inputs: ConceptInputs,
+): string[] {
+  const labels = projectLabels(inputs);
+  const verdict = s(report.decision?.verdict || report.scores.verdict);
+  const conf = report.decision?.overallConfidencePct;
+  const overall = (report.scores.overall ?? 0).toFixed(1);
+  const fin = report.financials;
+  const cur = fin.currency || "";
+  const overview = s(inputs.description) || s(report.research?.overview);
+  const objectives = s(inputs.strategicObjectives);
+  const industry = s(inputs.industry);
+  const location = s(inputs.location);
+  const topRisks = (report.risks || [])
+    .filter((r) => /high|critical/i.test(r.level))
+    .slice(0, 2)
+    .map((r) => s(r.name));
+  const be = shortBreakEven(fin.breakEvenSummary);
+  const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
+  const baseRev = base ? withCurrency(s(base.annualRevenue), cur) : "";
+
+  const out: string[] = [];
+
+  // Para 1 — what & why now
+  const p1: string[] = [];
+  p1.push(
+    `${s(inputs.projectName) || "This project"} is a ${labels.isInternal ? "strategic internal" : "commercial"} initiative${industry ? ` in ${industry}` : ""}${location ? ` (${location})` : ""}.`,
+  );
+  if (overview) p1.push(firstSentence(overview));
+  if (objectives) p1.push(`Its stated objectives are to ${objectives.replace(/\.$/, "").toLowerCase()}.`);
+  out.push(p1.filter(Boolean).join(" "));
+
+  // Para 2 — verdict & why conditional
+  const verdictReason = verdict && /conditional|caution|improve/i.test(verdict)
+    ? "The verdict is conditional because several key assumptions still rest on AI inference or external benchmarks rather than direct evidence from this project."
+    : verdict && /proceed/i.test(verdict)
+      ? "The signal is positive across the FMART-O dimensions, but execution discipline will determine the outcome."
+      : "The current evidence base does not yet support a confident go decision and inputs should be strengthened first.";
+  out.push(
+    `Overall FMART-O score is ${overall} / 10${conf != null ? ` with ${conf}% decision confidence` : ""}, leading to a "${verdict || "—"}" recommendation. ${verdictReason}`,
+  );
+
+  // Para 3 — money / value logic
+  const bits: string[] = [];
+  if (fin.investmentRange) bits.push(`The expected investment is ${withCurrency(s(fin.investmentRange), cur)}`);
+  if (be) bits.push(labels.isInternal ? `with payback around ${be} driven by operational savings` : `with break-even around ${be}`);
+  if (baseRev) bits.push(`and a base case of ${baseRev} ${labels.isInternal ? "in annual savings" : "in annual revenue"}`);
+  out.push(
+    bits.length
+      ? `${bits.join(", ")}. ${labels.isInternal ? "The value case depends on converting manual effort, duplicated tooling, and governance risk into measurable cost avoidance." : "The value case depends on customer acquisition holding to plan and unit economics improving as the product scales."}`
+      : `A detailed financial model is required before funding approval. ${labels.isInternal ? "Savings, payback, and adoption assumptions all need stakeholder validation." : "Revenue, cost, and unit-economics assumptions all need stakeholder validation."}`,
+  );
+
+  // Para 4 — risks & what must be validated
+  const riskTxt = topRisks.length
+    ? `Principal risks include ${topRisks.join(" and ")}.`
+    : "No critical risks were flagged, but the assumption register should be reviewed before commitment.";
+  const valTxt = labels.isInternal
+    ? "Before funding, validate internal demand, baseline cost of the current process, integration scope with legacy systems, and signed sponsor commitment from the priority departments."
+    : "Before funding, validate customer demand, pricing, competitive positioning, and the unit economics underpinning the base case.";
+  out.push(`${riskTxt} ${valTxt}`);
+
+  return out.filter(Boolean);
 }
 
 /* --------------------------- validation roadmap ---------------------------- */
@@ -221,15 +301,42 @@ export interface RoadmapPhase {
   items: string[];
 }
 
-export function deriveRoadmap(report: FeasibilityReport): RoadmapPhase[] {
+export function deriveRoadmap(report: FeasibilityReport, inputs?: ConceptInputs): RoadmapPhase[] {
   const next = report.nextSteps?.length ? report.nextSteps : report.recommendations || [];
   const safe = next.map(s).filter(Boolean);
-  const phase: RoadmapPhase[] = [
-    { window: "Next 30 days", items: safe.slice(0, 3) },
-    { window: "Days 31 – 60", items: safe.slice(3, 6) },
-    { window: "Days 61 – 90", items: safe.slice(6, 9) },
+  const isInternal = inputs ? projectLabels(inputs).isInternal : false;
+
+  const defaults30 = [
+    "Confirm executive sponsor, owner, and target decision date.",
+    isInternal
+      ? "Document baseline cost, hours, and tools for the current manual process."
+      : "Schedule 5–10 customer discovery interviews with the target segment.",
+    "Lock the scope of a minimum credible pilot or MVP.",
   ];
-  return phase.filter((p) => p.items.length > 0);
+  const defaults60 = [
+    isInternal
+      ? "Confirm written participation from 1–2 priority departments."
+      : "Validate pricing and willingness-to-pay with 3–5 prospects.",
+    "Finalize vendor / technology choices and the integration plan.",
+    "Build a detailed financial model with revised assumptions.",
+  ];
+  const defaults90 = isInternal
+    ? [
+        "Run a time-boxed pilot with 1–2 high-impact departments.",
+        "Measure reporting time reduction, adoption rate, and training completion against the baseline.",
+        "Prepare a funding decision pack with validated cost-avoidance assumptions.",
+      ]
+    : [
+        "Run a paid pilot or early-access cohort with target customers.",
+        "Measure conversion, retention, and unit economics against the base case.",
+        "Prepare a funding decision pack with validated revenue and CAC assumptions.",
+      ];
+
+  return [
+    { window: "Next 30 days", items: (safe.slice(0, 3).length ? safe.slice(0, 3) : defaults30).slice(0, 4) },
+    { window: "Days 31 – 60", items: (safe.slice(3, 6).length ? safe.slice(3, 6) : defaults60).slice(0, 4) },
+    { window: "Days 61 – 90", items: (safe.slice(6, 9).length ? safe.slice(6, 9) : defaults90).slice(0, 4) },
+  ];
 }
 
 /* -------------------------- legacy financial summary ----------------------- */
