@@ -384,7 +384,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 2 — Market Growth: TAM vs SAM</SubTitle>
-          <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
+          <div data-pdf-chart="market-growth"><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></div>
 
           <SubTitle>2.2 Target Customer Profile</SubTitle>
           <table className="w-full border-collapse text-[11px]">
