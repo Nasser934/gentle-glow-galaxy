@@ -61,10 +61,28 @@ export function confidencePercent(raw: unknown): number | null {
   let n = typeof raw === "string" ? parseFloat(raw.replace(/[%,\s]/g, "")) : Number(raw);
   if (!Number.isFinite(n)) return null;
   if (n < 0) n = 0;
-  if (n <= 1) n = n * 100;
+  if (n > 0 && n <= 1) n = n * 100;
+  else if (n > 1 && n <= 10) n = n * 10;
   while (n > 100) n = n / 10;
   return Math.round(n);
 }
+
+const getCitations = (report: any): any[] => {
+  if (!report) return [];
+  if (Array.isArray(report.research?.citations)) return report.research.citations;
+  if (Array.isArray(report.sources)) return report.sources;
+  if (Array.isArray(report.research?.sources)) return report.research.sources;
+  if (Array.isArray(report.citations)) return report.citations;
+  return [];
+};
+const isHighRisk = (rk: any): boolean => {
+  const vals = [rk?.level, rk?.severity, rk?.impact, rk?.riskLevel, rk?.priority];
+  return vals.some((v) => typeof v === "string" && /^(high|critical|severe)$/i.test(v.trim()));
+};
+const hasWeakMitigation = (rk: any): boolean => {
+  const m = (rk?.mitigation || rk?.mitigationPlan || "").toString().trim();
+  return m.length < 8;
+};
 
 const wordCount = (s: string | undefined) => (s || "").trim().split(/\s+/).filter(Boolean).length;
 const pickStatus = (wc: number, strong = 25, ok = 10): InputStatus =>
@@ -76,16 +94,24 @@ const STATUS_SCORE: Record<InputStatus, number> = {
   complete: 100, needs_improvement: 65, weak: 35, missing: 0,
 };
 
-/** Strip internal/QA/debug wording from consumer-facing strings. */
+/** Replace internal/QA/debug wording with consumer-safe phrasing. */
+const FORBIDDEN_PATTERNS: Array<[RegExp, string]> = [
+  [/\bqa[ -]?failed\b/gi, "evidence is limited"],
+  [/\bfallback used\b/gi, "needs validation"],
+  [/\btemplate mismatch\b/gi, "input detail is incomplete"],
+  [/\bsource notes? empty\b/gi, "evidence is limited"],
+  [/\braw (edge|function) error\b/gi, "needs validation"],
+  [/\binternal repair attempt\b/gi, "needs validation"],
+  [/\brepair attempt\b/gi, "needs validation"],
+  [/\bdeveloper (diagnostics?|error)\b/gi, "needs validation"],
+  [/\breport quality weak\b/gi, "input detail is incomplete"],
+  [/\bdebug\b/gi, ""],
+];
 export function sanitizeForConsumer(text: unknown): string {
   if (text == null) return "";
-  return String(text)
-    .replace(
-      /\b(qa[ -]?failed|fallback used|template mismatch|source notes empty|raw (edge|function) error|internal repair attempt|developer (diagnostics?|error)|report quality weak|repair attempt|debug)\b/gi,
-      "",
-    )
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  let out = String(text);
+  for (const [re, sub] of FORBIDDEN_PATTERNS) out = out.replace(re, sub);
+  return out.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])/g, "$1").trim();
 }
 
 /** Deep-walk an object and sanitize every string leaf. */
@@ -195,7 +221,7 @@ export function assessInputQuality(inputs: any) {
 /* ---------------- Evidence Mix ---------------- */
 export function deriveEvidenceMix(report: any, inputs: any) {
   const iq = assessInputQuality(inputs);
-  const citations = report?.research?.citations?.length || 0;
+  const citations = getCitations(report).length;
   const confAvg = report?.scores?.confidence
     ? Object.values(report.scores.confidence).reduce((a: number, b: any) => a + (Number(b) || 0), 0) / 6
     : 50;
@@ -238,9 +264,9 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
     } else if (dim === "market") {
       if (report?.market?.tamValue) positives.push(`TAM estimated at ${report.market.tamValue}.`);
       if (inputs?.location) positives.push(`Geography specified (${inputs.location}).`);
-      if ((report?.research?.citations?.length ?? 0) > 4) positives.push("Multiple public sources support market context.");
+      if (getCitations(report).length > 4) positives.push("Multiple public sources support market context.");
       if (!inputs?.location) negatives.push("No geography provided.");
-      if ((report?.research?.citations?.length ?? 0) < 3) negatives.push("Limited public evidence captured.");
+      if (getCitations(report).length < 3) negatives.push("Limited public evidence captured.");
       if (allWeak.includes("Competitors")) negatives.push("Few competitors supplied.");
     } else if (dim === "achievability") {
       if (inputs?.technologyReadiness) positives.push(`Technology readiness: ${inputs.technologyReadiness}.`);
@@ -291,7 +317,7 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
 /* ---------------- Claim Evidence Map ---------------- */
 export function deriveClaimEvidenceMap(report: any, inputs: any): ClaimEvidenceRow[] {
   const mix = deriveEvidenceMix(report, inputs);
-  const cites = (report?.research?.citations || []).map((c: any) => c.source || c.title).filter(Boolean) as string[];
+  const cites = getCitations(report).map((c: any) => c?.source || c?.title || c?.url).filter(Boolean) as string[];
   const conf = (n: number): ClaimEvidenceRow["confidence"] => n >= 70 ? "High" : n >= 45 ? "Medium" : "Low";
   const rows: ClaimEvidenceRow[] = [
     {
@@ -393,16 +419,23 @@ export function computeVerdict(args: {
     blockers.push("Analysis confidence is below 50% — validation required before any commitment.");
   }
   if (args.criticalRisksWithoutMitigation) {
-    if (verdict === "PROCEED") verdict = "CONDITIONAL PROCEED WITH VALIDATION";
-    blockers.push("Critical risks have no mitigation. Address before proceeding.");
+    if (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED") {
+      verdict = "CONDITIONAL PROCEED WITH VALIDATION";
+    }
+    blockers.push("Critical/high risk has no mitigation. Address before proceeding.");
   }
 
   let nextStepHint = "Refine assumptions and validate with stakeholders.";
-  if (args.marketEvidenceWeak) nextStepHint = "Run market validation (customer interviews, sizing sources) before any launch decision.";
-  if (args.financialsMissing) nextStepHint = "Complete financial validation (pricing, CAC, break-even) before execution.";
+  if (args.marketEvidenceWeak) nextStepHint = "Validate market demand (customer interviews, sizing sources) before any launch decision.";
+  if (args.financialsMissing) nextStepHint = "Complete financial validation (pricing, CAC, churn, gross margin, break-even) before execution.";
 
   let recommendationLabel = verdict.charAt(0) + verdict.slice(1).toLowerCase();
-  if (args.aiAssumptionPct > 40) recommendationLabel += " · Needs validation";
+  if (args.aiAssumptionPct > 40 && !/Needs validation/i.test(recommendationLabel)) {
+    recommendationLabel += " · Needs validation";
+  }
+  if (args.criticalRisksWithoutMitigation && !/Needs validation/i.test(recommendationLabel)) {
+    recommendationLabel += " · Needs validation";
+  }
 
   return { verdict, recommendationLabel, nextStepHint, blockers, overallConfidencePct: args.overallConfidencePct };
 }
@@ -445,10 +478,17 @@ export function ensureEvidenceFields(report: any, inputs: any): any {
     ? Object.values(r.scores.confidence).reduce((a: number, b: any) => a + (Number(b) || 0), 0) / 6
     : 50;
   const overallConfPct = Math.max(0, Math.min(100, confidencePercent(confAvg) ?? 50));
-  const marketEvidenceWeak = (r.research?.citations?.length ?? 0) < 3 || (r.scores?.market ?? 0) < 6;
-  const financialsMissing = !inputs.revenueModel || !inputs.budgetRange || (r.scores?.financial ?? 0) < 5;
+  const marketEvidenceWeak = getCitations(r).length < 3 || (r.scores?.market ?? 0) < 6;
+  const assumptionsThin = !(inputs?.assumptions && String(inputs.assumptions).trim().split(/\s+/).length >= 8);
+  const financialsMissing =
+    !inputs?.revenueModel ||
+    !inputs?.budgetRange ||
+    assumptionsThin ||
+    !r.financials?.breakEvenSummary ||
+    !r.financials?.ltvCacRatio ||
+    (r.scores?.financial ?? 0) < 5;
   const criticalRisksWithoutMitigation = (r.risks || []).some(
-    (rk: any) => rk.level === "High" && (!rk.mitigation || rk.mitigation.trim().length < 8),
+    (rk: any) => isHighRisk(rk) && hasWeakMitigation(rk),
   );
 
   const decision = computeVerdict({
