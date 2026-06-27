@@ -49,7 +49,8 @@ export const NotificationsBell = () => {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   if (!user) return null;
   const unread = items.filter((n) => !n.read_at).length;
