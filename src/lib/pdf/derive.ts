@@ -256,7 +256,7 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
     .map((r) => `${s(r.name)} — ${s(r.mitigation) || "mitigation requires validation."}`);
 
   return {
-    investmentRange: fin.investmentRange ? `${s(fin.investmentRange)} ${cur}`.trim() : "Requires validation",
+    investmentRange: fin.investmentRange ? withCurrency(fin.investmentRange, cur) : "Requires validation",
     breakEven: s(fin.breakEvenSummary) || "Requires validation",
     ltvCac: s(fin.ltvCacRatio) || "Requires validation",
     capExMid: fin.capExTotal?.mid != null ? `${fin.capExTotal.mid.toLocaleString("en-US")} ${cur}`.trim() : "Requires validation",
