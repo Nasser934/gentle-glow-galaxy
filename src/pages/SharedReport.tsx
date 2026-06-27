@@ -64,7 +64,7 @@ const SharedReport = () => {
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: row.output, inputs: row.inputs } })}
+            <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: enrichedReport, inputs: row.inputs, slug: row.slug, reportId: row.id } })}
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Download className="mr-1.5 h-3.5 w-3.5" /> Open full report
             </Button>
