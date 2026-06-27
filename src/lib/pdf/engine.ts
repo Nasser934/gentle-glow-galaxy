@@ -508,7 +508,7 @@ export function finalizeTOC(doc: Doc) {
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(10);
   doc.toc.forEach((entry) => {
     if (y > BOTTOM_LIMIT - 20) return;
-    const title = `${entry.number}. ${entry.title}`;
+    const title = entry.number > 0 ? `${entry.number}. ${entry.title}` : entry.title;
     const pageStr = String(entry.page);
     setColor(pdf, C.text); pdf.setFont("helvetica", "bold");
     pdf.text(title, MARGIN, y);
