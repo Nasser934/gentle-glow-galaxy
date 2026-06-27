@@ -245,6 +245,38 @@ const Analyze = () => {
     </div>
   );
 
+  // Phase 4 hardening: render a safe blocked view instead of the wizard.
+  if (isReRun && rerunBlocked) {
+    return (
+      <div className="min-h-screen bg-background">
+        <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+          <div className="container mx-auto flex h-14 items-center justify-between px-6">
+            <button onClick={() => navigate("/")} className="flex items-center gap-2.5 text-foreground transition-colors hover:text-primary">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
+                <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
+            </button>
+            <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
+          </div>
+        </nav>
+        <div className="container mx-auto max-w-xl px-6 py-16">
+          <div className="rounded-xl border border-warning/40 bg-warning/10 p-6 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
+              <AlertCircle className="h-4 w-4 text-warning" />
+              {rerunBlocked.reason === "not_owner" ? "Read-only report" : "Cannot improve this report"}
+            </div>
+            <p className="text-muted-foreground">{rerunBlocked.message}</p>
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" onClick={() => navigate("/analyze")}>Start a new analysis</Button>
+              <Button size="sm" variant="outline" onClick={() => navigate("/dashboard")}>Back to dashboard</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
