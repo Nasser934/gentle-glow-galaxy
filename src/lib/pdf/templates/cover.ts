@@ -10,6 +10,39 @@ import {
   drawKpiGrid, type KpiItem, type RGB,
 } from "../engine";
 import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
+import { projectLabels } from "../project";
+import { sanitizeForConsumer } from "@/lib/evidence";
+
+const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
+
+/** Trim to a single short bullet (≤ ~110 chars), one sentence. */
+function trimBullets(items: string[], max: number): string[] {
+  return (items || []).slice(0, max).map((it) => {
+    const first = (it || "").split(/(?<=[.!?])\s/)[0] || it;
+    return first.length > 110 ? first.slice(0, 107).trimEnd() + "…" : first;
+  }).filter(Boolean);
+}
+
+/** Extract a compact break-even value, e.g. "Month 20". Strips trailing clauses. */
+function shortenBreakEven(raw: string | undefined): string {
+  const t = s(raw).trim();
+  if (!t) return "";
+  const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  // Sentence start clause up to first delimiter
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
+}
+
+function shortenPayback(raw: string | undefined): string {
+  return shortenBreakEven(raw);
+}
+
+function confidenceBand(pct: number): string {
+  if (pct >= 75) return "High";
+  if (pct >= 55) return "Medium";
+  return "Low — strengthen inputs";
+}
 
 const verdictColor = (v: string): RGB => {
   const u = (v || "").toUpperCase();
