@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   AlertCircle, ArrowUpRight, CheckCircle2, ChevronRight, Edit3,
-  FileWarning, Gauge, History, Info, ShieldAlert, Sparkles,
+  FileWarning, Gauge, History, Info, ShieldAlert, Sparkles, GitBranch,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { listReportVersions } from "@/lib/reports";
 import type {
   ConceptInputs, FeasibilityReport, InputFieldAssessment,
   InputStatus, ReportVersion,
@@ -391,6 +393,70 @@ export const LegacyEvidenceNotice = ({ report, reportId, canEdit }: { report: Fe
   );
 };
 
+/* -------- Report Family (DB-backed list of all versions) -------- */
+type FamilyRow = { id: string; slug: string; title: string; created_at: string; parent_report_id: string | null };
+export const ReportFamilyPanel = ({
+  reportId, currentReportId, canEdit,
+}: { reportId: string; currentReportId: string; canEdit?: boolean }) => {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<FamilyRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    listReportVersions(reportId)
+      .then((data) => { if (!cancelled) setRows((data as any) || []); })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [reportId]);
+  if (loading) return null;
+  if (!rows || rows.length <= 1) return null;
+  const currentIdx = rows.findIndex((r) => r.id === currentReportId);
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <GitBranch className="h-4 w-4 text-primary" /> Report family
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {rows.length} version{rows.length === 1 ? "" : "s"} of this analysis
+          {currentIdx >= 0 ? ` · viewing v${currentIdx + 1}` : ""}.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-border rounded-md border border-border">
+          {rows.map((r, i) => {
+            const isCurrent = r.id === currentReportId;
+            return (
+              <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px]">v{i + 1}</Badge>
+                    <span className="truncate font-medium text-foreground">{r.title}</span>
+                    {isCurrent && <span className="text-[10px] uppercase tracking-wider text-primary">current</span>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
+                </div>
+                {!isCurrent && (
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/r/${r.slug}`)} className="h-7 px-2 text-[11px]">
+                    Open
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {canEdit && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Re-running this analysis adds a new version to the family — the original is never overwritten.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 /* -------- All-in-one render -------- */
 export const EvidenceSections = ({
   report, reportId, canEdit,
@@ -408,6 +474,7 @@ export const EvidenceSections = ({
       <EvidenceMixPanel report={report} />
     </div>
     <ClaimEvidenceTable report={report} />
+    {reportId && <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} />}
     <VersionComparison report={report} />
   </div>
 );

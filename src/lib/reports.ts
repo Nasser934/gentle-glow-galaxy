@@ -46,7 +46,15 @@ export async function saveRerunReport(params: {
 }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
+
+  // Ownership: walk to the root and verify the signed-in user owns it.
   const rootId = await getReportRootId(params.parentReportId);
+  const root = await getReportWithOwnership(rootId);
+  if (!root) throw new Error("Original report not found.");
+  if (root.user_id !== user.id) {
+    throw new Error("Only the report owner can create a new version.");
+  }
+
   const { data, error } = await supabase
     .from("reports")
     .insert({
@@ -90,11 +98,22 @@ export async function getReportWithOwnership(id: string) {
   return data as { id: string; user_id: string; parent_report_id: string | null; slug: string; is_public: boolean } | null;
 }
 
-/** Walk to the root of the version chain. If id has no parent it IS the root. */
+/**
+ * Walk to the root of the version chain. Loops up parent_report_id with
+ * a max-depth guard (10) and a visited-set to defend against cycles.
+ */
 export async function getReportRootId(reportId: string): Promise<string> {
-  const row = await getReportWithOwnership(reportId);
-  if (!row) return reportId;
-  return row.parent_report_id ?? row.id;
+  const visited = new Set<string>();
+  let currentId = reportId;
+  for (let i = 0; i < 10; i++) {
+    if (visited.has(currentId)) return currentId; // cycle guard
+    visited.add(currentId);
+    const row = await getReportWithOwnership(currentId);
+    if (!row) return currentId;
+    if (!row.parent_report_id || row.parent_report_id === row.id) return row.id;
+    currentId = row.parent_report_id;
+  }
+  return currentId; // depth cap reached — treat as root
 }
 
 /** List the root and every child version, ordered oldest -> newest. */
