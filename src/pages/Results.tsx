@@ -82,9 +82,13 @@ const Results = () => {
   const [savingShare, setSavingShare] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const report = location.state?.report as FeasibilityReport | undefined;
+  const rawReport = location.state?.report as FeasibilityReport | undefined;
   const inputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
+  const report = useMemo(
+    () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
+    [rawReport, inputs],
+  );
 
   useEffect(() => {
     if (existingSlug) setShareSlug(existingSlug);
