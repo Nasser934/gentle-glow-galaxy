@@ -70,6 +70,21 @@ const Analyze = () => {
     return () => { cancelled = true; };
   }, [isReRun, reportId]);
 
+  // Map focus field → wizard step, jump there once inputs are loaded.
+  const FOCUS_TO_STEP: Record<string, number> = {
+    projectName: 0, industry: 0, location: 0, description: 0, strategicObjectives: 0,
+    businessModel: 0, revenueModel: 0, founderExperience: 0, competitorUrls: 0,
+    budgetRange: 1, timeline: 1, teamSize: 1, dependencies: 1,
+    assumptions: 2, constraints: 2, successFactors: 2,
+    knownRisks: 3, regulatoryConsiderations: 3, technologyReadiness: 3,
+  };
+  useEffect(() => {
+    if (!focusField || loadingPrevious) return;
+    const target = FOCUS_TO_STEP[focusField];
+    if (typeof target === "number") setStep(target);
+  }, [focusField, loadingPrevious]);
+
+
   // Input quality assessment (live)
   const quality = useMemo(() => assessInputQuality(inputs), [inputs]);
   const weakKeys = useMemo(
