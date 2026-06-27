@@ -29,17 +29,67 @@ type EssayField =
 
 const Analyze = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const reportId = params.get("reportId") || "";
+  const focusField = params.get("focus") || "";
+  const isReRun = !!reportId;
+
   const [step, setStep] = useState(0);
   const [inputs, setInputs] = useState<ConceptInputs>(initialInputs);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [loadingPrevious, setLoadingPrevious] = useState(isReRun);
+  const [previousReport, setPreviousReport] = useState<any>(null);
+  const [previousInputs, setPreviousInputs] = useState<ConceptInputs | null>(null);
 
   const [brief, setBrief] = useState("");
   const [isAutoFilling, setIsAutoFilling] = useState(false);
-  const [showBrief, setShowBrief] = useState(true);
+  const [showBrief, setShowBrief] = useState(!isReRun);
   const [completing, setCompleting] = useState<EssayField | null>(null);
 
   const set = (field: keyof ConceptInputs, value: string) =>
     setInputs((prev) => ({ ...prev, [field]: value }));
+
+  // Pre-fill from previous report when ?reportId= is present
+  useEffect(() => {
+    if (!isReRun) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const row = await getReportById(reportId);
+        if (!row) { toast.error("Previous report not found."); return; }
+        if (cancelled) return;
+        setInputs(row.inputs);
+        setPreviousInputs(row.inputs);
+        setPreviousReport(row.output);
+        toast.success("Previous inputs loaded. Edit weak fields, then re-run.");
+      } catch (e: any) {
+        toast.error(e?.message || "Could not load previous report.");
+      } finally {
+        if (!cancelled) setLoadingPrevious(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isReRun, reportId]);
+
+  // Input quality assessment (live)
+  const quality = useMemo(() => assessInputQuality(inputs), [inputs]);
+  const weakKeys = useMemo(
+    () => new Set(quality.fields.filter((f) => f.status === "missing" || f.status === "weak" || f.status === "needs_improvement").map((f) => f.key)),
+    [quality],
+  );
+  const suggestions: Record<string, string> = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const f of quality.fields) if (weakKeys.has(f.key)) m[f.key as string] = f.suggestion;
+    return m;
+  }, [quality, weakKeys]);
+
+  const fieldHint = (key: keyof ConceptInputs) =>
+    isReRun && weakKeys.has(key) ? (
+      <p className="mt-1 flex items-start gap-1 text-[11px] text-warning">
+        <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{suggestions[key as string]}</span>
+      </p>
+    ) : null;
 
   const handleAutoFill = async () => {
     if (brief.trim().length < 10) {
@@ -100,7 +150,6 @@ const Analyze = () => {
     try {
       const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
       if (error) {
-        // FunctionsHttpError exposes the response body via .context
         let detail = error.message;
         try {
           const ctx: any = (error as any).context;
@@ -110,13 +159,35 @@ const Analyze = () => {
         throw new Error(detail);
       }
       if (data?.error) throw new Error(data.error);
-      navigate("/results", { state: { report: data, inputs } });
+
+      // Enrich with evidence layer
+      let enriched = ensureEvidenceFields(data, inputs);
+
+      // If this is a re-run, carry version history forward and append diff
+      if (isReRun && previousReport && previousInputs) {
+        const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
+        const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
+        const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
+        enriched = { ...enriched, reportVersions: [...history, versionEntry] };
+        try {
+          const saved = await saveReport(inputs, enriched);
+          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug } });
+          return;
+        } catch (e) {
+          // fall through — still navigate so user sees results
+          console.warn("Save new version failed", e);
+        }
+      }
+
+      navigate("/results", { state: { report: enriched, inputs } });
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
     } finally {
       setIsAnalyzing(false);
     }
   };
+
+
 
   const EssayLabel = ({ field, children }: { field: EssayField; children: React.ReactNode }) => (
     <div className="flex items-center justify-between">
