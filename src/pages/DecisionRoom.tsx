@@ -12,6 +12,8 @@ import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/fo
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
 import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types/analysis";
 import { toast } from "sonner";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
@@ -90,7 +92,8 @@ const DecisionRoom = () => {
     );
   }
 
-  const { inputs, output: report, title, demo, slug } = row;
+  const { inputs, output: rawReport, title, demo, slug } = row;
+  const report = ensureEvidenceFields(rawReport, inputs);
   const overallConfPct = confidencePercent(
     report.scores.confidence
       ? Object.values(report.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6
@@ -321,6 +324,9 @@ const DecisionRoom = () => {
             </Button>
           </div>
         </Section>
+
+        {/* Consumer Evidence & Improvement Layer */}
+        <EvidenceSections report={report} reportId={demo ? undefined : reportId} canEdit={!demo} />
       </div>
     </div>
   );

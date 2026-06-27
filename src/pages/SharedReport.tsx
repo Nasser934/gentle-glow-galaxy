@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { CommentsPanel } from "@/components/report/CommentsPanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 const SharedReport = () => {
   const { slug = "" } = useParams();
@@ -44,6 +46,7 @@ const SharedReport = () => {
   }
 
   const isOwner = user?.id === row.user_id;
+  const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -61,7 +64,7 @@ const SharedReport = () => {
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: row.output, inputs: row.inputs } })}
+            <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: enrichedReport, inputs: row.inputs, slug: row.slug, reportId: row.id } })}
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Download className="mr-1.5 h-3.5 w-3.5" /> Open full report
             </Button>
@@ -80,7 +83,12 @@ const SharedReport = () => {
           {isOwner && <StatusControl report={row} onChanged={(s) => setRow({ ...row, status: s })} />}
         </div>
 
-        <InteractiveDashboard report={row.output} inputs={row.inputs} />
+        <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />
+
+        <div className="mt-8">
+          <EvidenceSections report={enrichedReport} reportId={row.id} canEdit={isOwner} />
+        </div>
+
 
         <div className="mt-10 border-t border-border pt-6">
           <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-medium tracking-tight">

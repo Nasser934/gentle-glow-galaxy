@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, BarChart3, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,6 +19,8 @@ import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
 import { saveReport } from "@/lib/reports";
 import { isInternalProject } from "@/lib/format";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 /* ------------------------------------------------------------------ */
 /* Page chrome                                                         */
@@ -77,23 +79,30 @@ const Results = () => {
   const pdfRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
   const [savingShare, setSavingShare] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const report = location.state?.report as FeasibilityReport | undefined;
+  const rawReport = location.state?.report as FeasibilityReport | undefined;
   const inputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
+  const existingId = location.state?.reportId as string | undefined;
+  const report = useMemo(
+    () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
+    [rawReport, inputs],
+  );
 
   useEffect(() => {
     if (existingSlug) setShareSlug(existingSlug);
-  }, [existingSlug]);
+    if (existingId) setReportId(existingId);
+  }, [existingSlug, existingId]);
 
   // Auto-save once on first load
   useEffect(() => {
     if (!report || !inputs || existingSlug || shareSlug) return;
     let cancelled = false;
     saveReport(inputs, report)
-      .then((d) => { if (!cancelled) setShareSlug(d.slug); })
+      .then((d) => { if (!cancelled) { setShareSlug(d.slug); setReportId(d.id); } })
       .catch((e) => console.warn("auto-save failed", e));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,7 +164,7 @@ const Results = () => {
     let slug = shareSlug;
     if (!slug) {
       setSavingShare(true);
-      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); }
+      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); setReportId(d.id); }
       catch (e: any) { toast.error(e.message); setSavingShare(false); return; }
       setSavingShare(false);
     }
@@ -218,6 +227,22 @@ const Results = () => {
           <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
         <InteractiveDashboard report={report} inputs={inputs} />
+
+        {/* Consumer Evidence & Improvement Layer */}
+        <div className="mt-8 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
+              <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
+            </div>
+            {reportId && (
+              <Button size="sm" onClick={() => navigate(`/analyze?reportId=${reportId}`)} className="gap-1.5">
+                <Edit3 className="h-3.5 w-3.5" /> Improve report inputs
+              </Button>
+            )}
+          </div>
+          <EvidenceSections report={report} reportId={reportId || undefined} canEdit />
+        </div>
       </section>
 
       {/* Divider between the two on-screen pages */}

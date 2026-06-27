@@ -33,6 +33,14 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
   return data;
 }
 
+/** Save as a new version (separate row) carrying version history forward. */
+export async function saveReportVersion(
+  inputs: ConceptInputs,
+  output: FeasibilityReport,
+) {
+  return saveReport(inputs, output);
+}
+
 export async function getReportBySlug(slug: string) {
   const { data, error } = await supabase
     .from("reports")
