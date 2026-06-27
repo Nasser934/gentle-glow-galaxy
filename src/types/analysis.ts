@@ -219,6 +219,92 @@ export interface FeasibilityReport {
 
   recommendations: string[];     // strategic recommendations bullets
   nextSteps: string[];
+
+  // ----------------------------------------------------------
+  // Consumer Evidence & Improvement Layer (all optional — added
+  // by ensureEvidenceFields() so old reports stay compatible).
+  // ----------------------------------------------------------
+  inputQualityScore?: number; // 0-100
+  inputCompleteness?: {
+    overall: number;
+    missingFields: string[];
+    weakFields: string[];
+    contradictoryFields: string[];
+  };
+  evidenceMix?: {
+    userInputPercent: number;
+    webResearchPercent: number;
+    aiAssumptionPercent: number;
+  };
+  scoreExplanation?: ScoreExplanationRow[];
+  claimEvidenceMap?: ClaimEvidenceRow[];
+  reportVersions?: ReportVersion[];
+  decision?: DecisionVerdict;
+  legacyEvidence?: boolean; // true when fields were derived (not authored by AI)
+}
+
+export type InputStatus = "complete" | "needs_improvement" | "weak" | "missing";
+
+export interface InputFieldAssessment {
+  key: keyof ConceptInputs;
+  label: string;
+  status: InputStatus;
+  impact: string;
+  suggestion: string;
+}
+
+export interface ScoreExplanationRow {
+  dimension: "financial" | "market" | "achievability" | "risk" | "timing" | "operational";
+  label: string;
+  score: number;
+  positiveDrivers: string[];
+  negativeDrivers: string[];
+  missingEvidence: string[];
+  improvementActions: string[];
+  decisionImplication: string;
+}
+
+export interface ClaimEvidenceRow {
+  claimId: string;
+  claimText: string;
+  reportSection: string;
+  userInputPercent: number;
+  webResearchPercent: number;
+  aiAssumptionPercent: number;
+  confidence: "High" | "Medium" | "Low";
+  sources: string[];
+  userCanImproveBy: string;
+}
+
+export interface ReportVersion {
+  versionId: string;
+  createdAt: string;
+  changedInputs: string[];
+  previousScore: number;
+  newScore: number;
+  scoreDelta: number;
+  previousConfidence: number;
+  newConfidence: number;
+  confidenceDelta: number;
+  previousAiAssumptionPercent: number;
+  newAiAssumptionPercent: number;
+  summary: string;
+}
+
+export type ConsumerVerdict =
+  | "PROCEED"
+  | "CONDITIONAL PROCEED"
+  | "CONDITIONAL PROCEED WITH VALIDATION"
+  | "IMPROVE INPUTS BEFORE INVESTMENT DECISION"
+  | "REVISE"
+  | "DO NOT PROCEED";
+
+export interface DecisionVerdict {
+  verdict: ConsumerVerdict;
+  recommendationLabel: string;
+  nextStepHint: string;
+  blockers: string[];
+  overallConfidencePct: number;
 }
 
 // ============================================================
