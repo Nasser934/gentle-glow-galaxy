@@ -253,7 +253,7 @@ const Results = () => {
             <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
             <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
           </div>
-          <EvidenceSections report={report} reportId={reportId || undefined} canEdit />
+          <EvidenceSections report={report} reportId={reportId || undefined} canEdit={canEdit} />
         </div>
       </section>
 
