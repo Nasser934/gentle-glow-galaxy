@@ -218,6 +218,22 @@ const Analyze = () => {
       </nav>
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
+        {isReRun && (
+          <div className="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-4">
+            <div className="flex items-start gap-2 text-sm">
+              <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div>
+                <div className="font-semibold text-foreground">Improving report inputs</div>
+                <p className="text-xs text-muted-foreground">
+                  {loadingPrevious
+                    ? "Loading previous inputs…"
+                    : `Previous inputs are loaded. ${quality.missing.length + quality.weak.length} field(s) need detail. Edit them and re-run — a new version will be created.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Brief auto-fill */}
         {showBrief && (
           <motion.div
