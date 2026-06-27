@@ -109,16 +109,14 @@ export async function exportReportToPdf(
   const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
-    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation" },
-    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation", sub: mix && mix.aiAssumptionPercent > 40 ? "Strengthen inputs" : undefined },
+    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
-    { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation" },
     labels.isInternal
-      ? { label: "Payback", value: s(report.financials.breakEvenSummary) ? "See break-even" : "Requires validation", sub: "Internal ROI metric" }
-      : { label: "LTV : CAC", value: s(report.financials.ltvCacRatio) || "Requires validation" },
+      ? { label: "Payback / Break-even", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+      : { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
   ];
-  reserveBlock(doc, 220);
-  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 3, rowH: 68, gap: 12 }) + 18;
+  reserveBlock(doc, 200);
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
 
   if (mix) {
     const mixNote =
