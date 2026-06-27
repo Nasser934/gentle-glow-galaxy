@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   AlertCircle, ArrowUpRight, CheckCircle2, ChevronRight, Edit3,
-  FileWarning, Gauge, History, Info, ShieldAlert, Sparkles,
+  FileWarning, Gauge, History, Info, ShieldAlert, Sparkles, GitBranch,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { listReportVersions } from "@/lib/reports";
 import type {
   ConceptInputs, FeasibilityReport, InputFieldAssessment,
   InputStatus, ReportVersion,
