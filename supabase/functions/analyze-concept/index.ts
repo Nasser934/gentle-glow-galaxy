@@ -638,7 +638,7 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
     const parsed = JSON.parse(args);
 
     // Re-shape financials.capEx totals into the client shape
-    const report = {
+    const baseReport: any = {
       reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
       classification: "Confidential",
@@ -668,7 +668,18 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
       fundingAdvisory: parsed.fundingAdvisory,
       recommendations: parsed.recommendations,
       nextSteps: parsed.nextSteps,
+      // Pass through model-provided evidence layer; ensureEvidenceFields fills any gaps.
+      inputQualityScore: parsed.inputQualityScore,
+      inputCompleteness: parsed.inputCompleteness,
+      evidenceMix: parsed.evidenceMix,
+      scoreExplanation: parsed.scoreExplanation,
+      claimEvidenceMap: parsed.claimEvidenceMap,
     };
+
+    // Server-side: fill missing evidence fields, compute authoritative verdict,
+    // then sanitize every string leaf to strip internal/QA wording.
+    const enriched = ensureEvidenceFields(baseReport, inputs);
+    const report = deepSanitize(enriched);
 
     return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
