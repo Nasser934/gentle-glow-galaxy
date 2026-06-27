@@ -359,7 +359,7 @@ const Results = () => {
           </table>
 
           <SubTitle>Figure 1 — FMART 6-Dimension Weighted Scoring (Overall: {report.scores.overall.toFixed(1)}/10)</SubTitle>
-          <FMARTRadar scores={report.scores} />
+          <div data-pdf-chart="fmart-radar"><FMARTRadar scores={report.scores} /></div>
         </ReportPage>
 
         {/* ============== PAGE 3 — MARKET ANALYSIS ============== */}
