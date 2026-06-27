@@ -136,43 +136,39 @@ export function deriveMemoSections(
   const whyCanWork = deriveDecisionDrivers(report, inputs);
   const whyCanFail = deriveDecisionBlockers(report, inputs);
 
+  const labels = projectLabels(inputs);
   const moneyLogic: string[] = [];
   const fin = report.financials;
-  if (fin.investmentRange) moneyLogic.push(`Investment range: ${withCurrency(fin.investmentRange, fin.currency)}.`);
-  if (fin.breakEvenSummary) moneyLogic.push(`Break-even (base): ${s(fin.breakEvenSummary)}.`);
-  if (fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
+  if (fin.investmentRange) moneyLogic.push(`Investment: ${withCurrency(fin.investmentRange, fin.currency)}.`);
+  if (fin.breakEvenSummary) moneyLogic.push(`Break-even: ${firstSentence(s(fin.breakEvenSummary))}`);
+  if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
   const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
-  if (base) moneyLogic.push(`Base case: ${s(base.annualRevenue)} revenue, ${s(base.subscribersYr1)} customers (Yr 1).`);
+  if (base) moneyLogic.push(labels.baseCaseTemplate(s(base.annualRevenue), s(base.subscribersYr1)));
   if (!moneyLogic.length) {
-    moneyLogic.push("A detailed financial model should be generated and validated against project-specific operating assumptions before funding approval.");
+    moneyLogic.push("Detailed financial model required before funding approval.");
   }
 
   const validation: string[] = [];
   const iq = assessInputQuality(inputs);
   for (const f of [...iq.missing, ...iq.weak].slice(0, 3)) {
-    validation.push(`Validate: ${s(f)}.`);
+    validation.push(`Validate ${s(f).toLowerCase()}.`);
   }
   for (const r of (report.risks || []).filter((x) => /high/i.test(x.level)).slice(0, 2)) {
     validation.push(`Confirm mitigation for ${s(r.name)}.`);
   }
-  if (decision?.nextStepHint && validation.length < 4) {
-    validation.push(firstSentence(s(decision.nextStepHint)));
-  }
-  if (!validation.length) {
-    validation.push("Run a focused validation sprint before funding approval.");
-  }
+  if (!validation.length) validation.push("Run a focused validation sprint before funding approval.");
 
   const next30Days: string[] = [];
   const seed = (report.nextSteps?.length ? report.nextSteps : report.recommendations) || [];
-  for (const item of seed.slice(0, 4)) next30Days.push(firstSentence(s(item)));
+  for (const item of seed.slice(0, 3)) next30Days.push(firstSentence(s(item)));
 
   return {
-    recommendation,
-    whyCanWork: whyCanWork.length ? whyCanWork : ["Strong overall feasibility profile across the FMART dimensions."],
-    whyCanFail: whyCanFail.length ? whyCanFail : ["No material blockers detected — confirm during validation."],
-    moneyLogic: moneyLogic.slice(0, 4),
-    validation: validation.slice(0, 4),
-    next30Days: next30Days.slice(0, 4),
+    recommendation: recommendation.slice(0, 3),
+    whyCanWork: (whyCanWork.length ? whyCanWork : ["Strong overall feasibility profile across the FMART-O dimensions."]).slice(0, 3),
+    whyCanFail: (whyCanFail.length ? whyCanFail : ["No material blockers detected — confirm during validation."]).slice(0, 3),
+    moneyLogic: moneyLogic.slice(0, 3),
+    validation: validation.slice(0, 3),
+    next30Days: next30Days.slice(0, 3),
   };
 }
 
