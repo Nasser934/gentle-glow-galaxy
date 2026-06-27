@@ -27,30 +27,35 @@ export const NotificationsBell = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const userId = user?.id;
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const { data } = await supabase
       .from("notifications")
       .select("id, kind, title, body, url, read_at, created_at")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20);
     setItems((data ?? []) as Notification[]);
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!user) { setItems([]); return; }
+    if (!userId) { setItems([]); return; }
+
     load();
+
+    const channelName = `notifications:${userId}:${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(`notifications:${user.id}`, { config: { private: true } })
+      .channel(channelName)
       .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         () => load(),
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [load, userId]);
 
   if (!user) return null;
   const unread = items.filter((n) => !n.read_at).length;
