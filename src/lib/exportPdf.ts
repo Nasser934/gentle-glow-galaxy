@@ -106,16 +106,19 @@ export async function exportReportToPdf(
     "Decision-grade KPIs at a glance. Values labelled \"Requires validation\" need stakeholder confirmation before commitment.",
     { size: 9, italic: true, color: C.muted },
   );
+  const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
-    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10` },
+    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
     { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation" },
-    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation" },
-    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation" },
+    { label: "AI assumptions", value: mix ? `${mix.aiAssumptionPercent}%` : "Requires validation", sub: mix && mix.aiAssumptionPercent > 40 ? "Strengthen inputs" : undefined },
+    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
     { label: "Break-even (base)", value: s(report.financials.breakEvenSummary) || "Requires validation" },
-    { label: "LTV : CAC", value: s(report.financials.ltvCacRatio) || "Requires validation" },
+    labels.isInternal
+      ? { label: "Payback", value: s(report.financials.breakEvenSummary) ? "See break-even" : "Requires validation", sub: "Internal ROI metric" }
+      : { label: "LTV : CAC", value: s(report.financials.ltvCacRatio) || "Requires validation" },
   ];
-  ensureSpace(doc, 200);
-  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 3, rowH: 64, gap: 10 }) + 16;
+  reserveBlock(doc, 220);
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 3, rowH: 68, gap: 12 }) + 18;
 
   if (mix) {
     const mixNote =
@@ -163,40 +166,51 @@ export async function exportReportToPdf(
     styles: { fontSize: 8.8 },
   });
 
-  // FMART radar (single instance, guarded)
+  // FMART-O radar (single instance, guarded)
   placeScorecardRadarOnly(doc, report, charts["fmart-radar"] ?? null);
 
   /* ===== 4. Financial Feasibility ===== */
   startSection(doc, "Financial Feasibility");
+  // Keep intro + KPI grid + first table together — don't strand the heading.
+  reserveBlock(doc, 330);
   notice(
     doc,
-    "A detailed 24-month financial model should be generated before funding approval. The summary below reflects the current feasibility estimate and should be validated with project-specific operating assumptions.",
+    "The summary below reflects the current feasibility estimate. A detailed financial model should be validated with project-specific operating assumptions before funding approval.",
     "info",
   );
 
   const legacy = deriveLegacyFinancialSummary(report);
-  const finKpis: KpiItem[] = [
-    { label: "Investment range", value: legacy.investmentRange },
-    { label: "Break-even (base)", value: legacy.breakEven },
-    { label: "LTV : CAC", value: legacy.ltvCac },
-    { label: "CapEx (mid)", value: legacy.capExMid },
-    { label: "OpEx", value: legacy.opExMonthly },
-    { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
-  ];
-  ensureSpace(doc, 200);
-  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 58, gap: 10 }) + 12;
+  const finKpis: KpiItem[] = labels.isInternal
+    ? [
+        { label: "Investment range", value: legacy.investmentRange },
+        { label: "Break-even / Payback", value: legacy.breakEven },
+        { label: "CapEx (mid)", value: legacy.capExMid },
+        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+        { label: "Internal ROI", value: "See base case", sub: "Annual savings × Year 1" },
+      ]
+    : [
+        { label: "Investment range", value: legacy.investmentRange },
+        { label: "Break-even (base)", value: legacy.breakEven },
+        { label: "LTV : CAC", value: legacy.ltvCac },
+        { label: "CapEx (mid)", value: legacy.capExMid },
+        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+      ];
+  doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
 
-  // Revenue scenarios — compact 5-col
+  // Revenue / Savings scenarios — compact 5-col
   if (report.financials.scenarios?.length) {
-    subTitle(doc, "Revenue scenarios");
+    subTitle(doc, labels.isInternal ? "Savings scenarios" : "Revenue scenarios");
     placeTable(doc, {
-      head: [["Scenario", "Probability", "Customers / Yr 1", "Annual revenue", "Break-even"]],
+      head: [["Scenario", "Probability", labels.customersYr1Label, labels.annualRevenueLabel, "Break-even"]],
       body: report.financials.scenarios.map((sc) => [
         s(sc.scenario), s(sc.probability), s(sc.subscribersYr1), s(sc.annualRevenue), s(sc.breakEven),
       ]),
       styles: { fontSize: 9 },
     });
   }
+
 
   // CapEx chart commentary if captured
   if (charts["capex-breakdown"]) {
