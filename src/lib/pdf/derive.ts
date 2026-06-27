@@ -261,3 +261,37 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
     topFinancialRisks,
   };
 }
+
+/* -------------------------- assumption classification ---------------------- */
+
+const BUCKET_KEYWORDS: Array<[string, RegExp]> = [
+  // Order matters — most specific first.
+  ["Market",            /\b(tam|sam|som|market\s*size|market\s*growth|cagr|customers?|user\s*demand|willing(ness)?\s*to\s*(pay|fund)|adoption\s*rate|target\s*segment|competit(or|ive|ion)|differentiat|positioning|brand)\b/i],
+  ["Financial",         /\b(invest(ment)?|capex|opex|revenue|saving|cost(s)?|cash|funding|payback|break[\s-]?even|roi|ltv|cac|arr|mrr|pricing|margin|burn|runway)\b/i],
+  ["Risk / Compliance", /\b(regulat|complian|legal|policy|security|privacy|gdpr|pdpa|safety|data\s*quality|integration\s*risk|vendor\s*risk)\b/i],
+  ["Operational",       /\b(team|hiring|capacity|timeline|delivery|process|workflow|throughput|stakeholder|vendor|technology\s*read|infrastructure|department|operation|deploy)\b/i],
+];
+
+/** Classify an assumption into Market / Financial / Operational / Risk. */
+export function bucketAssumption(text: string): string {
+  const t = (text || "").toLowerCase();
+  for (const [bucket, re] of BUCKET_KEYWORDS) {
+    if (re.test(t)) return bucket;
+  }
+  return "Operational";
+}
+
+/* -------------------------- citation confidence ---------------------------- */
+
+/** Heuristic confidence for a citation when the model didn't supply one. */
+export function inferCitationConfidence(c: { source?: string; title?: string; takeaway?: string; confidence?: string }): string {
+  const supplied = (c.confidence || "").trim();
+  if (supplied && supplied !== "—") return supplied;
+  const text = `${c.source || ""} ${c.title || ""}`.toLowerCase();
+  const body = (c.takeaway || "").trim();
+  const isOfficial = /(gov|ministry|world\s*bank|imf|oecd|statista|gartner|mckinsey|deloitte|pwc|kpmg|ey|forrester|idc|nielsen|euromonitor|sama|stats|bureau)/i.test(text);
+  const isSpecific = /\d/.test(body) && body.length > 40;
+  if (isOfficial && isSpecific) return "High";
+  if (isOfficial || isSpecific) return "Medium";
+  return "Low";
+}
