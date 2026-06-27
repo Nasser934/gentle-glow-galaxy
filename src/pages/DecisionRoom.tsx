@@ -12,6 +12,8 @@ import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/fo
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
 import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types/analysis";
 import { toast } from "sonner";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
