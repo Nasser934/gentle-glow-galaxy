@@ -28,11 +28,13 @@ const COLORS = {
   softBlue:      [239, 246, 255] as [number, number, number], // #eff6ff
 };
 
-const verdictColor = (v: string): [number, number, number] =>
-  v === "PROCEED" ? COLORS.success
-  : v === "PROCEED WITH CAUTION" ? COLORS.warning
-  : v === "REVISE" ? [234, 88, 12]
-  : COLORS.destructive;
+const verdictColor = (v: string): [number, number, number] => {
+  const s = (v || "").toUpperCase();
+  if (s === "PROCEED") return COLORS.success;
+  if (s.startsWith("CONDITIONAL") || s === "PROCEED WITH CAUTION" || s === "IMPROVE INPUTS BEFORE INVESTMENT DECISION") return COLORS.warning;
+  if (s === "REVISE") return [234, 88, 12];
+  return COLORS.destructive;
+};
 
 const PAGE_W = 595.28; // A4 portrait pt
 const PAGE_H = 841.89;
