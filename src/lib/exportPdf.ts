@@ -511,21 +511,20 @@ export async function exportReportToPdf(
     ["Success factors", inputs.successFactors],
   ]);
 
-  /* Appendix B — Assumption Register (grouped) */
+  /* Appendix B — Assumption Register (grouped, balanced page splits) */
   const register: AssumptionRow[] = deriveAssumptionRegister(report, inputs);
   if (register.length) {
     startAppendix(doc, "Assumption Register");
-    const bucket = (a: AssumptionRow): string => {
-      const t = `${a.assumption} ${a.riskIfWrong || ""}`.toLowerCase();
-      if (/market|tam|sam|demand|competitor|growth/.test(t)) return "Market";
-      if (/financ|revenue|cost|capex|opex|payback|ltv|cac|budget|funding|cash/.test(t)) return "Financial";
-      if (/operation|team|hiring|process|throughput|adoption|delivery/.test(t)) return "Operational";
-      if (/risk|complian|regulator|legal|security|privacy|safety/.test(t)) return "Risk / Compliance";
-      return "Operational";
-    };
+    paragraph(
+      doc,
+      "Assumptions are grouped by domain. Internal-project assumptions use savings / payback metrics rather than SaaS LTV : CAC.",
+      { size: 9, italic: true, color: C.muted, gap: 8 },
+    );
     const groups = new Map<string, AssumptionRow[]>();
     register.forEach((a) => {
-      const g = bucket(a);
+      const g = bucketAssumption(`${a.assumption} ${a.riskIfWrong || ""}`);
+      // Drop LTV/CAC-only assumptions when this is an internal project.
+      if (labels.isInternal && /\b(ltv|cac|churn|arr|mrr|subscriber)\b/i.test(a.assumption) && !/saving|payback|department|workflow/i.test(a.assumption)) return;
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(a);
     });
@@ -533,10 +532,12 @@ export async function exportReportToPdf(
     order.forEach((g) => {
       const rows = groups.get(g);
       if (!rows || !rows.length) return;
+      // Keep group heading with at least 2 rows together.
+      reserveBlock(doc, 110);
       subTitle(doc, g);
       placeTable(doc, {
         head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
-        body: rows.slice(0, 12).map((r) => [
+        body: rows.slice(0, 10).map((r) => [
           s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
         ]),
         columnStyles: {
@@ -551,21 +552,25 @@ export async function exportReportToPdf(
     });
   }
 
-  /* Appendix C — Methodology (short) */
-  startAppendix(doc, "Methodology");
-  paragraph(doc, s(report.methodology) || "FMART 6-Dimension Weighted Scoring with grounded research synthesis.");
+  /* Appendix C — Methodology */
+  startAppendix(doc, "FMART-O Methodology");
+  paragraph(doc, "6-Dimension Weighted Scoring", { size: 11, color: C.muted, gap: 8 });
+  paragraph(
+    doc,
+    s(report.methodology) || "FMART-O 6-Dimension Weighted Scoring blends user inputs, web research and analyst-style synthesis. The 'O' is Operational feasibility — added to the traditional FMART (Financial, Market, Achievability, Risk, Timing) framework so cross-functional execution risk is scored explicitly.",
+  );
   const weights = report.scores.weights;
   if (weights) {
-    subTitle(doc, "FMART weights");
+    subTitle(doc, "FMART-O weights");
     placeTable(doc, {
       head: [["Dimension", "Weight"]],
       body: [
-        ["Financial", `${Math.round((weights.financial || 0) * 100)}%`],
-        ["Market", `${Math.round((weights.market || 0) * 100)}%`],
+        ["Financial",     `${Math.round((weights.financial || 0) * 100)}%`],
+        ["Market",        `${Math.round((weights.market || 0) * 100)}%`],
         ["Achievability", `${Math.round((weights.achievability || 0) * 100)}%`],
-        ["Risk (inverse)", `${Math.round((weights.risk || 0) * 100)}%`],
-        ["Timing", `${Math.round((weights.timing || 0) * 100)}%`],
-        ["Operational", `${Math.round((weights.operational || 0) * 100)}%`],
+        ["Risk (inverse)",`${Math.round((weights.risk || 0) * 100)}%`],
+        ["Timing",        `${Math.round((weights.timing || 0) * 100)}%`],
+        ["Operational",   `${Math.round((weights.operational || 0) * 100)}%`],
       ],
       columnStyles: { 0: { cellWidth: 200, fontStyle: "bold" }, 1: { cellWidth: 80, halign: "center" } },
       styles: { fontSize: 9 },
@@ -578,10 +583,16 @@ export async function exportReportToPdf(
     "Low — primarily AI assumption; requires validation.",
   ]);
   subTitle(doc, "Recommendation thresholds");
+  bulletList(doc, [
+    "≥ 7.5 — Proceed",
+    "6.0 – 7.4 — Conditional Proceed",
+    "4.5 – 5.9 — Revise",
+    "< 4.5 — Do Not Proceed",
+  ]);
   paragraph(
     doc,
-    "Verdict thresholds: ≥ 7.5 PROCEED · 6.0 – 7.4 PROCEED WITH CAUTION · 4.5 – 5.9 REVISE · < 4.5 DO NOT PROCEED.",
-    { size: 9, italic: true, color: C.muted },
+    "This methodology is intended to support structured feasibility judgment, not replace financial, legal or technical due diligence.",
+    { size: 9, italic: true, color: C.muted, gap: 4 },
   );
 
   /* Appendix D — Version History (conditional) */
