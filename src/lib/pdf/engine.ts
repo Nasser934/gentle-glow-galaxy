@@ -208,18 +208,18 @@ export function startSection(doc: Doc, title: string): number {
   setDraw(pdf, C.primary); pdf.setLineWidth(0.8);
   pdf.line(MARGIN, doc.y + 4, MARGIN + 24, doc.y + 4);
   doc.toc.push({ number: n, title: safeTitle, page: pdf.getCurrentPageInfo().pageNumber });
-  doc.y += 20;
+  doc.y += 26;
   return n;
 }
 
 export function subTitle(doc: Doc, text: string) {
   beginBlock(doc, 36);
-  doc.y += 2;
+  doc.y += 6;
   const { pdf } = doc;
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(9.5);
   setColor(pdf, [51, 65, 85]);
   pdf.text((text || "").toUpperCase(), MARGIN, doc.y);
-  doc.y += 12;
+  doc.y += 14;
 }
 
 // ---------- typography primitives ----------
@@ -233,9 +233,9 @@ export function paragraph(
   doc.pdf.setFontSize(size);
   setColor(doc.pdf, opts.color ?? C.text);
   const lines = doc.pdf.splitTextToSize(safe, CONTENT_W) as string[];
-  const lh = size * 1.35;
+  const lh = size * 1.4;
   for (const ln of lines) { ensureSpace(doc, lh); doc.pdf.text(ln, MARGIN, doc.y); doc.y += lh; }
-  doc.y += opts.gap ?? 3;
+  doc.y += opts.gap ?? 6;
 }
 
 export function bulletList(doc: Doc, items: string[], opts: { numbered?: boolean; size?: number } = {}) {
@@ -247,14 +247,14 @@ export function bulletList(doc: Doc, items: string[], opts: { numbered?: boolean
     const marker = opts.numbered ? `${idx + 1}.` : "•";
     const indent = 14;
     const lines = doc.pdf.splitTextToSize(text, CONTENT_W - indent) as string[];
-    ensureSpace(doc, lh * lines.length + 2);
+    ensureSpace(doc, lh * lines.length + 4);
     setColor(doc.pdf, C.primary); doc.pdf.setFont("helvetica", "bold");
     doc.pdf.text(marker, MARGIN, doc.y);
     doc.pdf.setFont("helvetica", "normal"); setColor(doc.pdf, C.text);
     lines.forEach((ln, i) => doc.pdf.text(ln, MARGIN + indent, doc.y + i * lh));
-    doc.y += lh * lines.length + 2;
+    doc.y += lh * lines.length + 5;
   });
-  doc.y += 2;
+  doc.y += 4;
 }
 
 export function kvLine(doc: Doc, label: string, value: string | undefined) {
