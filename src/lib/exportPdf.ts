@@ -40,6 +40,7 @@ import { placeExecutiveMemo } from "./pdf/templates/memo";
 import {
   deriveMemoSections, deriveLegacyFinancialSummary, deriveValidationItems,
   deriveRoadmap, deriveDecisionDrivers, bucketAssumption, inferCitationConfidence,
+  deriveExecutiveSummary,
 } from "./pdf/derive";
 import { projectLabels } from "./pdf/project";
 import { cleanCitations } from "./pdf/citations";
@@ -105,7 +106,18 @@ export async function exportReportToPdf(
   const decision = report.decision;
   const mix = report.evidenceMix;
 
-  /* ===== 1. Executive Decision Memo ===== */
+  /* ===== 1. Executive Summary (narrative) ===== */
+  startSection(doc, "Executive Summary");
+  paragraph(
+    doc,
+    "A short narrative for executives who want context before reading the memo. The bullets that follow in the Decision Memo summarise the same view in scannable form.",
+    { size: 9, italic: true, color: C.muted, gap: 8 },
+  );
+  for (const para of deriveExecutiveSummary(report, inputs)) {
+    paragraph(doc, para, { size: 10, gap: 8 });
+  }
+
+  /* ===== 2. Executive Decision Memo ===== */
   startSection(doc, "Executive Decision Memo");
   placeExecutiveMemo(doc, deriveMemoSections(report, inputs));
 
@@ -122,7 +134,7 @@ export async function exportReportToPdf(
     { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
       : { label: "Break-even (base)", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
   ];
   reserveBlock(doc, 200);
