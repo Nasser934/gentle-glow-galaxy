@@ -17,7 +17,7 @@ import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { DashboardSnapshot } from "@/components/report/DashboardSnapshot";
-import { saveReport, getReportWithOwnership } from "@/lib/reports";
+import { saveReport, getReportWithOwnership, listReportVersions } from "@/lib/reports";
 import { isInternalProject } from "@/lib/format";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
