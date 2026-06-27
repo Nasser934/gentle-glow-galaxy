@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -428,6 +429,69 @@ const reportSchema = {
     fundingAdvisory: { type: "string" },
     recommendations: { type: "array", items: { type: "string" }, description: "5–7 strategic recommendations." },
     nextSteps: { type: "array", items: { type: "string" }, description: "4–6 next steps." },
+
+    inputQualityScore: { type: "number", description: "0-100. Overall quality of the user-supplied brief." },
+    inputCompleteness: {
+      type: "object",
+      properties: {
+        overall: { type: "number" },
+        missingFields: { type: "array", items: { type: "string" } },
+        weakFields: { type: "array", items: { type: "string" } },
+        contradictoryFields: { type: "array", items: { type: "string" } },
+      },
+      required: ["overall","missingFields","weakFields","contradictoryFields"],
+      additionalProperties: false,
+    },
+    evidenceMix: {
+      type: "object",
+      description: "Whole-report mix. Three integer percents that sum to 100.",
+      properties: {
+        userInputPercent: { type: "number" },
+        webResearchPercent: { type: "number" },
+        aiAssumptionPercent: { type: "number" },
+      },
+      required: ["userInputPercent","webResearchPercent","aiAssumptionPercent"],
+      additionalProperties: false,
+    },
+    scoreExplanation: {
+      type: "array",
+      description: "One row per FMART + Operational dimension (6 total).",
+      items: {
+        type: "object",
+        properties: {
+          dimension: { type: "string", enum: ["financial","market","achievability","risk","timing","operational"] },
+          label: { type: "string" },
+          score: { type: "number" },
+          positiveDrivers: { type: "array", items: { type: "string" } },
+          negativeDrivers: { type: "array", items: { type: "string" } },
+          missingEvidence: { type: "array", items: { type: "string" } },
+          improvementActions: { type: "array", items: { type: "string" } },
+          decisionImplication: { type: "string" },
+        },
+        required: ["dimension","label","score","positiveDrivers","negativeDrivers","missingEvidence","improvementActions","decisionImplication"],
+        additionalProperties: false,
+      },
+    },
+    claimEvidenceMap: {
+      type: "array",
+      description: "Key report claims, each with mix percentages summing to 100 and a confidence band.",
+      items: {
+        type: "object",
+        properties: {
+          claimId: { type: "string" },
+          claimText: { type: "string" },
+          reportSection: { type: "string" },
+          userInputPercent: { type: "number" },
+          webResearchPercent: { type: "number" },
+          aiAssumptionPercent: { type: "number" },
+          confidence: { type: "string", enum: ["High","Medium","Low"] },
+          sources: { type: "array", items: { type: "string" } },
+          userCanImproveBy: { type: "string" },
+        },
+        required: ["claimId","claimText","reportSection","userInputPercent","webResearchPercent","aiAssumptionPercent","confidence","sources","userCanImproveBy"],
+        additionalProperties: false,
+      },
+    },
   },
   required: ["executiveSummary","scores","market","customer","competitors","research","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
   additionalProperties: false,
@@ -500,12 +564,21 @@ You MUST call the "provide_report" tool. All numbers must be realistic given the
 - Pick realistic TAM/SAM/SOM with credible CAGR.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
 - Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
-- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED.
+- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED. The server will recompute the authoritative verdict.
 - The 'overall' score MUST equal the weighted sum: sum(scores[d] * weights[d]) for the 6 dimensions; weights MUST sum to 1.0.
 - Set per-dimension confidence honestly (0–100). If grounded web research is missing, lower Market/Timing confidence accordingly.
 - Provide a concise rationale per dimension referencing the evidence and assumptions used.
 - Use the research context below as directional evidence. Do not overstate; if coverage is "Limited" or "Low", say so in research.confidence and qualify insights.
-- When competitor scrapes are present, reference them by name in the competitors array and competitorMentions.`;
+- When competitor scrapes are present, reference them by name in the competitors array and competitorMentions.
+
+CONSUMER EVIDENCE LAYER — also populate these new fields:
+- inputQualityScore (0-100): overall quality of the brief.
+- inputCompleteness: list missingFields, weakFields, contradictoryFields by their human-readable labels (e.g. "Revenue model & pricing", "Competitors").
+- evidenceMix: integer percentages summing to 100 — userInputPercent (from the brief), webResearchPercent (citations + scrapes), aiAssumptionPercent (AI inference). Be honest; thin briefs and few citations mean high AI %.
+- scoreExplanation: one row per dimension (financial, market, achievability, risk, timing, operational) with positiveDrivers, negativeDrivers, missingEvidence, improvementActions, decisionImplication.
+- claimEvidenceMap: 4–6 key claims (market growth, break-even, CAC, competition, regulatory…). Each row's three percents must sum to 100.
+
+CONSUMER-SAFE WORDING. Never use developer/QA language anywhere in user-visible text. Forbidden: "QA failed", "fallback used", "template mismatch", "source notes empty", "repair attempt", "raw error", "debug", "report quality weak". Prefer: "Needs validation", "Evidence is limited", "Input detail is incomplete", "Financial assumptions should be refined", "Market demand should be validated before launch", "This report is suitable for early decision-making, not final investment approval".`;
 
     const userPrompt = `Generate the full feasibility report for this concept:
 
@@ -565,7 +638,7 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
     const parsed = JSON.parse(args);
 
     // Re-shape financials.capEx totals into the client shape
-    const report = {
+    const baseReport: any = {
       reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
       classification: "Confidential",
@@ -595,7 +668,18 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
       fundingAdvisory: parsed.fundingAdvisory,
       recommendations: parsed.recommendations,
       nextSteps: parsed.nextSteps,
+      // Pass through model-provided evidence layer; ensureEvidenceFields fills any gaps.
+      inputQualityScore: parsed.inputQualityScore,
+      inputCompleteness: parsed.inputCompleteness,
+      evidenceMix: parsed.evidenceMix,
+      scoreExplanation: parsed.scoreExplanation,
+      claimEvidenceMap: parsed.claimEvidenceMap,
     };
+
+    // Server-side: fill missing evidence fields, compute authoritative verdict,
+    // then sanitize every string leaf to strip internal/QA wording.
+    const enriched = ensureEvidenceFields(baseReport, inputs);
+    const report = deepSanitize(enriched);
 
     return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
