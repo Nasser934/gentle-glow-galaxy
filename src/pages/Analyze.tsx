@@ -433,7 +433,9 @@ const Analyze = () => {
             <Button onClick={handleSubmit} disabled={isAnalyzing} className="gap-2 px-8">
               {isAnalyzing
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing…</>
-                : <>Run Analysis <ArrowRight className="h-4 w-4" /></>}
+                : isReRun
+                  ? <><RefreshCw className="h-4 w-4" /> Re-run analysis</>
+                  : <>Run Analysis <ArrowRight className="h-4 w-4" /></>}
             </Button>
           )}
         </div>
