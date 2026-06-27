@@ -40,6 +40,7 @@ import { placeExecutiveMemo } from "./pdf/templates/memo";
 import {
   deriveMemoSections, deriveLegacyFinancialSummary, deriveValidationItems,
   deriveRoadmap, deriveDecisionDrivers, bucketAssumption, inferCitationConfidence,
+  deriveExecutiveSummary,
 } from "./pdf/derive";
 import { projectLabels } from "./pdf/project";
 import { cleanCitations } from "./pdf/citations";
@@ -105,7 +106,18 @@ export async function exportReportToPdf(
   const decision = report.decision;
   const mix = report.evidenceMix;
 
-  /* ===== 1. Executive Decision Memo ===== */
+  /* ===== 1. Executive Summary (narrative) ===== */
+  startSection(doc, "Executive Summary");
+  paragraph(
+    doc,
+    "A short narrative for executives who want context before reading the memo. The bullets that follow in the Decision Memo summarise the same view in scannable form.",
+    { size: 9, italic: true, color: C.muted, gap: 8 },
+  );
+  for (const para of deriveExecutiveSummary(report, inputs)) {
+    paragraph(doc, para, { size: 10, gap: 8 });
+  }
+
+  /* ===== 2. Executive Decision Memo ===== */
   startSection(doc, "Executive Decision Memo");
   placeExecutiveMemo(doc, deriveMemoSections(report, inputs));
 
@@ -122,7 +134,7 @@ export async function exportReportToPdf(
     { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
       : { label: "Break-even (base)", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
   ];
   reserveBlock(doc, 200);
@@ -150,26 +162,36 @@ export async function exportReportToPdf(
     risk: report.scores.riskFinding,
     timing: report.scores.timingFinding,
   };
+  const DIM_NAME: Record<string, string> = {
+    financial: "Financial", market: "Market", achievability: "Achievability",
+    risk: "Risk", timing: "Timing", operational: "Operational",
+  };
   placeTable(doc, {
     head: [["Dimension", "Score", "Driver", "Concern", "Action"]],
     body: sx.slice(0, 6).map((r) => {
       const pos = (r.positiveDrivers || []).filter(Boolean)[0] || findingByDim[r.dimension] || "—";
       const neg = (r.negativeDrivers || []).filter((x) => x && !/no specific issues/i.test(x))[0] || "—";
       const act = (r.improvementActions || []).filter(Boolean)[0] || "—";
+      const dimName = DIM_NAME[String(r.dimension || "").toLowerCase()] || s(r.label);
+      // Prepend the descriptive label (if different) to the driver text so we don't lose it.
+      const lbl = s(r.label).trim();
+      const driver = lbl && lbl.toLowerCase() !== dimName.toLowerCase()
+        ? `${lbl} — ${s(pos)}`
+        : s(pos);
       return [
-        { content: s(r.label), styles: { fontStyle: "bold" as const } },
+        { content: dimName, styles: { fontStyle: "bold" as const } },
         { content: `${(r.score ?? 0).toFixed(1)}`, styles: { halign: "center" as const } },
-        s(pos),
+        driver,
         s(neg),
         s(act),
       ];
     }),
     columnStyles: {
-      0: { cellWidth: 90 },
+      0: { cellWidth: 80 },
       1: { cellWidth: 36, halign: "center" },
-      2: { cellWidth: 130 },
+      2: { cellWidth: 140 },
       3: { cellWidth: 110 },
-      4: { cellWidth: CONTENT_W - 90 - 36 - 130 - 110 },
+      4: { cellWidth: CONTENT_W - 80 - 36 - 140 - 110 },
     },
     styles: { fontSize: 8.8 },
   });
@@ -206,6 +228,20 @@ export async function exportReportToPdf(
         { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
       ];
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
+
+  // Short interpretation narrative — keeps the section from feeling like only cards + tables.
+  const finInterp: string[] = labels.isInternal
+    ? [
+        `Investment range ${s(report.financials.investmentRange) || "Requires validation"} reflects the platform CapEx envelope; payback is driven by converting manual reporting effort, duplicated tooling, and governance risk into measurable cost avoidance.`,
+        "The base case is conditional on adoption across priority departments — it should be validated with current labor cost, license cost, and data-processing effort benchmarks.",
+        "Key financial assumptions to validate: baseline cost per process, expected hours saved, and the share of OpEx that can realistically be redirected.",
+      ]
+    : [
+        `Investment range ${s(report.financials.investmentRange) || "Requires validation"} sizes the funding ask; break-even depends on customer ramp, pricing, and the cost-to-acquire holding to plan.`,
+        "The base case is conditional on the unit-economics — validate pricing, churn, and CAC payback before committing.",
+        "Key financial assumptions to validate: pricing tiers, gross margin, and the conversion curve from pilot to paying customer.",
+      ];
+  bulletList(doc, finInterp, { size: 9.5 });
 
   // Revenue / Savings scenarios — compact 5-col
   if (report.financials.scenarios?.length) {
@@ -396,7 +432,7 @@ export async function exportReportToPdf(
   }
 
   // Always present a complete 30 / 60 / 90 plan, even when data is sparse.
-  const roadmap = deriveRoadmap(report);
+  const roadmap = deriveRoadmap(report, inputs);
   const windows: Array<"Next 30 days" | "Days 31 – 60" | "Days 61 – 90"> = [
     "Next 30 days", "Days 31 – 60", "Days 61 – 90",
   ];
@@ -448,25 +484,25 @@ export async function exportReportToPdf(
     });
   }
 
-  // Curated citations (cleaned + capped to 5; confidence inferred when missing)
-  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 5);
+  // Curated citations — cap to top 4 to keep the table breathable.
+  const curated = cleanCitations(report.research?.citations as unknown[] | undefined, 4);
   if (curated.length) {
     subTitle(doc, "Top curated sources");
     placeTable(doc, {
-      head: [["Source", "Title", "Takeaway", "Confidence"]],
+      head: [["Source", "Title", "Takeaway", "Conf."]],
       body: curated.map((c) => [
-        { content: s(c.source).replace(/\s+/g, ""), styles: { fontStyle: "bold" as const } },
+        { content: s(c.source), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
         inferCitationConfidence(c),
       ]),
       columnStyles: {
-        0: { cellWidth: 90 },
-        1: { cellWidth: 140 },
-        2: { cellWidth: CONTENT_W - 90 - 140 - 60 },
-        3: { cellWidth: 60, halign: "center" },
+        0: { cellWidth: 100 },
+        1: { cellWidth: 130 },
+        2: { cellWidth: CONTENT_W - 100 - 130 - 50 },
+        3: { cellWidth: 50, halign: "center" },
       },
-      styles: { fontSize: 8.5 },
+      styles: { fontSize: 8.6, cellPadding: 6 },
     });
     paragraph(
       doc,
@@ -542,22 +578,23 @@ export async function exportReportToPdf(
     order.forEach((g) => {
       const rows = groups.get(g);
       if (!rows || !rows.length) return;
-      // Keep group heading with at least 2 rows together.
-      reserveBlock(doc, 110);
+      // Keep the whole group together when possible: ~26pt per row + heading.
+      const capped = rows.slice(0, 8);
+      reserveBlock(doc, Math.min(560, 60 + capped.length * 34));
       subTitle(doc, g);
       placeTable(doc, {
-        head: [["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]],
-        body: rows.slice(0, 10).map((r) => [
+        head: [["Assumption", "Source", "Conf.", "Risk if wrong", "What to add"]],
+        body: capped.map((r) => [
           s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
         ]),
         columnStyles: {
           0: { cellWidth: 150, fontStyle: "bold" },
           1: { cellWidth: 60, halign: "center" },
-          2: { cellWidth: 56, halign: "center" },
+          2: { cellWidth: 44, halign: "center" },
           3: { cellWidth: 110 },
-          4: { cellWidth: CONTENT_W - 376 },
+          4: { cellWidth: CONTENT_W - 364 },
         },
-        styles: { fontSize: 8.6 },
+        styles: { fontSize: 8.6, cellPadding: 6 },
       });
     });
   }
@@ -595,7 +632,7 @@ export async function exportReportToPdf(
   ]);
   subTitle(doc, "Recommendation thresholds");
   bulletList(doc, [
-    "≥ 7.5 — Proceed",
+    ">= 7.5 — Proceed",
     "6.0 – 7.4 — Conditional Proceed",
     "4.5 – 5.9 — Revise",
     "< 4.5 — Do Not Proceed",

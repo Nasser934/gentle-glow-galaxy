@@ -15,11 +15,11 @@ import { sanitizeForConsumer } from "@/lib/evidence";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
-/** Trim to a single short bullet (≤ ~110 chars), one sentence. */
+/** Trim to a single short bullet (≤ ~90 chars), one sentence — guarantees 2-line fit in cover cards. */
 function trimBullets(items: string[], max: number): string[] {
   return (items || []).slice(0, max).map((it) => {
     const first = (it || "").split(/(?<=[.!?])\s/)[0] || it;
-    return first.length > 110 ? first.slice(0, 107).trimEnd() + "…" : first;
+    return first.length > 90 ? first.slice(0, 87).trimEnd() + "…" : first;
   }).filter(Boolean);
 }
 
@@ -168,7 +168,7 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
   const labels = projectLabels(inputs);
   const beValue = shortenBreakEven(report.financials.breakEvenSummary);
   const fourth = labels.isInternal
-    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Based on operational savings" }
+    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
     : { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined };
 
   const kpis: KpiItem[] = [
@@ -191,7 +191,7 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
 
   if (drivers.length || blockers.length) {
     const colW = (CONTENT_W - 16) / 2;
-    const cardH = 100;
+    const cardH = 124;
     // Left card — drivers
     setFill(pdf, [240, 253, 244]); setDraw(pdf, [187, 247, 208]); pdf.setLineWidth(0.6);
     pdf.roundedRect(MARGIN, y, colW, cardH, 6, 6, "FD");

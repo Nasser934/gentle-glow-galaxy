@@ -41,11 +41,11 @@ export function projectLabels(inputs: ConceptInputs): ProjectLabels {
       isInternal: true,
       revenueWord: "Annual savings",
       customerWord: "Departments",
-      customersYr1Label: "Departments / Yr 1",
+      customersYr1Label: "Year-1 adoption",
       annualRevenueLabel: "Annual savings",
       fourthKpiLabel: "Payback",
       baseCaseTemplate: (rev, cust) =>
-        `Base case: ${rev} annual savings across ${cust} in Year 1.`,
+        `Base case: ${rev} annual savings at ${cust} Year-1 adoption.`,
     };
   }
   return {

@@ -26,16 +26,59 @@ const GARBAGE_TITLES = new Set<string>([
   "tavily search", "result", "results", "source", "page", "—",
 ]);
 
+const GARBAGE_PHRASES = [
+  /ask\s+for\s+customization/gi,
+  /download\s+free\s+sample/gi,
+  /get\s+a\s+quote/gi,
+  /request\s+a\s+sample/gi,
+  /buy\s+now/gi,
+  /enquire\s+before\s+buying/gi,
+  /toc\s*\|/gi,
+  /\bhome\s*\/\s*/gi,
+];
+
+const PUBLISHER_MAP: Array<[RegExp, string]> = [
+  [/fortunebusinessinsights\.com/i, "Fortune Business Insights"],
+  [/grandviewresearch\.com/i,       "Grand View Research"],
+  [/precedenceresearch\.com/i,      "Precedence Research"],
+  [/mordorintelligence\.com/i,      "Mordor Intelligence"],
+  [/businessresearchinsights\.com/i,"Business Research Insights"],
+  [/marketsandmarkets\.com/i,       "MarketsandMarkets"],
+  [/statista\.com/i,                "Statista"],
+  [/gartner\.com/i,                 "Gartner"],
+  [/mckinsey\.com/i,                "McKinsey"],
+  [/forrester\.com/i,               "Forrester"],
+  [/idc\.com/i,                     "IDC"],
+  [/deloitte\.com/i,                "Deloitte"],
+  [/pwc\.com/i,                     "PwC"],
+  [/kpmg\.com/i,                    "KPMG"],
+  [/\bey\.com/i,                    "EY"],
+  [/imf\.org/i,                     "IMF"],
+  [/worldbank\.org/i,               "World Bank"],
+  [/oecd\.org/i,                    "OECD"],
+];
+
 const stripMarkdown = (raw: string): string =>
   String(raw || "")
-    // backticks, bold/italic/strike, headings, blockquote/list markers
     .replace(/[`#*_~]+/g, "")
     .replace(/^\s*[-•*>+]+\s+/gm, "")
-    // collapse newlines / tabs / repeated whitespace
     .replace(/\s+/g, " ")
-    // strip stray bracket noise like "[1]" / "(source: …)"
     .replace(/\s*\[\d+\]\s*/g, " ")
     .trim();
+
+const cleanTakeaway = (raw: string): string => {
+  let t = stripMarkdown(raw);
+  for (const re of GARBAGE_PHRASES) t = t.replace(re, " ");
+  t = t.replace(/\s+/g, " ").replace(/\s+([.,;:])/g, "$1").trim();
+  // Strip leading orphaned punctuation
+  t = t.replace(/^[\s,.;:|/-]+/, "");
+  // Cap to ~2 sentences
+  const sentences = t.split(/(?<=[.!?])\s+/);
+  if (sentences.length > 2) t = sentences.slice(0, 2).join(" ");
+  // Hard cap to avoid runaway cells
+  if (t.length > 220) t = t.slice(0, 217).trimEnd() + "…";
+  return t;
+};
 
 const isGarbageTitle = (t: string): boolean => {
   if (!t || t.length < 3) return true;
@@ -46,14 +89,20 @@ const isGarbageTitle = (t: string): boolean => {
 
 const normaliseSource = (src: string, url: string): string => {
   const s = stripMarkdown(src);
+  // Try publisher map by URL host first
+  if (url) {
+    for (const [re, name] of PUBLISHER_MAP) if (re.test(url)) return name;
+  }
+  if (s) {
+    for (const [re, name] of PUBLISHER_MAP) if (re.test(s)) return name;
+  }
   if (s && !/^tavily/i.test(s) && !/^web( search)?$/i.test(s)) return s;
-  // Fall back to URL hostname
   try {
     if (url) {
       const h = new URL(url).hostname.replace(/^www\./, "");
       return h || "Web";
     }
-  } catch {/* ignore */}
+  } catch { /* ignore */ }
   return s || "Web";
 };
 
@@ -86,7 +135,7 @@ export function cleanCitations(
     if (isGarbageTitle(title)) continue;
 
     const url = String(r.url || r.link || "").trim();
-    const takeaway = stripMarkdown(
+    const takeaway = cleanTakeaway(
       String(r.takeaway || r.summary || r.snippet || r.description || ""),
     );
     if (!takeaway || takeaway.length < 12) continue;
