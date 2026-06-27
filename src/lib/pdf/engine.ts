@@ -181,6 +181,15 @@ export function ensureSpace(doc: Doc, needed: number) {
 }
 
 /**
+ * Reserve a contiguous block of `needed` pts of vertical space. If it won't
+ * fit on the current page, page-break first so the caller's whole block
+ * (e.g. section intro + KPI grid + first table) lands together on one page.
+ */
+export function reserveBlock(doc: Doc, needed: number) {
+  if (remaining(doc) < needed) addPage(doc);
+}
+
+/**
  * Wrap a heading+body pair to prevent orphan headings.
  * If less than (heading + 1 line + ORPHAN_GUARD) remains, break first.
  */
