@@ -170,7 +170,7 @@ export function assessInputQuality(inputs: ConceptInputs): {
 /* ---------------- Evidence Mix ---------------- */
 export function deriveEvidenceMix(report: FeasibilityReport, inputs: ConceptInputs) {
   const iq = assessInputQuality(inputs);
-  const citations = report.research?.citations?.length || 0;
+  const citations = getCitations(report).length;
   const confAvg = report.scores.confidence
     ? Object.values(report.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6
     : 50;
