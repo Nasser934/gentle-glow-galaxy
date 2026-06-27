@@ -419,7 +419,7 @@ export async function exportReportToPdf(
   });
 
   /* Appendix B — Assumption Register */
-  const register: AssumptionRow[] = deriveAssumptionRegister(report);
+  const register: AssumptionRow[] = deriveAssumptionRegister(report, inputs);
   if (register.length) {
     startAppendix(doc, "Assumption Register");
     placeTable(doc, {
