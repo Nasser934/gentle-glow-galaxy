@@ -131,10 +131,12 @@ function paintContinuationBand(doc: Doc) {
   pdf.rect(MARGIN, HEADER_Y + 4, CONTENT_W, CONT_BAND_H, "F");
   setColor(pdf, C.primary);
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(8);
-  const left = `${doc.currentSection.number}. ${doc.currentSection.title} — continued`;
+  // Skip the appendix-prefix numbers (>=100) — show just the title.
+  const isAppendix = doc.currentSection.number >= 100;
+  const left = isAppendix
+    ? `${doc.currentSection.title} — continued`
+    : `${doc.currentSection.number}. ${doc.currentSection.title} — continued`;
   pdf.text(left, MARGIN + 8, HEADER_Y + 16);
-  pdf.setFont("helvetica", "normal"); setColor(pdf, C.muted);
-  pdf.text("(continued)", PAGE_W - MARGIN - 8, HEADER_Y + 16, { align: "right" });
 }
 
 /**
