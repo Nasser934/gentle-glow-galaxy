@@ -135,6 +135,7 @@ const Results = () => {
         setOwnerId(row.user_id);
         setShareSlug(row.slug);
         setReportId(row.id);
+        setArchivedAt(row.archived_at ?? null);
         setFetchState("ok");
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
