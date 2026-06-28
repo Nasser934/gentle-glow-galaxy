@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { BarChart3, Loader2, GitCompare } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { UserMenu } from "@/components/UserMenu";
+import { Loader2, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listMyReports } from "@/lib/reports";
 import { supabase } from "@/integrations/supabase/client";
