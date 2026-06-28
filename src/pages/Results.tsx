@@ -114,6 +114,7 @@ const Results = () => {
           if (row.user_id !== ownerId) setOwnerId(row.user_id);
           if (row.slug && !shareSlug) setShareSlug(row.slug);
           setArchivedAt(row.archived_at ?? null);
+          if (row.status) setStatus(row.status);
         })
         .catch(() => { /* non-fatal */ });
       return () => { cancelled = true; };
