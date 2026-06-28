@@ -333,6 +333,12 @@ const Results = () => {
           <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && reportId && (
+            <StatusControl
+              report={{ id: reportId, status } as ReportRow}
+              onChanged={(s) => setStatus(s)}
+            />
+          )}
           <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
             <ArrowLeft className="h-3.5 w-3.5" /> New
           </Button>
