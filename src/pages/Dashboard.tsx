@@ -357,6 +357,7 @@ const Dashboard = () => {
                       onArchive={() => setPendingArchive(g)}
                       onRestore={() => onRestore(g)}
                       onCopyShare={() => copyShare(g.latest.slug)}
+                      onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
                     />
                   );
                 })}
