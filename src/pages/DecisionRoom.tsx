@@ -144,6 +144,12 @@ const DecisionRoom = () => {
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{title}</h1>
             <p className="text-sm text-muted-foreground">A 90-second read of the AI's decision, evidence, and risk.</p>
           </div>
+          {canEditStatus && (
+            <StatusControl
+              report={{ id: reportId, status } as ReportRow}
+              onChanged={(s) => setRow((prev) => (prev ? { ...prev, status: s } : prev))}
+            />
+          )}
         </div>
 
         {/* Top Decision Card */}
