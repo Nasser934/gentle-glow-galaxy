@@ -76,6 +76,13 @@ const Compare = () => {
 
   return (
     <div>
+      <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-1 text-[12px] text-muted-foreground">
+        <Link to="/dashboard" className="transition-colors hover:text-foreground">
+          My Analyses
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5 opacity-50" />
+        <span className="text-foreground/80">Compare</span>
+      </nav>
       <div className="mb-6 flex items-center gap-3">
         <GitCompare className="h-5 w-5 text-primary" />
         <h1 className="font-display text-2xl font-medium tracking-tight">Compare analyses</h1>
