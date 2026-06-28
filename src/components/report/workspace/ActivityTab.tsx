@@ -65,9 +65,9 @@ export const ActivityTab = ({ reportId }: { reportId: string }) => {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-display text-lg font-semibold tracking-tight">Activity</h2>
+        <h2 className="font-display text-lg font-semibold tracking-tight">Status History</h2>
         <p className="text-xs text-muted-foreground">
-          Status changes for this report. Comments are visible inside the public shared view.
+          Status changes for this report.
         </p>
       </div>
 
