@@ -15,7 +15,7 @@ import { exportReportToPdf, type VersionFamilyEntry } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { saveReport, getReportById, listReportVersions, type ReportRow } from "@/lib/reports";
+import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,6 +55,8 @@ const Results = () => {
 
   // Refresh-safe ownership: trust the DB, not just route state.
   const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
+  const [archivedAt, setArchivedAt] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
@@ -109,6 +111,7 @@ const Results = () => {
           if (cancelled || !row) return;
           if (row.user_id !== ownerId) setOwnerId(row.user_id);
           if (row.slug && !shareSlug) setShareSlug(row.slug);
+          setArchivedAt(row.archived_at ?? null);
         })
         .catch(() => { /* non-fatal */ });
       return () => { cancelled = true; };
@@ -132,6 +135,7 @@ const Results = () => {
         setOwnerId(row.user_id);
         setShareSlug(row.slug);
         setReportId(row.id);
+        setArchivedAt(row.archived_at ?? null);
         setFetchState("ok");
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
@@ -278,8 +282,43 @@ const Results = () => {
     catch { toast.info(url); }
   };
 
+  const handleRestore = async () => {
+    if (!reportId) return;
+    setRestoring(true);
+    try {
+      await restoreReportGroup(reportId);
+      setArchivedAt(null);
+      toast.success("Project restored");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   return (
     <div>
+      {archivedAt && canEdit && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 no-print">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-600 ring-1 ring-inset ring-amber-500/40">
+              Archived
+            </span>
+            <span className="text-amber-700 dark:text-amber-300">
+              This project is archived. It stays in your library and remains shareable, but is hidden from the Active view.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard?scope=archived")} className="h-8">
+              Back to Archived
+            </Button>
+            <Button size="sm" onClick={handleRestore} disabled={restoring} className="h-8 gap-1.5">
+              {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Restore project
+            </Button>
+          </div>
+        </div>
+      )}
       {/* In-page action row — replaces the previous sticky page-level nav.
           AppShell already provides the topbar; this row holds report-scoped actions. */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 no-print">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Loader2, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listMyReports } from "@/lib/reports";
@@ -17,12 +18,48 @@ const dims = [
 ] as const;
 
 const Compare = () => {
+  const [searchParams] = useSearchParams();
   const [rows, setRows] = useState<any[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [loaded, setLoaded] = useState<Record<string, FeasibilityReport>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { listMyReports().then(setRows).catch((e) => toast.error(e.message)).finally(() => setLoading(false)); }, []);
+  // Load all reports (active + archived) so deep links from the dashboard
+  // can preselect even older versions.
+  useEffect(() => {
+    listMyReports("all")
+      .then(setRows)
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Preselect from ?ids=a,b[,c] — up to 3, fetched in parallel.
+  useEffect(() => {
+    const raw = searchParams.get("ids");
+    if (!raw) return;
+    const ids = raw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3);
+    if (!ids.length) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(
+        ids.map((id) =>
+          supabase.from("reports").select("output").eq("id", id).maybeSingle()
+            .then(({ data, error }) => (error || !data ? null : { id, output: data.output as unknown as FeasibilityReport })),
+        ),
+      );
+      if (cancelled) return;
+      const next: Record<string, FeasibilityReport> = {};
+      const okIds: string[] = [];
+      for (const r of results) {
+        if (r) { next[r.id] = r.output; okIds.push(r.id); }
+      }
+      if (okIds.length) {
+        setLoaded((prev) => ({ ...prev, ...next }));
+        setPicked(okIds);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams]);
 
   const toggle = async (id: string) => {
     if (picked.includes(id)) { setPicked(picked.filter((x) => x !== id)); return; }

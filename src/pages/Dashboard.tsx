@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Plus,
   ExternalLink,
@@ -115,7 +115,12 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusKey>("all");
-  const [scope, setScope] = useState<ReportScope>("active");
+  const [searchParams] = useSearchParams();
+  const initialScope: ReportScope = (() => {
+    const s = searchParams.get("scope");
+    return s === "archived" || s === "all" ? s : "active";
+  })();
+  const [scope, setScope] = useState<ReportScope>(initialScope);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pendingArchive, setPendingArchive] = useState<Group | null>(null);
 
