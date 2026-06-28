@@ -20,7 +20,7 @@ import { Logo } from "@/components/Logo";
 const features = [
   {
     icon: BarChart3,
-    title: "FMART Scorecard",
+    title: "FMART-O Scorecard",
     description:
       "Five-axis radar — Feasibility, Market, ROI, Risk, Tech — generated from your inputs and live public signals.",
   },
@@ -105,7 +105,7 @@ const Index = () => {
             </h1>
 
             <p className="mx-auto mt-7 max-w-xl text-[17px] leading-[1.55] text-muted-foreground">
-              From a one-line idea to an investor-ready feasibility report — FMART scoring, market sizing,
+              From a one-line idea to an investor-ready feasibility report — FMART-O scoring, market sizing,
               risk heatmap and a defensible go/no-go verdict.
             </p>
           </motion.div>
@@ -268,7 +268,7 @@ const Index = () => {
         <div className="container mx-auto flex flex-col items-center justify-between gap-3 px-6 text-[12px] text-muted-foreground sm:flex-row">
           <div>© 2026 Concept AI</div>
           <div className="flex items-center gap-4">
-            <span>FMART™ scoring</span>
+            <span>FMART-O™ scoring</span>
             <span className="h-1 w-1 rounded-full bg-border" />
             <span>Public research enabled</span>
           </div>
