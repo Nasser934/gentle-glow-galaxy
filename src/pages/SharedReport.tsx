@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock, Gauge } from "lucide-react";
+import { Loader2, BarChart3, MessageSquare, Lock, ExternalLink, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { getReportBySlug, type ReportRow } from "@/lib/reports";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { CommentsPanel } from "@/components/report/CommentsPanel";
-import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
