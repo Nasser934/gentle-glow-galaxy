@@ -397,7 +397,7 @@ const Results = () => {
 
       {/* Tabs synced to ?tab= */}
       <Tabs value={tab} onValueChange={setTab} className="no-print">
-        <TabsList className="mb-6 h-9 w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1 sm:w-auto">
+        <TabsList className="mb-6 inline-flex h-9 w-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1">
           <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
           <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
           <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
