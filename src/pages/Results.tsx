@@ -139,6 +139,7 @@ const Results = () => {
         setShareSlug(row.slug);
         setReportId(row.id);
         setArchivedAt(row.archived_at ?? null);
+        if (row.status) setStatus(row.status);
         setFetchState("ok");
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
