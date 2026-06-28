@@ -39,7 +39,25 @@ interface AppShellProps {
 
 export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) => {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const openDecisionRoom = () => {
+    setMobileOpen(false);
+    let id: string | null = null;
+    try { id = sessionStorage.getItem("conceptai:currentReportId"); } catch { /* ignore */ }
+    if (id) {
+      navigate(`/decision-room/${id}`);
+    } else {
+      toast({
+        title: "Open an analysis first",
+        description: "The Decision Room runs on a specific report. Pick one from My Analyses to enter its room.",
+      });
+      navigate("/dashboard");
+    }
+  };
+
+  const decisionActive = pathname.startsWith("/decision-room");
 
   const SidebarBody = (
     <div className="flex h-full flex-col">
@@ -67,7 +85,21 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
             </NavLink>
           );
         })}
+        <button
+          type="button"
+          onClick={openDecisionRoom}
+          className={cn(
+            "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13px] font-medium transition-colors",
+            decisionActive
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          )}
+        >
+          <Gavel className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span>Decision Room</span>
+        </button>
       </nav>
+
       <div className="border-t border-sidebar-border p-3 text-[11px] text-muted-foreground">
         <div className="font-medium uppercase tracking-wider">Concept AI</div>
         <div className="mt-0.5">Feasibility Intelligence</div>
