@@ -58,6 +58,7 @@ const Results = () => {
   const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [status, setStatus] = useState<ReportRow["status"]>("draft");
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
