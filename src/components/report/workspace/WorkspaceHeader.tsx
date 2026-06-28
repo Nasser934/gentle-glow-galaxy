@@ -41,6 +41,8 @@ interface WorkspaceHeaderProps {
   reportId?: string | null;
   /** Slot for the existing StatusControl + export/share buttons. */
   actions?: ReactNode;
+  /** Preserve current query string, e.g. ?tab=versions, when switching versions. */
+  versionSearch?: string;
 }
 
 /**
