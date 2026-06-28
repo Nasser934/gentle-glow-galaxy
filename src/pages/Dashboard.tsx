@@ -175,7 +175,7 @@ const Dashboard = () => {
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-background/60">
                   <td className="px-4 py-3">
-                    <Link to={`/r/${r.slug}`} className="font-medium hover:text-primary">
+                    <Link to={`/reports/${r.id}`} className="font-medium hover:text-primary">
                       {r.title}
                     </Link>
                   </td>
