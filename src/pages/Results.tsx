@@ -49,6 +49,13 @@ const Results = () => {
     if (existingSlug) setShareSlug(existingSlug);
     if (existingId) setReportId(existingId);
   }, [existingSlug, existingId]);
+  // Expose the currently viewed report so the sidebar's Decision Room link can target it.
+  useEffect(() => {
+    if (reportId) {
+      try { sessionStorage.setItem("conceptai:currentReportId", reportId); } catch { /* ignore */ }
+    }
+  }, [reportId]);
+
   useEffect(() => {
     if (!existingId || ownerId) return;
     let cancelled = false;
