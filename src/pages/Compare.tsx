@@ -38,25 +38,13 @@ const Compare = () => {
   const cells = picked.map((id) => ({ id, row: rows.find((r) => r.id === id), report: loaded[id] }));
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 ring-1 ring-inset ring-primary/30">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <span className="text-[15px] font-medium tracking-tight">Concept AI</span>
-          </Link>
-          <div className="flex items-center gap-2"><ThemeToggle /><UserMenu /></div>
-        </div>
-      </nav>
+    <div>
+      <div className="mb-6 flex items-center gap-3">
+        <GitCompare className="h-5 w-5 text-primary" />
+        <h1 className="font-display text-2xl font-medium tracking-tight">Compare analyses</h1>
+      </div>
+      <p className="mb-6 text-sm text-muted-foreground">Pick up to 3 saved reports to compare side-by-side.</p>
 
-      <div className="container mx-auto px-6 py-10">
-        <div className="mb-6 flex items-center gap-3">
-          <GitCompare className="h-5 w-5 text-primary" />
-          <h1 className="font-display text-2xl font-medium tracking-tight">Compare analyses</h1>
-        </div>
-        <p className="mb-6 text-sm text-muted-foreground">Pick up to 3 saved reports to compare side-by-side.</p>
 
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
