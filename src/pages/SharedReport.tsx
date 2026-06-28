@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Loader2, BarChart3, ArrowLeft, Download, MessageSquare, Lock, Gauge } from "lucide-react";
+import { Loader2, BarChart3, MessageSquare, Lock, ExternalLink, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { getReportBySlug, type ReportRow } from "@/lib/reports";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { CommentsPanel } from "@/components/report/CommentsPanel";
-import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
@@ -45,12 +44,13 @@ const SharedReport = () => {
     );
   }
 
-  return <SharedReportContent row={row} setRow={setRow} user={user} navigate={navigate} />;
+  return <SharedReportContent row={row} user={user} navigate={navigate} />;
 };
 
-const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
-  const isOwner = user?.id === row.user_id;
+const SharedReportContent = ({ row, user, navigate }: any) => {
   const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
+
+
 
 
   return (
@@ -65,14 +65,15 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={() => navigate(`/decision-room/${row.id}`)}
-              className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
-              <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
-            </Button>
-            {user?.id === row.user_id && (
+            {user?.id === row.user_id ? (
               <Button variant="outline" size="sm" onClick={() => navigate(`/reports/${row.id}`)}
                 className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
-                <Download className="mr-1.5 h-3.5 w-3.5" /> Open workspace
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open workspace
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/analyze`)}
+                className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Run a similar analysis
               </Button>
             )}
             <UserMenu />
@@ -83,11 +84,10 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
       <div className="container mx-auto px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis</div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis · read-only</div>
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{row.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{row.industry} · saved {new Date(row.created_at).toLocaleDateString()}</p>
           </div>
-          {isOwner && <StatusControl report={row} onChanged={(s) => setRow({ ...row, status: s })} />}
         </div>
 
         <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />

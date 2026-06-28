@@ -197,8 +197,8 @@ const DecisionRoom = () => {
           </Card>
         </div>
 
-        {/* FMART Decision Breakdown */}
-        <Section title="FMART Decision Breakdown" icon={Gauge} hint="FMART 6-Dimension Weighted Scoring · per-dimension evidence & rationale">
+        {/* FMART-O Decision Breakdown */}
+        <Section title="FMART-O Decision Breakdown" icon={Gauge} hint="FMART-O 6-Dimension Weighted Scoring · per-dimension evidence & rationale">
           <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">

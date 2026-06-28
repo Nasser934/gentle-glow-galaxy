@@ -41,7 +41,7 @@ export const demoReport: FeasibilityReport = {
   dateIssued: new Date().toISOString().slice(0, 10),
   classification: "Internal · Demo",
   preparedBy: "Concept AI",
-  methodology: "FMART 6-Dimension Weighted Scoring with grounded research synthesis.",
+  methodology: "FMART-O 6-Dimension Weighted Scoring with grounded research synthesis.",
   executiveSummary:
     "Project Atlas digitises daily field operations across 14 sites. The analysis shows a strong operational case driven by measurable labour-time savings (~70% reduction in reporting) and earlier surfacing of schedule slippage. Financial value is internal — cost avoidance and productivity uplift rather than external revenue. The dominant risk is field adoption; this is mitigated by phased rollout, mandatory steerco KPI, and an offline-first mobile design. Recommended verdict: PROCEED WITH CAUTION, conditional on a 3-site pilot demonstrating sustained adoption above 75% within 6 weeks.",
   scores: {
