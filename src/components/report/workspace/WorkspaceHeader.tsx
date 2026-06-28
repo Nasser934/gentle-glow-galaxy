@@ -49,7 +49,7 @@ interface WorkspaceHeaderProps {
  * Owner workspace header — breadcrumb, title, status pill, and version switcher.
  * Purely presentational; status mutations stay in the caller (StatusControl).
  */
-export const WorkspaceHeader = ({ title, status, reportId, actions }: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ title, status, reportId, actions, versionSearch = "" }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionRow[] | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
