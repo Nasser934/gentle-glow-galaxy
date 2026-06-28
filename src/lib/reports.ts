@@ -12,6 +12,7 @@ export interface ReportRow {
   status: "draft" | "in_review" | "approved" | "rejected";
   is_public: boolean;
   parent_report_id: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
