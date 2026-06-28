@@ -319,13 +319,6 @@ const Results = () => {
     }
   };
 
-  const versionSearch = useMemo(() => {
-    const p = new URLSearchParams(searchParams);
-    if (tab === "overview") p.delete("tab");
-    else p.set("tab", tab);
-    const s = p.toString();
-    return s ? `?${s}` : "";
-  }, [searchParams, tab]);
 
   return (
     <div>
