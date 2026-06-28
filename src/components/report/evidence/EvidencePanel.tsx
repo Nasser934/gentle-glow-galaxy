@@ -464,11 +464,13 @@ export const ReportFamilyPanel = ({
 
 /* -------- All-in-one render -------- */
 export const EvidenceSections = ({
-  report, reportId, canEdit,
+  report, reportId, canEdit, hideVersionPanels,
 }: {
   report: FeasibilityReport;
   reportId?: string;
   canEdit?: boolean;
+  /** When true, omit ReportFamilyPanel and VersionComparison (rendered elsewhere, e.g. Versions tab). */
+  hideVersionPanels?: boolean;
 }) => (
   <div className="space-y-6">
     <LegacyEvidenceNotice report={report} reportId={reportId} canEdit={canEdit} />
@@ -479,7 +481,9 @@ export const EvidenceSections = ({
       <EvidenceMixPanel report={report} />
     </div>
     <ClaimEvidenceTable report={report} />
-    {reportId && <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} />}
-    <VersionComparison report={report} />
+    {!hideVersionPanels && reportId && (
+      <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} />
+    )}
+    {!hideVersionPanels && <VersionComparison report={report} />}
   </div>
 );

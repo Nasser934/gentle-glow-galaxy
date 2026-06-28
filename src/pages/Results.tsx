@@ -1,10 +1,11 @@
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -17,9 +18,16 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
+import { WorkspaceHeader } from "@/components/report/workspace/WorkspaceHeader";
+import { ActivityTab } from "@/components/report/workspace/ActivityTab";
 import { useAuth } from "@/contexts/AuthContext";
+
+type WorkspaceTab = "overview" | "report" | "versions" | "activity";
+const TAB_VALUES: WorkspaceTab[] = ["overview", "report", "versions", "activity"];
+
+
 
 /* ------------------------------------------------------------------ */
 const Results = () => {
@@ -27,6 +35,17 @@ const Results = () => {
   const navigate = useNavigate();
   const { reportId: routeReportId } = useParams();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const rawTab = searchParams.get("tab") as WorkspaceTab | null;
+  const tab: WorkspaceTab = rawTab && TAB_VALUES.includes(rawTab) ? rawTab : "overview";
+  const setTab = (next: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === "overview") nextParams.delete("tab");
+    else nextParams.set("tab", next);
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const captureRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
@@ -323,85 +342,122 @@ const Results = () => {
           </div>
         </div>
       )}
-      {/* In-page action row — replaces the previous sticky page-level nav.
-          AppShell already provides the topbar; this row holds report-scoped actions. */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 no-print">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
-            Dashboard
-          </span>
-          <span className="text-xs text-muted-foreground">Interactive analysis</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canEdit && reportId && (
-            <StatusControl
-              report={{ id: reportId, status } as ReportRow}
-              onChanged={(s) => setStatus(s)}
-            />
-          )}
-          <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
-            <ArrowLeft className="h-3.5 w-3.5" /> New
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
-            {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-            {copied ? "Copied" : "Share"}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" disabled={downloading} className="h-8 gap-1.5">
-                {downloading
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                  : <><Download className="h-3.5 w-3.5" /> Export</>}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
 
-      {/* ============== INTERACTIVE DASHBOARD ============== */}
-      <section className="no-print">
-        <InteractiveDashboard report={report} inputs={inputs} />
+      {/* Workspace header: breadcrumb, title, status pill, version switcher, + owner actions */}
+      <WorkspaceHeader
+        title={inputs.projectName || report.reportId || "Untitled report"}
+        status={canEdit ? status : undefined}
+        reportId={reportId}
+        actions={
+          <>
+            {canEdit && reportId && (
+              <StatusControl
+                report={{ id: reportId, status } as ReportRow}
+                onChanged={(s) => setStatus(s)}
+              />
+            )}
+            <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
+              <ArrowLeft className="h-3.5 w-3.5" /> New
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
+              {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Share"}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" disabled={downloading} className="h-8 gap-1.5">
+                  {downloading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                    : <><Download className="h-3.5 w-3.5" /> Export</>}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
 
-        {/* Evidence layer */}
-        <div className="mt-8 space-y-4">
-          <div>
-            <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
-            <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
-          </div>
-          <EvidenceSections report={report} reportId={reportId || undefined} canEdit={canEdit} />
-        </div>
+      {/* Tabs synced to ?tab= */}
+      <Tabs value={tab} onValueChange={setTab} className="no-print">
+        <TabsList className="mb-6 h-9 w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1 sm:w-auto">
+          <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
+          <TabsTrigger value="report" className="text-[13px]">Report</TabsTrigger>
+          <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
+          <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Activity</TabsTrigger>
+        </TabsList>
 
-        {/* ============== EXPORT CTA ============== */}
-        <div className="mt-10 rounded-xl border border-border bg-card/60 p-6 backdrop-blur">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* OVERVIEW — interactive dashboard + evidence (version panels hidden; live in Versions tab) */}
+        <TabsContent value="overview" className="mt-0 space-y-8">
+          <section>
+            <InteractiveDashboard report={report} inputs={inputs} />
+          </section>
+          <section className="space-y-4">
             <div>
-              <h3 className="font-display text-lg font-semibold tracking-tight">Export your report</h3>
-              <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-                The dashboard is interactive. The PDF is generated separately as a native, selectable
-                decision report — searchable text, real tables, and clean typography.
-              </p>
+              <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
+              <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={handleDownload} disabled={downloading} className="gap-2">
-                {downloading
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
-                  : <><FileText className="h-4 w-4" /> Download PDF</>}
-              </Button>
-              <Button variant="outline" onClick={handleExportXlsx} disabled={downloading} className="gap-2">
-                <FileSpreadsheet className="h-4 w-4" /> Excel
-              </Button>
-              <Button variant="outline" onClick={handleExportPptx} disabled={downloading} className="gap-2">
-                <Presentation className="h-4 w-4" /> PowerPoint
-              </Button>
+            <EvidenceSections report={report} reportId={reportId || undefined} canEdit={canEdit} hideVersionPanels />
+          </section>
+        </TabsContent>
+
+        {/* REPORT — export entry point (the PDF is generated; on-screen preview lives in the export pipeline) */}
+        <TabsContent value="report" className="mt-0">
+          <div className="rounded-xl border border-border bg-card/60 p-6 backdrop-blur">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-display text-lg font-semibold tracking-tight">Export your report</h3>
+                <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+                  The dashboard is interactive. The PDF is generated separately as a native, selectable
+                  decision report — searchable text, real tables, and clean typography.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleDownload} disabled={downloading} className="gap-2">
+                  {downloading
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
+                    : <><FileText className="h-4 w-4" /> Download PDF</>}
+                </Button>
+                <Button variant="outline" onClick={handleExportXlsx} disabled={downloading} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> Excel
+                </Button>
+                <Button variant="outline" onClick={handleExportPptx} disabled={downloading} className="gap-2">
+                  <Presentation className="h-4 w-4" /> PowerPoint
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </TabsContent>
+
+        {/* VERSIONS — single home for family + comparison (removed from Overview to avoid duplicates) */}
+        <TabsContent value="versions" className="mt-0 space-y-6">
+          {reportId ? (
+            <>
+              <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} />
+              <VersionComparison report={report} />
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
+              Save this analysis to start tracking versions.
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ACTIVITY — status history timeline */}
+        <TabsContent value="activity" className="mt-0">
+          {reportId ? (
+            <ActivityTab reportId={reportId} />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
+              Activity will appear here once the report is saved.
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
 
       {/* ============== OFFSCREEN CHART CAPTURE ROOT ==============
           Hidden from users; rendered solely so the PDF exporter can capture
