@@ -113,7 +113,7 @@ export const DashboardSnapshot = ({
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border p-3" style={{ borderColor: PALETTE.border, background: PALETTE.card }}>
           <div className="mb-1 font-display text-[12px] font-semibold uppercase tracking-wide" style={{ color: PALETTE.text }}>
-            FMART Radar
+            FMART-O Radar
           </div>
           <FMARTRadar scores={report.scores} />
         </div>

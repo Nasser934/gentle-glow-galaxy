@@ -169,7 +169,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           <MethodologyPanel scores={report.scores} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.2fr]">
             <Card>
-              <CardHeader><CardTitle className="text-base">FMART Radar</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">FMART-O Radar</CardTitle></CardHeader>
               <CardContent><FMARTRadar scores={report.scores} /></CardContent>
             </Card>
             {scoreData.some((d) => d.score > 0) ? (
