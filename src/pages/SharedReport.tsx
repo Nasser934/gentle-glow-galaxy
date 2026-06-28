@@ -64,14 +64,15 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={() => navigate(`/decision-room/${row.id}`)}
-              className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
-              <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
-            </Button>
-            {user?.id === row.user_id && (
+            {user?.id === row.user_id ? (
               <Button variant="outline" size="sm" onClick={() => navigate(`/reports/${row.id}`)}
                 className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
-                <Download className="mr-1.5 h-3.5 w-3.5" /> Open workspace
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open workspace
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/analyze`)}
+                className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Run a similar analysis
               </Button>
             )}
             <UserMenu />
@@ -82,11 +83,10 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
       <div className="container mx-auto px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis</div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis · read-only</div>
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{row.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{row.industry} · saved {new Date(row.created_at).toLocaleDateString()}</p>
           </div>
-          {isOwner && <StatusControl report={row} onChanged={(s) => setRow({ ...row, status: s })} />}
         </div>
 
         <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />
