@@ -91,9 +91,27 @@ const Results = () => {
   useEffect(() => {
     if (!routeReportId) return;
     if (stateReport) {
-      // Got the payload via state — just record ownership when known.
-      if (stateOwnerId && !ownerId) setOwnerId(stateOwnerId);
-      return;
+      // Got the payload via state — record ownership.
+      // Freshly-saved owner path: Analyze.tsx just saved this report as the
+      // current user, so trust user.id locally for canEdit. We still verify
+      // ownership against the DB in the background below.
+      if (stateOwnerId && !ownerId) {
+        setOwnerId(stateOwnerId);
+      } else if (!ownerId && user) {
+        setOwnerId(user.id);
+      }
+      // Background verification — corrects ownerId if the row is not actually
+      // owned by this user (e.g. crafted navigation state). RLS still protects
+      // writes server-side, but this keeps UI honest.
+      let cancelled = false;
+      getReportById(routeReportId)
+        .then((row) => {
+          if (cancelled || !row) return;
+          if (row.user_id !== ownerId) setOwnerId(row.user_id);
+          if (row.slug && !shareSlug) setShareSlug(row.slug);
+        })
+        .catch(() => { /* non-fatal */ });
+      return () => { cancelled = true; };
     }
     let cancelled = false;
     setFetchState("loading");
@@ -118,7 +136,7 @@ const Results = () => {
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
     return () => { cancelled = true; };
-  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId]);
+  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId, shareSlug]);
 
   const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
 
