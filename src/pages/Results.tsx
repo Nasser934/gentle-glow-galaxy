@@ -35,6 +35,17 @@ const Results = () => {
   const navigate = useNavigate();
   const { reportId: routeReportId } = useParams();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const rawTab = searchParams.get("tab") as WorkspaceTab | null;
+  const tab: WorkspaceTab = rawTab && TAB_VALUES.includes(rawTab) ? rawTab : "overview";
+  const setTab = (next: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === "overview") nextParams.delete("tab");
+    else nextParams.set("tab", next);
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const captureRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
