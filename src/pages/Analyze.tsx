@@ -334,7 +334,7 @@ const Analyze = () => {
               <div key={s} className="flex items-center gap-2">
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors ring-1 ${
                   i <= step
-                    ? "hero-gradient text-white ring-primary/40 shadow-sm"
+                    ? "bg-primary text-primary-foreground ring-primary shadow-sm"
                     : "bg-background text-foreground ring-border"
                 }`}>{i + 1}</div>
                 <span className={`hidden text-sm font-medium md:inline ${
