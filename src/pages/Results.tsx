@@ -18,6 +18,7 @@ import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 
 /* ------------------------------------------------------------------ */
@@ -57,6 +58,7 @@ const Results = () => {
   const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [status, setStatus] = useState<ReportRow["status"]>("draft");
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
@@ -112,6 +114,7 @@ const Results = () => {
           if (row.user_id !== ownerId) setOwnerId(row.user_id);
           if (row.slug && !shareSlug) setShareSlug(row.slug);
           setArchivedAt(row.archived_at ?? null);
+          if (row.status) setStatus(row.status);
         })
         .catch(() => { /* non-fatal */ });
       return () => { cancelled = true; };
@@ -136,6 +139,7 @@ const Results = () => {
         setShareSlug(row.slug);
         setReportId(row.id);
         setArchivedAt(row.archived_at ?? null);
+        if (row.status) setStatus(row.status);
         setFetchState("ok");
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
@@ -329,6 +333,12 @@ const Results = () => {
           <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && reportId && (
+            <StatusControl
+              report={{ id: reportId, status } as ReportRow}
+              onChanged={(s) => setStatus(s)}
+            />
+          )}
           <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
             <ArrowLeft className="h-3.5 w-3.5" /> New
           </Button>

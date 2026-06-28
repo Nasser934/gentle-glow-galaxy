@@ -25,6 +25,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -42,7 +43,9 @@ import {
   listMyReports,
   archiveReportGroup,
   restoreReportGroup,
+  updateReportStatus,
   type ReportScope,
+  type ReportRow,
 } from "@/lib/reports";
 import { toast } from "sonner";
 
@@ -205,6 +208,17 @@ const Dashboard = () => {
     }
   };
 
+  const onChangeStatus = async (rowId: string, s: ReportRow["status"]) => {
+    try {
+      await updateReportStatus(rowId, s);
+      // Optimistic local update so the chip refreshes immediately.
+      setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
+      toast.success(`Status updated: ${s.replace("_", " ")}`);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const copyShare = (slug: string) => {
     const url = `${window.location.origin}/r/${slug}`;
     navigator.clipboard.writeText(url).then(
@@ -344,6 +358,7 @@ const Dashboard = () => {
                       onArchive={() => setPendingArchive(g)}
                       onRestore={() => onRestore(g)}
                       onCopyShare={() => copyShare(g.latest.slug)}
+                      onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
                     />
                   );
                 })}
@@ -363,6 +378,7 @@ const Dashboard = () => {
                 onArchive={() => setPendingArchive(g)}
                 onRestore={() => onRestore(g)}
                 onCopyShare={() => copyShare(g.latest.slug)}
+                onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
               />
             ))}
           </div>
@@ -400,15 +416,24 @@ function RowActions({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   scope: ReportScope;
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const isArchived = !!group.latest.archived_at;
   const hasMulti = group.versions.length > 1;
+  const current = group.latest.status as ReportRow["status"];
+  const STATUS_OPTIONS: { key: ReportRow["status"]; label: string }[] = [
+    { key: "draft", label: "Draft" },
+    { key: "in_review", label: "In review" },
+    { key: "approved", label: "Approved" },
+    { key: "rejected", label: "Rejected" },
+  ];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -440,6 +465,25 @@ function RowActions({
           <Link2 className="mr-2 h-4 w-4" /> Copy share link
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Set status
+        </DropdownMenuLabel>
+        {STATUS_OPTIONS.map((s) => (
+          <DropdownMenuItem
+            key={s.key}
+            onClick={() => onChangeStatus(s.key)}
+            disabled={current === s.key}
+          >
+            <span className={`mr-2 inline-block h-2 w-2 rounded-full ${
+              s.key === "approved" ? "bg-success" :
+              s.key === "in_review" ? "bg-warning" :
+              s.key === "rejected" ? "bg-destructive" : "bg-muted-foreground/60"
+            }`} />
+            {s.label}
+            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">current</span>}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
         {isArchived || scope === "archived" ? (
           <DropdownMenuItem onClick={onRestore}>
             <ArchiveRestore className="mr-2 h-4 w-4" /> Restore project
@@ -464,6 +508,7 @@ function DesktopGroup({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   expanded: boolean;
@@ -472,6 +517,7 @@ function DesktopGroup({
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
   const versionLabel = hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1";
@@ -505,7 +551,7 @@ function DesktopGroup({
         <td className="px-4 py-3 text-muted-foreground">{relativeTime(group.latest.updated_at || group.latest.created_at)}</td>
         <td className="px-4 py-3">
           <div className="flex justify-end">
-            <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} />
+            <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />
           </div>
         </td>
       </tr>
@@ -549,6 +595,7 @@ function MobileCard({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   expanded: boolean;
@@ -557,6 +604,7 @@ function MobileCard({
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
   return (
@@ -568,7 +616,7 @@ function MobileCard({
             {(group.latest.industry || "—")} · {hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1"}
           </div>
         </Link>
-        <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} />
+        <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />
       </div>
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">

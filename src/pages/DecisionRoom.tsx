@@ -14,6 +14,8 @@ import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { StatusControl } from "@/components/report/StatusControl";
+import { useAuth } from "@/contexts/AuthContext";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
@@ -49,7 +51,8 @@ const Section = ({ title, icon: Icon, children, hint }: any) => (
 const DecisionRoom = () => {
   const { reportId = "" } = useParams();
   const navigate = useNavigate();
-  const [row, setRow] = useState<{ inputs: ConceptInputs; output: FeasibilityReport; title: string; slug: string | null; demo: boolean } | null>(null);
+  const { user } = useAuth();
+  const [row, setRow] = useState<{ inputs: ConceptInputs; output: FeasibilityReport; title: string; slug: string | null; demo: boolean; ownerId: string | null; status: ReportRow["status"] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -60,12 +63,12 @@ const DecisionRoom = () => {
     (async () => {
       try {
         if (reportId === DEMO_REPORT_ID) {
-          if (!cancelled) setRow({ inputs: demoInputs, output: demoReport, title: demoInputs.projectName, slug: null, demo: true });
+          if (!cancelled) setRow({ inputs: demoInputs, output: demoReport, title: demoInputs.projectName, slug: null, demo: true, ownerId: null, status: "draft" });
           return;
         }
         const r: ReportRow | null = await getReportById(reportId);
         if (!r) { if (!cancelled) setNotFound(true); return; }
-        if (!cancelled) setRow({ inputs: r.inputs, output: r.output, title: r.title, slug: r.slug, demo: false });
+        if (!cancelled) setRow({ inputs: r.inputs, output: r.output, title: r.title, slug: r.slug, demo: false, ownerId: r.user_id, status: r.status });
       } catch (e: any) {
         toast.error(e?.message || "Could not load report");
         if (!cancelled) setNotFound(true);
@@ -92,7 +95,8 @@ const DecisionRoom = () => {
     );
   }
 
-  const { inputs, output: rawReport, title, demo, slug } = row;
+  const { inputs, output: rawReport, title, demo, ownerId, status } = row;
+  const canEditStatus = !demo && !!user && !!ownerId && user.id === ownerId;
   const report = ensureEvidenceFields(rawReport, inputs);
   const overallConfPct = confidencePercent(
     report.scores.confidence
@@ -140,6 +144,12 @@ const DecisionRoom = () => {
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{title}</h1>
             <p className="text-sm text-muted-foreground">A 90-second read of the AI's decision, evidence, and risk.</p>
           </div>
+          {canEditStatus && (
+            <StatusControl
+              report={{ id: reportId, status } as ReportRow}
+              onChanged={(s) => setRow((prev) => (prev ? { ...prev, status: s } : prev))}
+            />
+          )}
         </div>
 
         {/* Top Decision Card */}
