@@ -44,7 +44,7 @@ const SharedReport = () => {
     );
   }
 
-  return <SharedReportContent row={row} setRow={setRow} user={user} navigate={navigate} />;
+  return <SharedReportContent row={row} user={user} navigate={navigate} />;
 };
 
 const SharedReportContent = ({ row, user, navigate }: any) => {
