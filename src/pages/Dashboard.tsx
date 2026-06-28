@@ -551,7 +551,7 @@ function DesktopGroup({
         <td className="px-4 py-3 text-muted-foreground">{relativeTime(group.latest.updated_at || group.latest.created_at)}</td>
         <td className="px-4 py-3">
           <div className="flex justify-end">
-            <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} />
+            <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />
           </div>
         </td>
       </tr>
