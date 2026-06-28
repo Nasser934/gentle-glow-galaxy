@@ -12,6 +12,7 @@ export interface ReportRow {
   status: "draft" | "in_review" | "approved" | "rejected";
   is_public: boolean;
   parent_report_id: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -128,19 +129,55 @@ export async function listReportVersions(reportId: string) {
   return data ?? [];
 }
 
-export async function listMyReports() {
-  const { data, error } = await supabase
+export type ReportScope = "active" | "archived" | "all";
+
+export async function listMyReports(scope: ReportScope = "active") {
+  let q = supabase
     .from("reports")
-    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id")
+    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, archived_at" as any)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(200);
+  if (scope === "active") q = q.is("archived_at" as any, null);
+  else if (scope === "archived") q = q.not("archived_at" as any, "is", null);
+  const { data, error } = await q;
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as any[];
 }
 
 export async function deleteReport(id: string) {
   const { error } = await supabase.from("reports").delete().eq("id", id);
   if (error) throw error;
+}
+
+/** Archive a whole project group (root + all child versions). Owner only via RLS. */
+export async function archiveReportGroup(reportId: string) {
+  const rootId = await getReportRootId(reportId);
+  const now = new Date().toISOString();
+  const { error: e1 } = await supabase
+    .from("reports")
+    .update({ archived_at: now } as any)
+    .eq("id", rootId);
+  if (e1) throw e1;
+  const { error: e2 } = await supabase
+    .from("reports")
+    .update({ archived_at: now } as any)
+    .eq("parent_report_id", rootId);
+  if (e2) throw e2;
+}
+
+/** Restore a whole project group. Owner only via RLS. */
+export async function restoreReportGroup(reportId: string) {
+  const rootId = await getReportRootId(reportId);
+  const { error: e1 } = await supabase
+    .from("reports")
+    .update({ archived_at: null } as any)
+    .eq("id", rootId);
+  if (e1) throw e1;
+  const { error: e2 } = await supabase
+    .from("reports")
+    .update({ archived_at: null } as any)
+    .eq("parent_report_id", rootId);
+  if (e2) throw e2;
 }
 
 export async function updateReportStatus(id: string, status: ReportRow["status"], note?: string) {
