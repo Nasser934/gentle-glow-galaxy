@@ -1,10 +1,11 @@
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
@@ -17,9 +18,16 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
+import { WorkspaceHeader } from "@/components/report/workspace/WorkspaceHeader";
+import { ActivityTab } from "@/components/report/workspace/ActivityTab";
 import { useAuth } from "@/contexts/AuthContext";
+
+type WorkspaceTab = "overview" | "report" | "versions" | "activity";
+const TAB_VALUES: WorkspaceTab[] = ["overview", "report", "versions", "activity"];
+
+
 
 /* ------------------------------------------------------------------ */
 const Results = () => {
