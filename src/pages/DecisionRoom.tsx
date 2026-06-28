@@ -126,6 +126,21 @@ const DecisionRoom = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-[12px] text-muted-foreground">
+        <Link to="/dashboard" className="transition-colors hover:text-foreground">
+          My Analyses
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5 opacity-50" />
+        {demo ? (
+          <span className="truncate text-foreground/80">{title}</span>
+        ) : (
+          <Link to={`/reports/${reportId}`} className="truncate transition-colors hover:text-foreground">
+            {title}
+          </Link>
+        )}
+        <ChevronRight className="h-3.5 w-3.5 opacity-50" />
+        <span className="text-foreground/80">Decision Room</span>
+      </nav>
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="h-8 gap-1.5 text-muted-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard

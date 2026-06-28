@@ -41,13 +41,15 @@ interface WorkspaceHeaderProps {
   reportId?: string | null;
   /** Slot for the existing StatusControl + export/share buttons. */
   actions?: ReactNode;
+  /** Preserve current query string, e.g. ?tab=versions, when switching versions. */
+  versionSearch?: string;
 }
 
 /**
  * Owner workspace header — breadcrumb, title, status pill, and version switcher.
  * Purely presentational; status mutations stay in the caller (StatusControl).
  */
-export const WorkspaceHeader = ({ title, status, reportId, actions }: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ title, status, reportId, actions, versionSearch = "" }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionRow[] | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
@@ -129,7 +131,7 @@ export const WorkspaceHeader = ({ title, status, reportId, actions }: WorkspaceH
                     return (
                       <DropdownMenuItem
                         key={v.id}
-                        onClick={() => { if (!isCurrent) navigate(`/reports/${v.id}`); }}
+                        onClick={() => { if (!isCurrent) navigate(`/reports/${v.id}${versionSearch}`); }}
                         className={cn(
                           "flex items-center justify-between gap-3",
                           isCurrent && "bg-accent",

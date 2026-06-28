@@ -319,37 +319,48 @@ const Results = () => {
     }
   };
 
+  const versionSearch = useMemo(() => {
+    const p = new URLSearchParams(searchParams);
+    if (tab === "overview") p.delete("tab");
+    else p.set("tab", tab);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [searchParams, tab]);
+
   return (
     <div>
-      {archivedAt && canEdit && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 no-print">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-600 ring-1 ring-inset ring-amber-500/40">
-              Archived
-            </span>
-            <span className="text-amber-700 dark:text-amber-300">
-              This project is archived. It stays in your library and remains shareable, but is hidden from the Active view.
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard?scope=archived")} className="h-8">
-              Back to Archived
-            </Button>
-            <Button size="sm" onClick={handleRestore} disabled={restoring} className="h-8 gap-1.5">
-              {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Restore project
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Workspace header: breadcrumb, title, status pill, version switcher, + owner actions */}
       <WorkspaceHeader
         title={inputs.projectName || report.reportId || "Untitled report"}
-        status={canEdit ? status : undefined}
+        status={reportId ? status : undefined}
         reportId={reportId}
+        versionSearch={versionSearch}
         actions={
           <>
+            {archivedAt && canEdit && (
+              <>
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-600 ring-1 ring-inset ring-amber-500/40">
+                  Archived
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/dashboard?scope=archived")}
+                  className="h-8"
+                >
+                  Back to Archived
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleRestore}
+                  disabled={restoring}
+                  className="h-8 gap-1.5"
+                >
+                  {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Restore
+                </Button>
+              </>
+            )}
             {canEdit && reportId && (
               <StatusControl
                 report={{ id: reportId, status } as ReportRow}
@@ -385,10 +396,12 @@ const Results = () => {
       <Tabs value={tab} onValueChange={setTab} className="no-print">
         <TabsList className="mb-6 h-9 w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1 sm:w-auto">
           <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
-          <TabsTrigger value="report" className="text-[13px]">Report</TabsTrigger>
+          <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
           <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
-          <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Activity</TabsTrigger>
+          <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
         </TabsList>
+
+
 
         {/* OVERVIEW — interactive dashboard + evidence (version panels hidden; live in Versions tab) */}
         <TabsContent value="overview" className="mt-0 space-y-8">
