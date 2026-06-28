@@ -23,8 +23,8 @@ export const FMARTRadar = ({ scores }: { scores: FMARTScores }) => {
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data} outerRadius="78%">
           <PolarGrid stroke={REPORT_COLORS.border} />
-          <PolarAngleAxis dataKey="dim" tick={{ fill: REPORT_COLORS.text, fontSize: 11, fontWeight: 600 }} />
-          <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: REPORT_COLORS.muted, fontSize: 9 }} />
+          <PolarAngleAxis dataKey="dim" tick={{ fill: "hsl(var(--foreground))", fontSize: 11, fontWeight: 600 }} />
+          <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
           <Radar name="Score" dataKey="value" stroke={REPORT_COLORS.primary} fill={REPORT_COLORS.primary} fillOpacity={0.35} />
         </RadarChart>
       </ResponsiveContainer>
