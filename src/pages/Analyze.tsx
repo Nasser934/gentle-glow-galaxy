@@ -213,7 +213,7 @@ const Analyze = () => {
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
         try {
           const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
-          navigate("/results", { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
+          navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
           return;
         } catch (e) {
           console.warn("Save new version failed", e);
@@ -221,6 +221,15 @@ const Analyze = () => {
         }
       }
 
+      // First-time analysis: save first, then navigate to the canonical owner
+      // workspace. This prevents Results.tsx from auto-saving a duplicate row.
+      try {
+        const saved = await saveReport(inputs, enriched);
+        navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
+        return;
+      } catch (e) {
+        console.warn("Initial save failed; falling back to /results", e);
+      }
       navigate("/results", { state: { report: enriched, inputs } });
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
