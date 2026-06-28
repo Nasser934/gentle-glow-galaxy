@@ -207,6 +207,17 @@ const Dashboard = () => {
     }
   };
 
+  const onChangeStatus = async (rowId: string, s: ReportRow["status"]) => {
+    try {
+      await updateReportStatus(rowId, s);
+      // Optimistic local update so the chip refreshes immediately.
+      setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
+      toast.success(`Status updated: ${s.replace("_", " ")}`);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const copyShare = (slug: string) => {
     const url = `${window.location.origin}/r/${slug}`;
     navigator.clipboard.writeText(url).then(
