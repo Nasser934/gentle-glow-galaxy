@@ -351,7 +351,7 @@ const DecisionRoom = () => {
         </Section>
 
         {/* Consumer Evidence & Improvement Layer */}
-        <EvidenceSections report={report} reportId={demo ? undefined : reportId} canEdit={!demo} />
+        <EvidenceSections report={report} reportId={demo ? undefined : reportId} canEdit={canEditStatus} />
       </div>
     </div>
   );
