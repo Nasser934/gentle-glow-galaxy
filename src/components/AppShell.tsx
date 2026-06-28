@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   PlusCircle,
@@ -13,6 +13,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -26,13 +27,8 @@ const NAV: NavItem[] = [
   { to: "/dashboard", label: "My Analyses", icon: LayoutDashboard },
   { to: "/analyze", label: "New Analysis", icon: PlusCircle },
   { to: "/compare", label: "Compare", icon: GitCompare },
-  {
-    to: "/decision-room/demo",
-    label: "Decision Room",
-    icon: Gavel,
-    match: (p) => p.startsWith("/decision-room"),
-  },
 ];
+
 
 interface AppShellProps {
   children: ReactNode;
