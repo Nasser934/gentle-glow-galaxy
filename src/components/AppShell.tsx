@@ -51,21 +51,39 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
     setMobileOpen(false);
   }, [pathname]);
 
-  // Esc closes the drawer; focus the first link on open; restore focus on close.
+  // Esc closes the drawer; focus first link on open; trap Tab inside drawer; restore focus on close.
   useEffect(() => {
     if (!mobileOpen) return;
+    const getFocusable = () =>
+      Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'a, button, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => !el.hasAttribute("disabled"));
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMobileOpen(false);
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = getFocusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && (active === first || !drawerRef.current?.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
-    // Focus first focusable element inside the drawer.
-    const focusable = drawerRef.current?.querySelector<HTMLElement>(
-      'a, button, [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.focus();
+    getFocusable()[0]?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      // Return focus to the hamburger that opened it.
       hamburgerRef.current?.focus();
     };
   }, [mobileOpen]);
