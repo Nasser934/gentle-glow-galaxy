@@ -69,10 +69,12 @@ const SharedReportContent = ({ row, setRow, user, navigate }: any) => {
               className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
               <Gauge className="mr-1.5 h-3.5 w-3.5" /> Open Decision Room
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/results", { state: { report: enrichedReport, inputs: row.inputs, slug: row.slug, reportId: row.id, ownerId: row.user_id, readOnly: true } })}
-              className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
-              <Download className="mr-1.5 h-3.5 w-3.5" /> Open full report
-            </Button>
+            {user?.id === row.user_id && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/reports/${row.id}`)}
+                className="h-8 rounded-md border-border/70 bg-card/40 px-3 text-[13px] hover:bg-card">
+                <Download className="mr-1.5 h-3.5 w-3.5" /> Open workspace
+              </Button>
+            )}
             <UserMenu />
           </div>
         </div>
