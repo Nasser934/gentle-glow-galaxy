@@ -49,9 +49,8 @@ const SharedReport = () => {
 
 const SharedReportContent = ({ row, user, navigate }: any) => {
   const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _isOwner = user?.id === row.user_id;
-  const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
+
+
 
 
   return (
