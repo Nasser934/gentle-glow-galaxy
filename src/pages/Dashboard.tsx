@@ -678,4 +678,4 @@ const StatCard = ({
 
 export default Dashboard;
 
-Loader2; // keep imports stable for future use
+
