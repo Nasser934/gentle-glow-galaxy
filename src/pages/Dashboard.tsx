@@ -42,7 +42,9 @@ import {
   listMyReports,
   archiveReportGroup,
   restoreReportGroup,
+  updateReportStatus,
   type ReportScope,
+  type ReportRow,
 } from "@/lib/reports";
 import { toast } from "sonner";
 
