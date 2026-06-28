@@ -131,7 +131,7 @@ export const WorkspaceHeader = ({ title, status, reportId, actions, versionSearc
                     return (
                       <DropdownMenuItem
                         key={v.id}
-                        onClick={() => { if (!isCurrent) navigate(`/reports/${v.id}`); }}
+                        onClick={() => { if (!isCurrent) navigate(`/reports/${v.id}${versionSearch}`); }}
                         className={cn(
                           "flex items-center justify-between gap-3",
                           isCurrent && "bg-accent",
