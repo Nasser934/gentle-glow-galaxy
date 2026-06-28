@@ -1,6 +1,6 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -15,7 +15,7 @@ import { exportReportToPdf, type VersionFamilyEntry } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { saveReport, getReportWithOwnership, listReportVersions } from "@/lib/reports";
+import { saveReport, getReportById, listReportVersions, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,20 +24,30 @@ import { useAuth } from "@/contexts/AuthContext";
 const Results = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { reportId: routeReportId } = useParams();
   const { user } = useAuth();
   const captureRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
-  const [reportId, setReportId] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<string | null>(routeReportId ?? null);
   const [savingShare, setSavingShare] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const rawReport = location.state?.report as FeasibilityReport | undefined;
-  const inputs = location.state?.inputs as ConceptInputs | undefined;
+  const stateReport = location.state?.report as FeasibilityReport | undefined;
+  const stateInputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
   const existingId = location.state?.reportId as string | undefined;
   const stateOwnerId = location.state?.ownerId as string | undefined;
   const readOnlyFlag = location.state?.readOnly === true;
+
+  // Fetched payload when arriving via /reports/:id without navigation state.
+  const [fetched, setFetched] = useState<ReportRow | null>(null);
+  const [fetchState, setFetchState] = useState<"idle" | "loading" | "not_found" | "forbidden" | "ok">(
+    routeReportId && !stateReport ? "loading" : "idle",
+  );
+
+  const rawReport: FeasibilityReport | undefined = stateReport ?? (fetched?.output as FeasibilityReport | undefined);
+  const inputs: ConceptInputs | undefined = stateInputs ?? (fetched?.inputs as ConceptInputs | undefined);
   const report = useMemo(
     () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
     [rawReport, inputs],
@@ -45,10 +55,31 @@ const Results = () => {
 
   // Refresh-safe ownership: trust the DB, not just route state.
   const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
+
+  // Hydrate slug/id from navigation state if present.
   useEffect(() => {
     if (existingSlug) setShareSlug(existingSlug);
-    if (existingId) setReportId(existingId);
-  }, [existingSlug, existingId]);
+    if (existingId && !routeReportId) setReportId(existingId);
+  }, [existingSlug, existingId, routeReportId]);
+
+  // /results legacy upgrade: if we landed on /results but we *do* have an id
+  // (from state or sessionStorage), upgrade the URL to /reports/:id.
+  // If only state.report/inputs are present (unsaved, just-finished analysis),
+  // do NOT redirect — keep rendering so auto-save/export still work.
+  useEffect(() => {
+    if (routeReportId) return; // already on canonical URL
+    if (existingId) {
+      navigate(`/reports/${existingId}`, { replace: true, state: location.state });
+      return;
+    }
+    if (!stateReport) {
+      let cached: string | null = null;
+      try { cached = sessionStorage.getItem("conceptai:currentReportId"); } catch { /* ignore */ }
+      if (cached) navigate(`/reports/${cached}`, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Expose the currently viewed report so the sidebar's Decision Room link can target it.
   useEffect(() => {
     if (reportId) {
@@ -56,28 +87,91 @@ const Results = () => {
     }
   }, [reportId]);
 
+  // Fetch path for refresh-safe /reports/:id (no navigation state).
   useEffect(() => {
-    if (!existingId || ownerId) return;
+    if (!routeReportId) return;
+    if (stateReport) {
+      // Got the payload via state — just record ownership when known.
+      if (stateOwnerId && !ownerId) setOwnerId(stateOwnerId);
+      return;
+    }
     let cancelled = false;
-    getReportWithOwnership(existingId)
-      .then((row) => { if (!cancelled && row) setOwnerId(row.user_id); })
-      .catch(() => { /* non-fatal */ });
+    setFetchState("loading");
+    getReportById(routeReportId)
+      .then((row) => {
+        if (cancelled) return;
+        if (!row) { setFetchState("not_found"); return; }
+        // Non-owner: only redirect to /r/:slug when both slug and public flag are safe.
+        if (user && row.user_id !== user.id) {
+          if (row.is_public && row.slug) {
+            navigate(`/r/${row.slug}`, { replace: true });
+            return;
+          }
+          setFetchState("forbidden");
+          return;
+        }
+        setFetched(row);
+        setOwnerId(row.user_id);
+        setShareSlug(row.slug);
+        setReportId(row.id);
+        setFetchState("ok");
+      })
+      .catch(() => { if (!cancelled) setFetchState("not_found"); });
     return () => { cancelled = true; };
-  }, [existingId, ownerId]);
+  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId]);
 
   const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
 
-  // Auto-save once on first load — never in read-only/shared view.
+  // Auto-save once on first load — never in read-only/shared view, and never
+  // when we already have a reportId (Analyze.tsx now saves before navigating,
+  // and refresh-fetch hydrates an existing row). This guarantees one row per
+  // analysis unless the user explicitly re-runs.
   useEffect(() => {
     if (readOnlyFlag) return;
-    if (!report || !inputs || existingSlug || shareSlug) return;
+    if (!report || !inputs) return;
+    if (reportId || existingId || routeReportId) return;
+    if (existingSlug || shareSlug) return;
     let cancelled = false;
     saveReport(inputs, report)
-      .then((d) => { if (!cancelled) { setShareSlug(d.slug); setReportId(d.id); setOwnerId(user?.id ?? null); } })
+      .then((d) => {
+        if (cancelled) return;
+        setShareSlug(d.slug);
+        setReportId(d.id);
+        setOwnerId(user?.id ?? null);
+        // Upgrade the URL to the canonical owner workspace.
+        navigate(`/reports/${d.id}`, { replace: true, state: location.state });
+      })
       .catch((e) => console.warn("auto-save failed", e));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Loading state for refresh-safe fetch.
+  if (fetchState === "loading") {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (fetchState === "not_found" || fetchState === "forbidden") {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="max-w-md rounded-xl border border-border bg-card p-8 text-center">
+          <Lock className="mx-auto mb-3 h-7 w-7 text-muted-foreground" />
+          <h2 className="font-display text-xl font-medium">Not found or not accessible</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This report doesn't exist, has been removed, or you don't have permission to open it.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>My Analyses</Button>
+            <Button onClick={() => navigate("/analyze")}>New analysis</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!report || !inputs) {
     return (
