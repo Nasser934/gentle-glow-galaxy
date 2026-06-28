@@ -616,7 +616,7 @@ function MobileCard({
             {(group.latest.industry || "—")} · {hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1"}
           </div>
         </Link>
-        <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} />
+        <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />
       </div>
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
