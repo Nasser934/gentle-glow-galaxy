@@ -1,25 +1,23 @@
-import { ReactNode, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   PlusCircle,
   GitCompare,
   Gavel,
-  Search,
   Menu,
-  X,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
-import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/use-toast";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
+  /** Optional custom matcher — defaults to exact pathname match. */
   match?: (path: string) => boolean;
 }
 
@@ -27,8 +25,13 @@ const NAV: NavItem[] = [
   { to: "/dashboard", label: "My Analyses", icon: LayoutDashboard },
   { to: "/analyze", label: "New Analysis", icon: PlusCircle },
   { to: "/compare", label: "Compare", icon: GitCompare },
+  {
+    to: "/decision-room",
+    label: "Decision Room",
+    icon: Gavel,
+    match: (path) => path === "/decision-room" || path.startsWith("/decision-room/"),
+  },
 ];
-
 
 interface AppShellProps {
   children: ReactNode;
@@ -39,25 +42,33 @@ interface AppShellProps {
 
 export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) => {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
-  const openDecisionRoom = () => {
+  // Close mobile drawer on any route change (including programmatic navigation).
+  useEffect(() => {
     setMobileOpen(false);
-    let id: string | null = null;
-    try { id = sessionStorage.getItem("conceptai:currentReportId"); } catch { /* ignore */ }
-    if (id) {
-      navigate(`/decision-room/${id}`);
-    } else {
-      toast({
-        title: "Open an analysis first",
-        description: "The Decision Room runs on a specific report. Pick one from My Analyses to enter its room.",
-      });
-      navigate("/dashboard");
-    }
-  };
+  }, [pathname]);
 
-  const decisionActive = pathname.startsWith("/decision-room");
+  // Esc closes the drawer; focus the first link on open; restore focus on close.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    // Focus first focusable element inside the drawer.
+    const focusable = drawerRef.current?.querySelector<HTMLElement>(
+      'a, button, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // Return focus to the hamburger that opened it.
+      hamburgerRef.current?.focus();
+    };
+  }, [mobileOpen]);
 
   const SidebarBody = (
     <div className="flex h-full flex-col">
@@ -72,7 +83,6 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
             <NavLink
               key={item.to}
               to={item.to}
-              onClick={() => setMobileOpen(false)}
               className={cn(
                 "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",
                 active
@@ -85,19 +95,6 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
             </NavLink>
           );
         })}
-        <button
-          type="button"
-          onClick={openDecisionRoom}
-          className={cn(
-            "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13px] font-medium transition-colors",
-            decisionActive
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-          )}
-        >
-          <Gavel className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          <span>Decision Room</span>
-        </button>
       </nav>
 
       <div className="border-t border-sidebar-border p-3 text-[11px] text-muted-foreground">
@@ -120,8 +117,15 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
           <div
             className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
           />
-          <aside className="absolute inset-y-0 left-0 w-64 border-r border-sidebar-border bg-sidebar shadow-xl">
+          <aside
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Main navigation"
+            className="absolute inset-y-0 left-0 w-64 border-r border-sidebar-border bg-sidebar shadow-xl"
+          >
             {SidebarBody}
           </aside>
         </div>
@@ -129,27 +133,26 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
 
       <div className="lg:pl-56">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-xl lg:px-6">
+        <header
+          className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-xl lg:px-6"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
           <button
+            ref={hamburgerRef}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted lg:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation"
+            aria-expanded={mobileOpen}
+            aria-controls="app-mobile-drawer"
           >
             <Menu className="h-5 w-5" />
           </button>
 
-          <div className="flex flex-1 items-center gap-3">
-            <div className="relative hidden max-w-md flex-1 md:block">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Search analyses, reports, evidence…"
-                className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-          </div>
+          {/* Title slot — reserved for breadcrumbs in a later phase. */}
+          <div className="flex-1" />
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <NotificationsBell />
             <ThemeToggle />
             <UserMenu />
           </div>

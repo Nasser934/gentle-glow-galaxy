@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserMenu } from "@/components/UserMenu";
+
 import { toast } from "sonner";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { FMARTRadar } from "@/components/report/FMARTRadar";
@@ -167,53 +167,43 @@ const Results = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Top toolbar */}
-      <nav className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl no-print">
-        <div className="container mx-auto flex h-14 items-center justify-between px-6">
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="font-display text-sm font-semibold tracking-tight text-foreground hover:text-primary"
-            aria-label="Concept AI — home"
-          >
-            Concept AI
-          </button>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
-              <ArrowLeft className="h-3.5 w-3.5" /> New
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5 rounded-md border-border/70 bg-card/40 px-3 text-[13px] font-medium hover:bg-card">
-              {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Share"}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" disabled={downloading} className="h-8 gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
-                  {downloading
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                    : <><Download className="h-3.5 w-3.5" /> Export</>}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <UserMenu />
-          </div>
-        </div>
-      </nav>
-
-      {/* ============== INTERACTIVE DASHBOARD ============== */}
-      <section className="container mx-auto px-4 sm:px-6 py-8 no-print">
-        <div className="mb-4 flex items-center gap-2">
+    <div>
+      {/* In-page action row — replaces the previous sticky page-level nav.
+          AppShell already provides the topbar; this row holds report-scoped actions. */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 no-print">
+        <div className="flex items-center gap-2">
           <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
             Dashboard
           </span>
           <span className="text-xs text-muted-foreground">Interactive analysis</span>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
+            <ArrowLeft className="h-3.5 w-3.5" /> New
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
+            {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+            {copied ? "Copied" : "Share"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" disabled={downloading} className="h-8 gap-1.5">
+                {downloading
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                  : <><Download className="h-3.5 w-3.5" /> Export</>}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* ============== INTERACTIVE DASHBOARD ============== */}
+      <section className="no-print">
         <InteractiveDashboard report={report} inputs={inputs} />
 
         {/* Evidence layer */}
