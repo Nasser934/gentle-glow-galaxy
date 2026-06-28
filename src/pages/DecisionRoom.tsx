@@ -14,6 +14,8 @@ import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { StatusControl } from "@/components/report/StatusControl";
+import { useAuth } from "@/contexts/AuthContext";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
