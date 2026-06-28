@@ -107,7 +107,6 @@ const Compare = () => {
             )}
           </>
         )}
-      </div>
     </div>
   );
 };
