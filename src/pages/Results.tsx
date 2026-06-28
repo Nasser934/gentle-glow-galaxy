@@ -55,6 +55,8 @@ const Results = () => {
 
   // Refresh-safe ownership: trust the DB, not just route state.
   const [ownerId, setOwnerId] = useState<string | null>(stateOwnerId ?? null);
+  const [archivedAt, setArchivedAt] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
