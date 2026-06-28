@@ -191,6 +191,16 @@ const Results = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const versionSearch = useMemo(() => {
+    const p = new URLSearchParams(searchParams);
+    if (tab === "overview") p.delete("tab");
+    else p.set("tab", tab);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [searchParams, tab]);
+
+
+
   // Loading state for refresh-safe fetch.
   if (fetchState === "loading") {
     return (
