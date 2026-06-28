@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Loader2, GitCompare } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Loader2, GitCompare, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listMyReports } from "@/lib/reports";
 import { supabase } from "@/integrations/supabase/client";
