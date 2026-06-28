@@ -282,6 +282,20 @@ const Results = () => {
     catch { toast.info(url); }
   };
 
+  const handleRestore = async () => {
+    if (!reportId) return;
+    setRestoring(true);
+    try {
+      await restoreReportGroup(reportId);
+      setArchivedAt(null);
+      toast.success("Project restored");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   return (
     <div>
       {/* In-page action row — replaces the previous sticky page-level nav.
