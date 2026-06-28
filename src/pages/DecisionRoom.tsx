@@ -95,7 +95,8 @@ const DecisionRoom = () => {
     );
   }
 
-  const { inputs, output: rawReport, title, demo, slug } = row;
+  const { inputs, output: rawReport, title, demo, ownerId, status } = row;
+  const canEditStatus = !demo && !!user && !!ownerId && user.id === ownerId;
   const report = ensureEvidenceFields(rawReport, inputs);
   const overallConfPct = confidencePercent(
     report.scores.confidence
