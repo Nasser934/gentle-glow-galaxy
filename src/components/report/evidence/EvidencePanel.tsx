@@ -442,7 +442,7 @@ export const ReportFamilyPanel = ({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => navigate(canEdit ? `/decision-room/${r.id}` : `/r/${r.slug}`)}
+                    onClick={() => navigate(canEdit ? `/reports/${r.id}` : `/r/${r.slug}`)}
                     className="h-7 px-2 text-[11px]"
                   >
                     Open
