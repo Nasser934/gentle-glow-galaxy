@@ -508,6 +508,7 @@ function DesktopGroup({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   expanded: boolean;
@@ -516,6 +517,7 @@ function DesktopGroup({
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
   const versionLabel = hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1";
