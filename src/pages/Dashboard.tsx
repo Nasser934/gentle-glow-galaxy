@@ -416,15 +416,24 @@ function RowActions({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   scope: ReportScope;
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const isArchived = !!group.latest.archived_at;
   const hasMulti = group.versions.length > 1;
+  const current = group.latest.status as ReportRow["status"];
+  const STATUS_OPTIONS: { key: ReportRow["status"]; label: string }[] = [
+    { key: "draft", label: "Draft" },
+    { key: "in_review", label: "In review" },
+    { key: "approved", label: "Approved" },
+    { key: "rejected", label: "Rejected" },
+  ];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -455,6 +464,25 @@ function RowActions({
         <DropdownMenuItem onClick={onCopyShare}>
           <Link2 className="mr-2 h-4 w-4" /> Copy share link
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Set status
+        </DropdownMenuLabel>
+        {STATUS_OPTIONS.map((s) => (
+          <DropdownMenuItem
+            key={s.key}
+            onClick={() => onChangeStatus(s.key)}
+            disabled={current === s.key}
+          >
+            <span className={`mr-2 inline-block h-2 w-2 rounded-full ${
+              s.key === "approved" ? "bg-success" :
+              s.key === "in_review" ? "bg-warning" :
+              s.key === "rejected" ? "bg-destructive" : "bg-muted-foreground/60"
+            }`} />
+            {s.label}
+            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">current</span>}
+          </DropdownMenuItem>
+        ))}
         <DropdownMenuSeparator />
         {isArchived || scope === "archived" ? (
           <DropdownMenuItem onClick={onRestore}>
