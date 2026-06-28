@@ -121,10 +121,15 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
           />
           <aside
             ref={drawerRef}
+            id="app-mobile-drawer"
             role="dialog"
             aria-modal="true"
             aria-label="Main navigation"
-            className="absolute inset-y-0 left-0 w-64 border-r border-sidebar-border bg-sidebar shadow-xl"
+            className="absolute inset-y-0 left-0 w-[85vw] max-w-xs border-r border-sidebar-border bg-sidebar shadow-xl"
+            style={{
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            }}
           >
             {SidebarBody}
           </aside>
