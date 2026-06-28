@@ -595,6 +595,7 @@ function MobileCard({
   onArchive,
   onRestore,
   onCopyShare,
+  onChangeStatus,
 }: {
   group: Group;
   expanded: boolean;
@@ -603,6 +604,7 @@ function MobileCard({
   onArchive: () => void;
   onRestore: () => void;
   onCopyShare: () => void;
+  onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
   return (
