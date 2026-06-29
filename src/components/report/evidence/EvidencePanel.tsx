@@ -396,8 +396,8 @@ export const LegacyEvidenceNotice = ({ report, reportId, canEdit }: { report: Fe
 /* -------- Report Family (DB-backed list of all versions) -------- */
 type FamilyRow = { id: string; slug: string; title: string; created_at: string; parent_report_id: string | null };
 export const ReportFamilyPanel = ({
-  reportId, currentReportId, canEdit,
-}: { reportId: string; currentReportId: string; canEdit?: boolean }) => {
+  reportId, currentReportId, canEdit, showEmpty,
+}: { reportId: string; currentReportId: string; canEdit?: boolean; showEmpty?: boolean }) => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<FamilyRow[] | null>(null);
   const [loading, setLoading] = useState(true);
