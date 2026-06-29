@@ -15,10 +15,14 @@ const COLORS = {
   white: "FFFFFF",
 };
 
-const verdictColor = (v: string) =>
-  v === "PROCEED" ? COLORS.success
-  : v === "PROCEED WITH CAUTION" || v === "REVISE" ? COLORS.warning
-  : COLORS.danger;
+const verdictColor = (v: string) => {
+  const t = (v || "").toLowerCase();
+  if (t === "proceed") return COLORS.success;
+  if (t.includes("caution") || t.includes("conditional") || t === "revise") {
+    return COLORS.warning;
+  }
+  return COLORS.danger;
+};
 
 const num = (s?: string) => { const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : 0; };
 
