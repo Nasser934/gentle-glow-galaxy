@@ -1,5 +1,6 @@
 import pptxgen from "pptxgenjs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { buildExportDecisionPack, applyCanonicalToReport } from "@/lib/exportDecisionPack";
 
 const COLORS = {
   primary: "1F4ED8",
@@ -21,7 +22,12 @@ const verdictColor = (v: string) =>
 
 const num = (s?: string) => { const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : 0; };
 
-export async function exportReportToPptx(report: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+export async function exportReportToPptx(rawReport: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+  // Canonical export pack — verdict, break-even, financial labels & risk counts
+  // match PDF and XLSX.
+  const pack = buildExportDecisionPack(rawReport, inputs);
+  const report = applyCanonicalToReport(rawReport, pack);
+
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE"; // 13.33 x 7.5 in
   pptx.title = `${inputs.projectName} — Feasibility Report`;

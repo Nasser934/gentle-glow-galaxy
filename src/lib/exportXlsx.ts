@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { formatConfidence } from "@/lib/format";
+import { buildExportDecisionPack, applyCanonicalToReport } from "@/lib/exportDecisionPack";
 
 const PRIMARY = "FF1F4ED8";
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: PRIMARY } };
@@ -23,7 +24,12 @@ const autoWidth = (ws: ExcelJS.Worksheet) => {
 
 const num = (s?: string) => { const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : 0; };
 
-export async function exportReportToXlsx(report: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+export async function exportReportToXlsx(rawReport: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+  // Canonical export pack — verdict, break-even, financial labels & risk counts
+  // match PDF and PPTX.
+  const pack = buildExportDecisionPack(rawReport, inputs);
+  const report = applyCanonicalToReport(rawReport, pack);
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Concept AI";
   wb.created = new Date();
@@ -38,10 +44,15 @@ export async function exportReportToXlsx(report: FeasibilityReport, inputs: Conc
     ["Report ID", report.reportId],
     ["Date Issued", report.dateIssued],
     ["Industry", inputs.industry],
-    ["Verdict", report.scores.verdict],
+    ["Verdict", pack.verdict.canonical],
     ["Overall Score", `${report.scores.overall.toFixed(1)} / 10`],
-    ["Investment", report.financials.investmentRange],
-    ["Break-even", report.financials.breakEvenSummary],
+    ["Investment Range", pack.financial.investmentRange],
+    ["CapEx (mid)", pack.financial.capexMid],
+    ["Monthly OpEx", pack.financial.monthlyOpex],
+    ["Initial Funding Need", pack.financial.initialFundingNeed],
+    ["Break-even", pack.financial.breakEvenDisplay],
+    ["High-severity Risks", pack.risk.highRiskCount],
+    ["Material Risks (High + Med)", pack.risk.materialRiskCount],
     ["Methodology", report.methodology],
   ].forEach((r) => { const row = summary.addRow(r); row.eachCell((c) => c.border = ALL_BORDERS); });
   summary.addRow([]);

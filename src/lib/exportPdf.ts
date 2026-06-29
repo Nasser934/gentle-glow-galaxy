@@ -24,6 +24,10 @@ import {
   ensureEvidenceFields, sanitizeForConsumer, assessInputQuality,
   deriveAssumptionRegister, type AssumptionRow,
 } from "@/lib/evidence";
+import {
+  buildExportDecisionPack, applyCanonicalToReport,
+  type ExportDecisionPack,
+} from "@/lib/exportDecisionPack";
 
 import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
@@ -82,7 +86,11 @@ export async function exportReportToPdf(
     throw new Error("Missing report data for PDF export.");
   const { report: rawReport, inputs, versionFamily } = data as ExportPdfPayload;
 
-  const report = ensureEvidenceFields(rawReport, inputs);
+  const baseReport = ensureEvidenceFields(rawReport, inputs);
+  // Canonical export pack — single source of truth for verdict, break-even,
+  // investment range and risk counts across PDF/PPTX/XLSX.
+  const pack: ExportDecisionPack = buildExportDecisionPack(baseReport, inputs, { versionFamily });
+  const report = applyCanonicalToReport(baseReport, pack);
   const iq = assessInputQuality(inputs);
 
   resetScorecardGuards();
@@ -372,11 +380,11 @@ export async function exportReportToPdf(
   /* ===== 7. Risk & Mitigation ===== */
   if (report.risks?.length) {
     startSection(doc, "Risk & Mitigation");
-    const critical = report.risks.filter((r) => /high|critical/i.test(`${r.level} ${r.impact}`));
-    if (critical.length) {
+    const highCount = pack.risk.highRiskCount;
+    if (highCount > 0) {
       notice(
         doc,
-        `${critical.length} high-severity risk${critical.length > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
+        `${highCount} high-severity risk${highCount > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
         "warn",
       );
     }
