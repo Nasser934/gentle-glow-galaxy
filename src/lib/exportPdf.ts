@@ -51,6 +51,14 @@ import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
+/** Strip duplicated lead-ins like "Break-even occurs around Break-even is projected…". */
+const cleanAssumptionText = (text: string): string =>
+  (text || "")
+    .replace(/Break-even occurs around\s+Break-even is projected/gi, "Break-even is projected")
+    .replace(/\b(\w[\w\s-]{3,40}?)\s+\1\b/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
 /** Compact a break-even/payback string for KPI cards (e.g. "Month 20"). */
 function shortBE(raw: string | undefined): string {
   const t = s(raw || "").trim();
@@ -102,7 +110,7 @@ export async function exportReportToPdf(
   });
 
   /* ---------- Page 1: Cover ---------- */
-  drawCover(doc.pdf, report, inputs);
+  drawCover(doc.pdf, report, inputs, pack);
 
   /* ---------- Page 2: TOC reserved ---------- */
   reserveTocPage(doc);
@@ -139,11 +147,11 @@ export async function exportReportToPdf(
   const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
-    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
-    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
+    { label: "Decision confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
+    { label: "Investment Range", value: pack.financial.investmentRange, sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
-      : { label: "Break-even (base)", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
+      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: "Operational savings" }
+      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : "Base case" },
   ];
   reserveBlock(doc, 200);
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
@@ -220,20 +228,20 @@ export async function exportReportToPdf(
   const legacy = deriveLegacyFinancialSummary(report);
   const finKpis: KpiItem[] = labels.isInternal
     ? [
-        { label: "Investment range", value: legacy.investmentRange },
-        { label: "Break-even / Payback", value: legacy.breakEven },
-        { label: "CapEx (mid)", value: legacy.capExMid },
-        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Investment Range", value: pack.financial.investmentRange },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "CapEx (Mid)", value: pack.financial.capexMid },
+        { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
+        { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
         { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
-        { label: "Internal ROI", value: "See base case", sub: "Annual savings × Year 1" },
       ]
     : [
-        { label: "Investment range", value: legacy.investmentRange },
-        { label: "Break-even (base)", value: legacy.breakEven },
-        { label: "LTV : CAC", value: legacy.ltvCac },
-        { label: "CapEx (mid)", value: legacy.capExMid },
-        { label: "OpEx", value: legacy.opExMonthly },
-        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+        { label: "Investment Range", value: pack.financial.investmentRange },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "LTV:CAC", value: pack.financial.ltvCac },
+        { label: "CapEx (Mid)", value: pack.financial.capexMid },
+        { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
+        { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
       ];
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
 
@@ -381,11 +389,18 @@ export async function exportReportToPdf(
   if (report.risks?.length) {
     startSection(doc, "Risk & Mitigation");
     const highCount = pack.risk.highRiskCount;
+    const materialCount = pack.risk.materialRiskCount;
     if (highCount > 0) {
       notice(
         doc,
         `${highCount} high-severity risk${highCount > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
         "warn",
+      );
+    } else if (materialCount > 0) {
+      notice(
+        doc,
+        `${materialCount} material risk${materialCount > 1 ? "s" : ""} require mitigation review.`,
+        "info",
       );
     }
     placeTable(doc, {
@@ -470,25 +485,34 @@ export async function exportReportToPdf(
     }
   }
 
-  // Top claims (max 5)
-  const claims = (report.claimEvidenceMap || []).slice(0, 5);
-  if (claims.length) {
+  // Top claims with canonical claim IDs + readable source domains.
+  const topClaims = pack.evidence.topClaims;
+  const claimsRaw = report.claimEvidenceMap || [];
+  if (topClaims.length) {
     subTitle(doc, "Top claims and their evidence");
     placeTable(doc, {
-      head: [["Claim", "Mix (U/W/AI)", "Confidence", "How to strengthen"]],
-      body: claims.map((c) => [
-        { content: s(c.claimText), styles: { fontStyle: "bold" as const } },
-        `${c.userInputPercent}/${c.webResearchPercent}/${c.aiAssumptionPercent}`,
-        s(c.confidence),
-        s(c.userCanImproveBy),
-      ]),
+      head: [["ID", "Claim", "Confidence", "Source(s)", "How to strengthen"]],
+      body: topClaims.map((c, idx) => {
+        const raw = claimsRaw[idx];
+        const sourcesText = c.sources.length
+          ? c.sources.map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ")
+          : "—";
+        return [
+          { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },
+          s(c.claimText),
+          s(c.confidence),
+          sourcesText,
+          s(raw?.userCanImproveBy || ""),
+        ];
+      }),
       columnStyles: {
-        0: { cellWidth: 200 },
-        1: { cellWidth: 70, halign: "center" },
-        2: { cellWidth: 60, halign: "center" },
-        3: { cellWidth: CONTENT_W - 330 },
+        0: { cellWidth: 40, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 170 },
+        2: { cellWidth: 56, halign: "center" },
+        3: { cellWidth: 100 },
+        4: { cellWidth: CONTENT_W - 40 - 170 - 56 - 100 },
       },
-      styles: { fontSize: 8.8 },
+      styles: { fontSize: 8.6, cellPadding: 6 },
     });
   }
 
@@ -593,7 +617,11 @@ export async function exportReportToPdf(
       placeTable(doc, {
         head: [["Assumption", "Source", "Conf.", "Risk if wrong", "What to add"]],
         body: capped.map((r) => [
-          s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
+          cleanAssumptionText(s(r.assumption)),
+          s(r.sourceType),
+          s(r.confidence),
+          cleanAssumptionText(s(r.riskIfWrong)),
+          cleanAssumptionText(s(r.whatToAdd)),
         ]),
         columnStyles: {
           0: { cellWidth: 150, fontStyle: "bold" },
@@ -641,7 +669,7 @@ export async function exportReportToPdf(
   subTitle(doc, "Recommendation thresholds");
   bulletList(doc, [
     ">= 7.5 — Proceed",
-    "6.0 – 7.4 — Conditional Proceed",
+    "6.0 – 7.4 — Proceed with Caution",
     "4.5 – 5.9 — Revise",
     "< 4.5 — Do Not Proceed",
   ]);
@@ -681,6 +709,8 @@ function placeScorecardRadarOnly(
   fmartRadarUrl: string | null,
 ) {
   if (!fmartRadarUrl) return;
+  // Reserve heading + chart together so the heading is never stranded.
+  reserveBlock(doc, 230);
   subTitle(doc, "FMART-O 6-Dimension Radar");
   placeChartImage(doc, fmartRadarUrl, 200);
 }

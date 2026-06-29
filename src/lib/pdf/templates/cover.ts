@@ -12,14 +12,21 @@ import {
 import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 import { projectLabels } from "../project";
 import { sanitizeForConsumer } from "@/lib/evidence";
+import type { ExportDecisionPack } from "@/lib/exportDecisionPack";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
-/** Trim to a single short bullet (≤ ~90 chars), one sentence — guarantees 2-line fit in cover cards. */
+/**
+ * Keep the first 1–2 sentences of each item and let the cover card wrap them
+ * over two lines. We deliberately do NOT add an ellipsis here — Phase 2A
+ * requires readable cover bullets with no awkward truncation.
+ */
 function trimBullets(items: string[], max: number): string[] {
   return (items || []).slice(0, max).map((it) => {
-    const first = (it || "").split(/(?<=[.!?])\s/)[0] || it;
-    return first.length > 90 ? first.slice(0, 87).trimEnd() + "…" : first;
+    const sentences = (it || "").split(/(?<=[.!?])\s/);
+    let out = sentences[0] || it || "";
+    if (out.length < 70 && sentences[1]) out = `${out} ${sentences[1]}`;
+    return out.trim();
   }).filter(Boolean);
 }
 
@@ -45,12 +52,13 @@ function confidenceBand(pct: number): string {
 }
 
 const verdictColor = (v: string): RGB => {
-  const u = (v || "").toUpperCase();
-  if (u === "PROCEED") return C.success;
-  if (u.startsWith("CONDITIONAL") || u === "PROCEED WITH CAUTION" || u === "IMPROVE INPUTS BEFORE INVESTMENT DECISION")
-    return C.warning;
-  if (u === "REVISE") return [234, 88, 12];
-  return C.destructive;
+  const t = (v || "").toString().trim().toLowerCase();
+  if (t === "proceed") return C.success;
+  if (t === "proceed with caution" || t.startsWith("conditional") || /caution|improve inputs/.test(t)) return C.warning;
+  if (t === "revise") return [234, 88, 12];
+  if (t === "do not proceed" || /reject|do-not-proceed/.test(t)) return C.destructive;
+  if (/proceed/.test(t)) return C.success;
+  return C.warning;
 };
 
 function cleanRecommendationLabel(verdict: string, label: string): string {
@@ -100,11 +108,18 @@ function provenanceBar(
   return ly + 6;
 }
 
-export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: ConceptInputs) {
+export function drawCover(
+  pdf: jsPDF,
+  report: FeasibilityReport,
+  inputs: ConceptInputs,
+  pack?: ExportDecisionPack,
+) {
   const decision = report.decision;
   const mix = report.evidenceMix;
-  const confidencePct = decision?.overallConfidencePct ?? 0;
-  const verdictText = (decision?.verdict || report.scores.verdict || "").toString();
+  const confidencePct = pack?.score.decisionConfidencePct ?? decision?.overallConfidencePct ?? 0;
+  // Canonical verdict everywhere on the cover.
+  const verdictText = pack?.verdict.canonical
+    || (decision?.verdict || report.scores.verdict || "").toString();
   const recoTail = cleanRecommendationLabel(verdictText, decision?.recommendationLabel || "");
 
   // Top band
@@ -164,19 +179,23 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
     y += 4;
   }
 
-  // 4-up KPI grid (no-clip, shrink-to-fit). One row = clear visual hierarchy.
+  // 4-up KPI grid (canonical values from the export pack when available).
   const labels = projectLabels(inputs);
-  const beValue = shortenBreakEven(report.financials.breakEvenSummary);
+  const investment = pack?.financial.investmentRange
+    || s(report.financials.investmentRange) || "Requires validation";
+  const beValue = pack?.financial.breakEvenDisplay
+    || shortenBreakEven(report.financials.breakEvenSummary)
+    || "Requires validation";
   const fourth = labels.isInternal
-    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
-    : { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined };
+    ? { label: "Payback / Validation", value: beValue, sub: "Operational savings" }
+    : { label: "Investment Range", value: investment, sub: report.financials.currency || undefined };
 
   const kpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
     { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
     labels.isInternal
-      ? { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined }
-      : { label: "Break-even (base)", value: beValue || "Requires validation", sub: beValue ? "See Financial Feasibility" : undefined },
+      ? { label: "Investment Range", value: investment, sub: report.financials.currency || undefined }
+      : { label: "Break-even", value: beValue, sub: beValue !== "Requires validation" ? "Base case" : undefined },
     fourth,
   ];
   y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 4, rowH: 70, gap: 10 });
