@@ -389,8 +389,10 @@ const Analyze = () => {
               <>
                 <div className="space-y-2">
                   <Label>Project Name *</Label>
-                  <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} />
+                  <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} className={errorClass("projectName")} aria-invalid={!!fieldErrors.projectName} />
+                  <InlineError field="projectName" />
                 </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Industry / Sector *</Label>
