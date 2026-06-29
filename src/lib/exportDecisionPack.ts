@@ -307,9 +307,9 @@ export function buildExportDecisionPack(
   // Market
   const market: CanonicalMarket = {
     currency: report.market.currency || currency,
-    tam: compactCurrencyString(report.market.tamValue),
-    sam: compactCurrencyString(report.market.samValue),
-    som: compactCurrencyString(report.market.somValue),
+    tam: canonicalMarketValue(report.market.tamValue),
+    sam: canonicalMarketValue(report.market.samValue),
+    som: canonicalMarketValue(report.market.somValue),
     cagr: report.market.tamCagr || "",
     growthSeries: report.market.growthChart || [],
   };
