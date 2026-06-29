@@ -491,28 +491,30 @@ const Results = () => {
       {/* ============== OFFSCREEN CHART CAPTURE ROOT ==============
           Hidden from users; rendered solely so the PDF exporter can capture
           chart images via [data-pdf-chart="..."]. Not interactive. */}
-      <div
-        ref={captureRootRef}
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: "-10000px",
-          top: 0,
-          width: "794px",
-          pointerEvents: "none",
-          background: "#ffffff",
-        }}
-      >
-        <div data-pdf-chart="fmart-radar" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <FMARTRadar scores={report.scores} />
+      {captureMounted && (
+        <div
+          ref={captureRootRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "-10000px",
+            top: 0,
+            width: "794px",
+            pointerEvents: "none",
+            background: "#ffffff",
+          }}
+        >
+          <div data-pdf-chart="fmart-radar" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <FMARTRadar scores={report.scores} />
+          </div>
+          <div data-pdf-chart="market-growth" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
+          </div>
+          <div data-pdf-chart="capex-breakdown" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <CapExBarChart data={report.financials.capEx} currency={report.financials.currency} />
+          </div>
         </div>
-        <div data-pdf-chart="market-growth" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
-        </div>
-        <div data-pdf-chart="capex-breakdown" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <CapExBarChart data={report.financials.capEx} currency={report.financials.currency} />
-        </div>
-      </div>
+      )}
     </div>
   );
 };
