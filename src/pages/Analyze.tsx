@@ -397,9 +397,11 @@ const Analyze = () => {
                   <div className="space-y-2">
                     <Label>Industry / Sector *</Label>
                     <Select value={inputs.industry} onValueChange={(v) => set("industry", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("industry")} aria-invalid={!!fieldErrors.industry}><SelectValue placeholder="Select industry" /></SelectTrigger>
                       <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="industry" />
+
                     {(() => {
                       const tpl = findTemplate(inputs.industry);
                       if (!tpl) return null;
