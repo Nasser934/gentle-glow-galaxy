@@ -394,14 +394,13 @@ export async function exportReportToXlsx(
   if (topClaims.length) {
     src.addRow([]);
     src.addRow(["Top claims & source confidence"]).font = { bold: true, color: { argb: PRIMARY } };
-    styleHeader(src.addRow(["Claim ID", "Claim", "Confidence", "Source domains", ""]));
+    styleHeader(src.addRow(["Claim ID", "Claim", "Confidence", "Source domains"]));
     topClaims.forEach((c) => {
       const row = src.addRow([
         c.claimId,
         c.claimText,
         c.confidence,
         c.sources.map((s) => s.domain || s.title).filter(Boolean).join(", "),
-        "",
       ]);
       borderRow(row);
       row.getCell(2).alignment = { wrapText: true, vertical: "top" };
