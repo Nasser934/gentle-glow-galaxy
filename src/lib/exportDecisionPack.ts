@@ -383,11 +383,8 @@ export function applyCanonicalToReport(
     decision: report.decision
       ? {
           ...report.decision,
-          verdict: pack.verdict.canonical as FeasibilityReport["decision"] extends infer D
-            ? D extends { verdict: infer V }
-              ? V
-              : never
-            : never,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          verdict: pack.verdict.canonical as any,
         }
       : report.decision,
   };
