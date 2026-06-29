@@ -567,7 +567,7 @@ function DesktopGroup({
             <td />
             <td className="px-4 py-2 pl-8 text-muted-foreground">
               <span className="font-medium text-foreground">v{group.versions.length - idx}</span>
-              {idx === 0 && <span className="ml-2 text-[11px] font-semibold text-primary">latest</span>}
+              {idx === 0 && <span className="ml-2 text-[11px] font-semibold uppercase tracking-wider text-primary">Latest</span>}
               {idx === group.versions.length - 1 && idx !== 0 && <span className="ml-2 text-[11px]">original</span>}
 
             </td>
