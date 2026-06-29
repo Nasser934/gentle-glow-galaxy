@@ -22,7 +22,7 @@ const features = [
     icon: BarChart3,
     title: "FMART-O Scorecard",
     description:
-      "Five-axis radar — Feasibility, Market, ROI, Risk, Tech — generated from your inputs and live public signals.",
+      "Six-dimension feasibility scoring across financial, market, achievability, operational, risk, and timing signals.",
   },
   {
     icon: Shield,

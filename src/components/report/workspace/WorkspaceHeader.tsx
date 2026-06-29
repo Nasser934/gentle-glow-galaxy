@@ -144,7 +144,7 @@ export const WorkspaceHeader = ({ title, status, reportId, actions, versionSearc
                               Viewing now
                             </span>
                           )}
-                          {i === (versions?.length ?? 0) - 1 && !isCurrent && (
+                          {i === (versions?.length ?? 0) - 1 && (
                             <span className="rounded bg-accent px-1.5 text-[10px] font-semibold uppercase text-foreground">
                               Latest
                             </span>
