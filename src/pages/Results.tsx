@@ -493,7 +493,7 @@ const Results = () => {
         {/* ACTIVITY — status history timeline */}
         <TabsContent value="activity" className="mt-0">
           {reportId ? (
-            <ActivityTab reportId={reportId} />
+            <ActivityTab reportId={reportId} refreshKey={activityRefresh} />
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
               Activity will appear here once the report is saved.
