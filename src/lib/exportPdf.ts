@@ -59,6 +59,15 @@ const cleanAssumptionText = (text: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** Compact a confidence label for narrow PDF table cells. */
+const shortConfidence = (value: string): string => {
+  const t = (value || "").toLowerCase();
+  if (t.startsWith("high")) return "High";
+  if (t.startsWith("med")) return "Med";
+  if (t.startsWith("low")) return "Low";
+  return value || "—";
+};
+
 /** Compact a break-even/payback string for KPI cards (e.g. "Month 20"). */
 function shortBE(raw: string | undefined): string {
   const t = s(raw || "").trim();
