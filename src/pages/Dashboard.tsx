@@ -524,7 +524,8 @@ function DesktopGroup({
   onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
-  const versionLabel = hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1";
+  const versionLabel = hasMulti ? `Latest: v${group.versions.length} · ${group.versions.length} versions` : "v1";
+
   return (
     <>
       <tr className="hover:bg-background/60">
