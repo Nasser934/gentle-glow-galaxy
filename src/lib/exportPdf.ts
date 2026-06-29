@@ -133,11 +133,6 @@ export async function exportReportToPdf(
 
   /* ===== 1. Executive Summary (narrative) ===== */
   startSection(doc, "Executive Summary");
-  paragraph(
-    doc,
-    "A short narrative for executives who want context before reading the memo. The bullets that follow in the Decision Memo summarise the same view in scannable form.",
-    { size: 9, italic: true, color: C.muted, gap: 8 },
-  );
   for (const para of deriveExecutiveSummary(report, inputs)) {
     paragraph(doc, para, { size: 10, gap: 8 });
   }
