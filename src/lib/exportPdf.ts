@@ -24,6 +24,10 @@ import {
   ensureEvidenceFields, sanitizeForConsumer, assessInputQuality,
   deriveAssumptionRegister, type AssumptionRow,
 } from "@/lib/evidence";
+import {
+  buildExportDecisionPack, applyCanonicalToReport,
+  type ExportDecisionPack,
+} from "@/lib/exportDecisionPack";
 
 import {
   createDoc, addFirstBodyPage, reserveTocPage, finalizeTOC, stampPageNumbers,
