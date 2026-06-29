@@ -275,6 +275,7 @@ const Analyze = () => {
       <Button
         type="button" variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary hover:bg-accent"
         onClick={() => completeField(field)} disabled={completing === field}
+        aria-label={`AI complete ${typeof children === "string" ? children : field}`}
       >
         {completing === field
           ? <><Loader2 className="h-3 w-3 animate-spin" /> Writing…</>
@@ -282,6 +283,7 @@ const Analyze = () => {
       </Button>
     </div>
   );
+
 
   // Phase 4 hardening: render a safe blocked view instead of the wizard.
   if (isReRun && rerunBlocked) {
