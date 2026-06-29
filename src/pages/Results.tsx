@@ -380,7 +380,7 @@ const Results = () => {
             {canEdit && reportId && (
               <StatusControl
                 report={{ id: reportId, status } as ReportRow}
-                onChanged={(s) => setStatus(s)}
+                onChanged={(s) => { setStatus(s); setActivityRefresh((n) => n + 1); }}
               />
             )}
             <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
