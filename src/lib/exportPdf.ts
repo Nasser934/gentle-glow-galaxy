@@ -59,6 +59,15 @@ const cleanAssumptionText = (text: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** Compact a confidence label for narrow PDF table cells. */
+const shortConfidence = (value: string): string => {
+  const t = (value || "").toLowerCase();
+  if (t.startsWith("high")) return "High";
+  if (t.startsWith("med")) return "Med";
+  if (t.startsWith("low")) return "Low";
+  return value || "—";
+};
+
 /** Compact a break-even/payback string for KPI cards (e.g. "Month 20"). */
 function shortBE(raw: string | undefined): string {
   const t = s(raw || "").trim();
@@ -124,11 +133,6 @@ export async function exportReportToPdf(
 
   /* ===== 1. Executive Summary (narrative) ===== */
   startSection(doc, "Executive Summary");
-  paragraph(
-    doc,
-    "A short narrative for executives who want context before reading the memo. The bullets that follow in the Decision Memo summarise the same view in scannable form.",
-    { size: 9, italic: true, color: C.muted, gap: 8 },
-  );
   for (const para of deriveExecutiveSummary(report, inputs)) {
     paragraph(doc, para, { size: 10, gap: 8 });
   }
@@ -500,7 +504,7 @@ export async function exportReportToPdf(
         return [
           { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },
           s(c.claimText),
-          s(c.confidence),
+          shortConfidence(s(c.confidence)),
           sourcesText,
           s(raw?.userCanImproveBy || ""),
         ];
@@ -526,7 +530,7 @@ export async function exportReportToPdf(
         { content: s(c.source), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
-        inferCitationConfidence(c),
+        shortConfidence(inferCitationConfidence(c)),
       ]),
       columnStyles: {
         0: { cellWidth: 100 },
@@ -552,6 +556,8 @@ export async function exportReportToPdf(
   const briefGroup = (label: string, rows: Array<[string, string | undefined]>) => {
     const filtered = rows.filter((r) => (r[1] || "").trim().length > 0);
     if (!filtered.length) return;
+    // Keep the subsection heading with at least the first two rows of its table.
+    reserveBlock(doc, Math.min(420, 44 + filtered.length * 28));
     subTitle(doc, label);
     placeTable(doc, {
       body: filtered.map(([k, v]) => [k, s(v)]),
