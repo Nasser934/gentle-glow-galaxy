@@ -452,7 +452,7 @@ const Results = () => {
         <TabsContent value="versions" className="mt-0 space-y-6">
           {reportId ? (
             <>
-              <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} />
+              <ReportFamilyPanel reportId={reportId} currentReportId={reportId} canEdit={canEdit} showEmpty />
               <VersionComparison report={report} />
             </>
           ) : (
