@@ -150,7 +150,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         </Badge>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-5 [&>*]:h-full">
         <Kpi icon={Target} label="Overall Score" value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
         <Kpi icon={DollarSign} label="Investment" value={report.financials.investmentRange} sub={cur} />
         <Kpi icon={Clock} label="Break-Even" value={report.financials.breakEvenSummary} />
