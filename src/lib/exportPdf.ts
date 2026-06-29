@@ -669,7 +669,7 @@ export async function exportReportToPdf(
   subTitle(doc, "Recommendation thresholds");
   bulletList(doc, [
     ">= 7.5 — Proceed",
-    "6.0 – 7.4 — Conditional Proceed",
+    "6.0 – 7.4 — Proceed with Caution",
     "4.5 – 5.9 — Revise",
     "< 4.5 — Do Not Proceed",
   ]);
