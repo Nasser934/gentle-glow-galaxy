@@ -229,7 +229,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           label="Market TAM"
           value={normalizeCurrencyDisplay(report.market.tamValue)}
           caption={report.market.tamCagr ? `CAGR ${report.market.tamCagr}` : undefined}
-          insight={report.market.summary || report.market.overview}
+          insight={report.market.tamLabel}
           fullValue={report.market.tamValue}
         />
         <KpiCard
