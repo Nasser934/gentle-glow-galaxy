@@ -470,6 +470,8 @@ function RowActions({
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Set status
         </DropdownMenuLabel>
+        <p className="px-2 pb-1 text-[10px] text-muted-foreground">Applies to latest version</p>
+
         {STATUS_OPTIONS.map((s) => (
           <DropdownMenuItem
             key={s.key}
