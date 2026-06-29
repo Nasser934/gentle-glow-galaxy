@@ -1,5 +1,6 @@
 import pptxgen from "pptxgenjs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { buildExportDecisionPack, applyCanonicalToReport } from "@/lib/exportDecisionPack";
 
 const COLORS = {
   primary: "1F4ED8",
