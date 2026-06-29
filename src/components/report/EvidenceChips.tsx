@@ -2,6 +2,7 @@
 // next to a piece of text by matching keywords in the citation title/takeaway.
 import { ExternalLink } from "lucide-react";
 import type { ResearchCitation } from "@/types/analysis";
+import { prettifySource } from "@/lib/format";
 
 const STOP = new Set([
   "the","and","for","with","from","this","that","into","over","under","about","their","they",
@@ -46,19 +47,22 @@ export const EvidenceChips = ({
   if (!matches.length) return null;
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
-      {matches.map((c, i) => (
-        <a
-          key={c.url + i}
-          href={c.url}
-          target="_blank"
-          rel="noreferrer"
-          title={`${c.source} — ${c.takeaway}`}
-          className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10"
-        >
-          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          <span className="truncate">{c.source}</span>
-        </a>
-      ))}
+      {matches.map((c, i) => {
+        const label = prettifySource(c);
+        return (
+          <a
+            key={c.url + i}
+            href={c.url}
+            target="_blank"
+            rel="noreferrer"
+            title={`${label} — ${c.takeaway}`}
+            className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{label}</span>
+          </a>
+        );
+      })}
     </div>
   );
 };

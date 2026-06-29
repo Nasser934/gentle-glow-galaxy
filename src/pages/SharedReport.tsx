@@ -82,12 +82,15 @@ const SharedReportContent = ({ row, user, navigate }: any) => {
       </nav>
 
       <div className="container mx-auto px-6 py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Shared analysis · read-only</div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-primary">Read-only shared report</div>
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{row.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{row.industry} · saved {new Date(row.created_at).toLocaleDateString()}</p>
           </div>
+        </div>
+        <div className="mb-6 rounded-md border border-border bg-card/40 px-3 py-2 text-[12px] text-muted-foreground">
+          This shared view is for review only. Only the owner can edit status, inputs, or evidence.
         </div>
 
         <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />

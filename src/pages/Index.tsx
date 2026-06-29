@@ -199,7 +199,7 @@ const Index = () => {
               Built for decisions, not slides.
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
-              Every artifact is structured, sourced and exportable. No prose padding, no AI slop.
+              Structured analysis, clear evidence, and decision-ready outputs.
             </p>
           </div>
 
