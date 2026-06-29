@@ -44,8 +44,22 @@ const autoWidth = (ws: ExcelJS.Worksheet, min = 12, max = 60) => {
 };
 
 const num = (s?: string) => {
-  const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  return m ? Number(m[0]) : 0;
+  const raw = (s || "").toString().trim();
+  if (!raw) return 0;
+
+  const cleaned = raw.replace(/,/g, "");
+  const m = cleaned.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return 0;
+
+  const value = Number(m[0]);
+  const tail = cleaned.slice(m.index! + m[0].length).toLowerCase();
+
+  if (/\b(t|tn|trillion)\b/.test(tail)) return value * 1_000_000_000_000;
+  if (/\b(b|bn|billion)\b/.test(tail)) return value * 1_000_000_000;
+  if (/\b(m|mn|million)\b/.test(tail)) return value * 1_000_000;
+  if (/\b(k|thousand)\b/.test(tail)) return value * 1_000;
+
+  return value;
 };
 
 export async function exportReportToXlsx(
