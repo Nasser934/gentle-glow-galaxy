@@ -210,6 +210,7 @@ export async function exportReportToXlsx(
   }
   capTotal.font = { bold: true, color: { argb: PRIMARY } };
   [2, 3, 4].forEach((i) => (capTotal.getCell(i).numFmt = "#,##0"));
+  capTotal.getCell(5).value = "";
 
   fin.addRow([]);
   fin.addRow(["OpEx Items"]).font = { bold: true, color: { argb: PRIMARY } };
