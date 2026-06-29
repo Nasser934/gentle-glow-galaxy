@@ -108,11 +108,18 @@ function provenanceBar(
   return ly + 6;
 }
 
-export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: ConceptInputs) {
+export function drawCover(
+  pdf: jsPDF,
+  report: FeasibilityReport,
+  inputs: ConceptInputs,
+  pack?: ExportDecisionPack,
+) {
   const decision = report.decision;
   const mix = report.evidenceMix;
-  const confidencePct = decision?.overallConfidencePct ?? 0;
-  const verdictText = (decision?.verdict || report.scores.verdict || "").toString();
+  const confidencePct = pack?.score.decisionConfidencePct ?? decision?.overallConfidencePct ?? 0;
+  // Canonical verdict everywhere on the cover.
+  const verdictText = pack?.verdict.canonical
+    || (decision?.verdict || report.scores.verdict || "").toString();
   const recoTail = cleanRecommendationLabel(verdictText, decision?.recommendationLabel || "");
 
   // Top band
@@ -172,19 +179,23 @@ export function drawCover(pdf: jsPDF, report: FeasibilityReport, inputs: Concept
     y += 4;
   }
 
-  // 4-up KPI grid (no-clip, shrink-to-fit). One row = clear visual hierarchy.
+  // 4-up KPI grid (canonical values from the export pack when available).
   const labels = projectLabels(inputs);
-  const beValue = shortenBreakEven(report.financials.breakEvenSummary);
+  const investment = pack?.financial.investmentRange
+    || s(report.financials.investmentRange) || "Requires validation";
+  const beValue = pack?.financial.breakEvenDisplay
+    || shortenBreakEven(report.financials.breakEvenSummary)
+    || "Requires validation";
   const fourth = labels.isInternal
-    ? { label: "Payback / Validation", value: shortenPayback(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
-    : { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined };
+    ? { label: "Payback / Validation", value: beValue, sub: "Operational savings" }
+    : { label: "Investment Range", value: investment, sub: report.financials.currency || undefined };
 
   const kpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
     { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
     labels.isInternal
-      ? { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined }
-      : { label: "Break-even (base)", value: beValue || "Requires validation", sub: beValue ? "See Financial Feasibility" : undefined },
+      ? { label: "Investment Range", value: investment, sub: report.financials.currency || undefined }
+      : { label: "Break-even", value: beValue, sub: beValue !== "Requires validation" ? "Base case" : undefined },
     fourth,
   ];
   y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 4, rowH: 70, gap: 10 });
