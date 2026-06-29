@@ -182,22 +182,35 @@ const Analyze = () => {
   };
 
   const validateStep = () => {
-    const errors: string[] = [];
+    const errs: Partial<Record<keyof ConceptInputs, string>> = {};
     if (step === 0) {
-      if (!inputs.projectName.trim()) errors.push("Project name is required");
-      if (!inputs.industry) errors.push("Industry is required");
-      if (!inputs.description.trim()) errors.push("Description is required");
+      if (!inputs.projectName.trim()) errs.projectName = "Project name is required";
+      if (!inputs.industry) errs.industry = "Industry is required";
+      if (!inputs.description.trim()) errs.description = "Description is required";
     }
     if (step === 1) {
-      if (!inputs.budgetRange) errors.push("Budget range is required");
-      if (!inputs.timeline) errors.push("Timeline is required");
+      if (!inputs.budgetRange) errs.budgetRange = "Budget range is required";
+      if (!inputs.timeline) errs.timeline = "Timeline is required";
     }
-    if (errors.length > 0) {
-      toast.error(`Please complete: ${errors.join(", ")}`);
+    setFieldErrors(errs);
+    const list = Object.values(errs);
+    if (list.length > 0) {
+      toast.error(`Please complete: ${list.join(", ")}`);
       return false;
     }
     return true;
   };
+
+  const errorClass = (field: keyof ConceptInputs) =>
+    fieldErrors[field] ? "border-destructive ring-1 ring-destructive/40" : "";
+  const InlineError = ({ field }: { field: keyof ConceptInputs }) =>
+    fieldErrors[field] ? (
+      <p id={`${field}-error`} className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
+        <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{fieldErrors[field]}</span>
+      </p>
+    ) : null;
+
 
   const next = () => { if (validateStep()) setStep((s) => Math.min(s + 1, 3)); };
   const prev = () => setStep((s) => Math.max(s - 1, 0));
