@@ -422,8 +422,27 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                             innerRadius="42%"
                             outerRadius="68%"
                             paddingAngle={2}
-                            label={({ pct }: any) => `${pct.toFixed(0)}%`}
                             labelLine={false}
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, pct }: any) => {
+                              if (pct < 5) return null;
+                              const r = innerRadius + (outerRadius - innerRadius) * 0.5;
+                              const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
+                              const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
+                              return (
+                                <text
+                                  x={x}
+                                  y={y}
+                                  fill="#ffffff"
+                                  textAnchor="middle"
+                                  dominantBaseline="central"
+                                  fontSize={13}
+                                  fontWeight={700}
+                                  style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
+                                >
+                                  {`${pct.toFixed(0)}%`}
+                                </text>
+                              );
+                            }}
                           >
                             {withPct.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                           </Pie>
