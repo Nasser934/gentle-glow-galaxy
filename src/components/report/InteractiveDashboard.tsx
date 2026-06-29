@@ -199,12 +199,47 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         </Badge>
       </div>
 
-      <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-5 [&>*]:h-full">
-        <Kpi icon={Target} label="Overall Score" value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
-        <Kpi icon={DollarSign} label="Investment" value={report.financials.investmentRange} sub={cur} />
-        <Kpi icon={Clock} label="Break-Even" value={report.financials.breakEvenSummary} />
-        <Kpi icon={TrendingUp} label="Market TAM" value={report.market.tamValue} sub={`CAGR ${report.market.tamCagr}`} />
-        <Kpi icon={Globe2} label="Research Signals" value={`${researchCount || "—"}`} sub={research?.confidence ? `${research.confidence} confidence` : "Free public sources"} />
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 [&>*]:h-full">
+        <KpiCard
+          icon={Target}
+          label="Overall Score"
+          value={`${report.scores.overall.toFixed(1)} / 10`}
+          caption="FMART-O weighted"
+          insight={report.scores.verdict}
+          fullValue={`${report.scores.overall.toFixed(1)} / 10`}
+        />
+        <KpiCard
+          icon={DollarSign}
+          label="Investment"
+          value={normalizeCurrencyDisplay(report.financials.investmentRange)}
+          caption={cur || "USD"}
+          insight="Estimated initial investment range"
+          fullValue={report.financials.investmentRange}
+        />
+        <KpiCard
+          icon={Clock}
+          label="Break-even"
+          value={extractShortBreakEven(report.financials.breakEvenSummary)}
+          caption="Base case"
+          insight={report.financials.breakEvenSummary}
+          fullValue={report.financials.breakEvenSummary}
+        />
+        <KpiCard
+          icon={TrendingUp}
+          label="Market TAM"
+          value={normalizeCurrencyDisplay(report.market.tamValue)}
+          caption={report.market.tamCagr ? `CAGR ${report.market.tamCagr}` : undefined}
+          insight={report.market.summary || report.market.overview}
+          fullValue={report.market.tamValue}
+        />
+        <KpiCard
+          icon={Globe2}
+          label="Research Signals"
+          value={`${researchCount || "—"}`}
+          caption={research?.confidence ? `${research.confidence} confidence` : "Free public sources"}
+          insight="Grounded research sources used in this analysis"
+          fullValue={String(researchCount)}
+        />
       </div>
 
       <Tabs defaultValue="score" className="space-y-4">
