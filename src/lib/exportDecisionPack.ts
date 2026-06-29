@@ -386,6 +386,13 @@ export function applyCanonicalToReport(
       investmentRange: pack.financial.investmentRange,
       breakEvenSummary: pack.financial.breakEvenDisplay,
     },
+    market: {
+      ...report.market,
+      tamValue: pack.market.tam,
+      samValue: pack.market.sam,
+      somValue: pack.market.som,
+      tamCagr: pack.market.cagr || report.market.tamCagr,
+    },
     decision: report.decision
       ? {
           ...report.decision,
