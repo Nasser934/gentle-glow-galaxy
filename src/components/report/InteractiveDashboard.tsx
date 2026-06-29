@@ -260,12 +260,20 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <Card>
                 <CardHeader><CardTitle className="text-base">Score Distribution</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="h-72 w-full">
+                  <div className="h-80 w-full sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={scoreData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                      <BarChart data={scoreData} margin={{ top: 8, right: 12, left: 0, bottom: 36 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                        <YAxis domain={[0, 10]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                          angle={-35}
+                          textAnchor="end"
+                          height={50}
+                          tickMargin={8}
+                        />
+                        <YAxis domain={[0, 10]} width={28} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
                         <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
                         <Bar dataKey="score" radius={[6, 6, 0, 0]}>
                           {scoreData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
