@@ -150,8 +150,8 @@ export async function exportReportToPdf(
     { label: "Decision confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment Range", value: pack.financial.investmentRange, sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: "Operational savings" }
-      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : "Base case" },
+      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) }
+      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) ?? (pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : undefined) },
   ];
   reserveBlock(doc, 200);
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
