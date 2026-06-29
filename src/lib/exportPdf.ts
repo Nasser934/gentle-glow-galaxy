@@ -229,7 +229,7 @@ export async function exportReportToPdf(
   const finKpis: KpiItem[] = labels.isInternal
     ? [
         { label: "Investment Range", value: pack.financial.investmentRange },
-        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) },
         { label: "CapEx (Mid)", value: pack.financial.capexMid },
         { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
         { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
