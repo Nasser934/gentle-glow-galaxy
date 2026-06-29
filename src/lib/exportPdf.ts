@@ -102,7 +102,7 @@ export async function exportReportToPdf(
   });
 
   /* ---------- Page 1: Cover ---------- */
-  drawCover(doc.pdf, report, inputs);
+  drawCover(doc.pdf, report, inputs, pack);
 
   /* ---------- Page 2: TOC reserved ---------- */
   reserveTocPage(doc);
