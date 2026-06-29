@@ -47,8 +47,19 @@ const Analyze = () => {
   const [showBrief, setShowBrief] = useState(!isReRun);
   const [completing, setCompleting] = useState<EssayField | null>(null);
 
-  const set = (field: keyof ConceptInputs, value: string) =>
+  // Per-field validation errors collected by validateStep(). Cleared on field change.
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ConceptInputs, string>>>({});
+
+  const set = (field: keyof ConceptInputs, value: string) => {
     setInputs((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
 
   // Pre-fill from previous report when ?reportId= is present — owner only.
   useEffect(() => {
