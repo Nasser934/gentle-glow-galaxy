@@ -209,9 +209,13 @@ function compactMoney(value: number, currency: string): string {
 
 /* ---------------------------- Risk normalization -------------------------- */
 
-const isHigh = (r: RiskRow): boolean => /high|critical/i.test(`${r.level} ${r.impact}`);
+const riskLevelText = (r: RiskRow): string =>
+  `${(r as any).severity ?? ""} ${r.level ?? ""}`.trim();
+
+const isHigh = (r: RiskRow): boolean => /\b(high|critical)\b/i.test(riskLevelText(r));
+
 const isMaterial = (r: RiskRow): boolean =>
-  isHigh(r) || /med|medium/i.test(`${r.level} ${r.impact}`);
+  isHigh(r) || /\b(med|medium)\b/i.test(riskLevelText(r));
 
 /* ------------------------------ Evidence ---------------------------------- */
 
@@ -262,11 +266,13 @@ export function buildExportDecisionPack(
   const canonical = canonicalizeVerdict(verdictRaw);
 
   // Score / confidence
-  const confPct = report.decision?.overallConfidencePct ?? null;
+  const rawConf = report.decision?.overallConfidencePct ?? null;
+  const normalizedConf = confidencePercent(rawConf);
+
   const confLabel: CanonicalScore["confidenceLabel"] =
-    confPct == null ? "Unknown"
-    : confPct >= 75 ? "High"
-    : confPct >= 50 ? "Medium"
+    normalizedConf == null ? "Unknown"
+    : normalizedConf >= 75 ? "High"
+    : normalizedConf >= 50 ? "Medium"
     : "Low";
 
   // Financial — single source of break-even truth
@@ -343,7 +349,7 @@ export function buildExportDecisionPack(
     verdict: { canonical, raw: verdictRaw },
     score: {
       overall: report.scores.overall || 0,
-      decisionConfidencePct: confidencePercent(confPct),
+      decisionConfidencePct: normalizedConf,
       confidenceLabel: confLabel,
     },
     financial,
