@@ -709,6 +709,8 @@ function placeScorecardRadarOnly(
   fmartRadarUrl: string | null,
 ) {
   if (!fmartRadarUrl) return;
+  // Reserve heading + chart together so the heading is never stranded.
+  reserveBlock(doc, 230);
   subTitle(doc, "FMART-O 6-Dimension Radar");
   placeChartImage(doc, fmartRadarUrl, 200);
 }
