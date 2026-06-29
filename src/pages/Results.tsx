@@ -408,12 +408,14 @@ const Results = () => {
 
       {/* Tabs synced to ?tab= */}
       <Tabs value={tab} onValueChange={setTab} className="no-print">
-        <TabsList className="mb-6 inline-flex h-9 w-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1">
-          <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
-          <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
-          <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
-          <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
-        </TabsList>
+        <div className="mb-6 max-w-full overflow-x-auto overflow-y-hidden">
+          <TabsList className="inline-flex h-auto min-h-9 w-max max-w-none flex-nowrap justify-start gap-1 rounded-lg border border-border bg-card/40 p-1">
+            <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
+            <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
+            <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
+            <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
+          </TabsList>
+        </div>
 
 
 
