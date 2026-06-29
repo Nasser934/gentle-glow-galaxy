@@ -477,25 +477,34 @@ export async function exportReportToPdf(
     }
   }
 
-  // Top claims (max 5)
-  const claims = (report.claimEvidenceMap || []).slice(0, 5);
-  if (claims.length) {
+  // Top claims with canonical claim IDs + readable source domains.
+  const topClaims = pack.evidence.topClaims;
+  const claimsRaw = report.claimEvidenceMap || [];
+  if (topClaims.length) {
     subTitle(doc, "Top claims and their evidence");
     placeTable(doc, {
-      head: [["Claim", "Mix (U/W/AI)", "Confidence", "How to strengthen"]],
-      body: claims.map((c) => [
-        { content: s(c.claimText), styles: { fontStyle: "bold" as const } },
-        `${c.userInputPercent}/${c.webResearchPercent}/${c.aiAssumptionPercent}`,
-        s(c.confidence),
-        s(c.userCanImproveBy),
-      ]),
+      head: [["ID", "Claim", "Confidence", "Source(s)", "How to strengthen"]],
+      body: topClaims.map((c, idx) => {
+        const raw = claimsRaw[idx];
+        const sourcesText = c.sources.length
+          ? c.sources.map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ")
+          : "—";
+        return [
+          { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },
+          s(c.claimText),
+          s(c.confidence),
+          sourcesText,
+          s(raw?.userCanImproveBy || ""),
+        ];
+      }),
       columnStyles: {
-        0: { cellWidth: 200 },
-        1: { cellWidth: 70, halign: "center" },
-        2: { cellWidth: 60, halign: "center" },
-        3: { cellWidth: CONTENT_W - 330 },
+        0: { cellWidth: 40, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 170 },
+        2: { cellWidth: 56, halign: "center" },
+        3: { cellWidth: 100 },
+        4: { cellWidth: CONTENT_W - 40 - 170 - 56 - 100 },
       },
-      styles: { fontSize: 8.8 },
+      styles: { fontSize: 8.6, cellPadding: 6 },
     });
   }
 
