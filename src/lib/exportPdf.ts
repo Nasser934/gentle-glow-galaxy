@@ -556,6 +556,8 @@ export async function exportReportToPdf(
   const briefGroup = (label: string, rows: Array<[string, string | undefined]>) => {
     const filtered = rows.filter((r) => (r[1] || "").trim().length > 0);
     if (!filtered.length) return;
+    // Keep the subsection heading with at least the first two rows of its table.
+    reserveBlock(doc, Math.min(420, 44 + filtered.length * 28));
     subTitle(doc, label);
     placeTable(doc, {
       body: filtered.map(([k, v]) => [k, s(v)]),
