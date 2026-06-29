@@ -327,7 +327,8 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <Card key={label}>
                 <CardContent className="p-5">
                   <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
-                  <div className="mt-1 font-display text-2xl font-bold text-primary">{value}</div>
+                  <div className="mt-1 font-display text-2xl font-bold text-primary break-words" title={String(value ?? "")}>{compactCurrencyString(value as string)}</div>
+
                   <p className="mt-2 text-sm text-foreground">{desc}</p>
                   <Badge variant="outline" className="mt-3">CAGR {cagr}</Badge>
                 </CardContent>
