@@ -58,23 +58,23 @@ export const externalLabels = {
 };
 
 /**
- * Compact a number into K / Mn / Bn / Tn form.
- *   1_200_000      -> "1.2Mn"
- *   55_000_000     -> "55Mn"
- *   1_250_000_000  -> "1.25Bn"
+ * Compact a number into K / M / B / T form (no "n" suffix).
+ *   1_200_000      -> "1.2M"
+ *   55_000_000     -> "55M"
+ *   1_250_000_000  -> "1.3B"
  *   130_000        -> "130K"
  */
 export const compactNumber = (n: number): string => {
   if (!Number.isFinite(n)) return "";
   const abs = Math.abs(n);
-  const trim = (v: number) => {
-    const s = v.toFixed(2);
-    return s.replace(/\.?0+$/, "");
+  const fmt = (v: number, big: number) => {
+    const decimals = abs >= big ? 0 : 1;
+    return v.toFixed(decimals).replace(/\.?0+$/, "");
   };
-  if (abs >= 1e12) return `${trim(n / 1e12)}Tn`;
-  if (abs >= 1e9)  return `${trim(n / 1e9)}Bn`;
-  if (abs >= 1e6)  return `${trim(n / 1e6)}Mn`;
-  if (abs >= 1e3)  return `${trim(n / 1e3)}K`;
+  if (abs >= 1e12) return `${fmt(n / 1e12, 1e13)}T`;
+  if (abs >= 1e9)  return `${fmt(n / 1e9, 1e10)}B`;
+  if (abs >= 1e6)  return `${fmt(n / 1e6, 1e7)}M`;
+  if (abs >= 1e3)  return `${Math.round(n / 1e3)}K`;
   return `${n}`;
 };
 
@@ -82,27 +82,21 @@ export const compactNumber = (n: number): string => {
  * Compact every numeric token inside a currency/range string while preserving
  * currency prefixes/suffixes (SAR, USD, $, €, etc.) and en-dash ranges.
  *
- *   "$1,200,000,000"          -> "$1.2Bn"
+ *   "$1,200,000,000"          -> "$1.2B"
  *   "$130,000 - $250,000"     -> "$130K–$250K"
- *   "SAR 2.1B"                -> "SAR 2.1Bn"
- *   "55,000,000"              -> "55Mn"
- *
- * Already-compact suffixes (K, M, B, T) are normalized to (K, Mn, Bn, Tn).
+ *   "SAR 2.1B"                -> "SAR 2.1B"
+ *   "55,000,000"              -> "55M"
  */
 export const compactCurrencyString = (input?: string | null): string => {
   if (input == null) return "—";
   let s = String(input).trim();
   if (!s) return "—";
-  // Strip artefact ".000" / ".00" from raw numbers like "1.200.000.000"
   s = s.replace(/\.000\b/g, "").replace(/\.00\b/g, "");
-  // Normalize range separators
   s = s.replace(/\s*[-–—]\s*/g, "–");
-  // Normalize single-letter suffixes to canonical form, only when not already xN
-  s = s.replace(/(\d(?:\.\d+)?)\s*T(?!n|[a-z])/gi, "$1Tn")
-       .replace(/(\d(?:\.\d+)?)\s*B(?!n|[a-z])/gi, "$1Bn")
-       .replace(/(\d(?:\.\d+)?)\s*M(?!n|[a-z])/gi, "$1Mn")
-       .replace(/(\d(?:\.\d+)?)\s*K(?![a-z])/gi, "$1K");
-  // Replace bare large numbers (with commas or 4+ digits) with compact form
+  // Normalize legacy "Mn/Bn/Tn" suffixes to single-letter form.
+  s = s.replace(/(\d(?:\.\d+)?)\s*Tn\b/gi, "$1T")
+       .replace(/(\d(?:\.\d+)?)\s*Bn\b/gi, "$1B")
+       .replace(/(\d(?:\.\d+)?)\s*Mn\b/gi, "$1M");
   s = s.replace(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{4,}(?:\.\d+)?/g, (m) => {
     const n = Number(m.replace(/,/g, ""));
     if (!Number.isFinite(n)) return m;
@@ -110,4 +104,6 @@ export const compactCurrencyString = (input?: string | null): string => {
   });
   return s;
 };
+
+
 
