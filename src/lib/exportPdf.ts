@@ -220,20 +220,20 @@ export async function exportReportToPdf(
   const legacy = deriveLegacyFinancialSummary(report);
   const finKpis: KpiItem[] = labels.isInternal
     ? [
-        { label: "Investment range", value: legacy.investmentRange },
-        { label: "Break-even / Payback", value: legacy.breakEven },
-        { label: "CapEx (mid)", value: legacy.capExMid },
-        { label: "OpEx", value: legacy.opExMonthly },
+        { label: "Investment Range", value: pack.financial.investmentRange },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "CapEx (Mid)", value: pack.financial.capexMid },
+        { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
+        { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
         { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
-        { label: "Internal ROI", value: "See base case", sub: "Annual savings × Year 1" },
       ]
     : [
-        { label: "Investment range", value: legacy.investmentRange },
-        { label: "Break-even (base)", value: legacy.breakEven },
-        { label: "LTV : CAC", value: legacy.ltvCac },
-        { label: "CapEx (mid)", value: legacy.capExMid },
-        { label: "OpEx", value: legacy.opExMonthly },
-        { label: "Top financial risks", value: legacy.topFinancialRisks.length ? `${legacy.topFinancialRisks.length} tracked` : "Requires validation" },
+        { label: "Investment Range", value: pack.financial.investmentRange },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "LTV:CAC", value: pack.financial.ltvCac },
+        { label: "CapEx (Mid)", value: pack.financial.capexMid },
+        { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
+        { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
       ];
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, finKpis, { cols: 3, rowH: 62, gap: 10 }) + 14;
 
