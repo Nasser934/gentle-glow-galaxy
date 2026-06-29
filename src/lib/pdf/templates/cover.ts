@@ -52,12 +52,13 @@ function confidenceBand(pct: number): string {
 }
 
 const verdictColor = (v: string): RGB => {
-  const u = (v || "").toUpperCase();
-  if (u === "PROCEED") return C.success;
-  if (u.startsWith("CONDITIONAL") || u === "PROCEED WITH CAUTION" || u === "IMPROVE INPUTS BEFORE INVESTMENT DECISION")
-    return C.warning;
-  if (u === "REVISE") return [234, 88, 12];
-  return C.destructive;
+  const t = (v || "").toString().trim().toLowerCase();
+  if (t === "proceed") return C.success;
+  if (t === "proceed with caution" || t.startsWith("conditional") || /caution|improve inputs/.test(t)) return C.warning;
+  if (t === "revise") return [234, 88, 12];
+  if (t === "do not proceed" || /reject|do-not-proceed/.test(t)) return C.destructive;
+  if (/proceed/.test(t)) return C.success;
+  return C.warning;
 };
 
 function cleanRecommendationLabel(verdict: string, label: string): string {
