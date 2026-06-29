@@ -103,10 +103,11 @@ export const DashboardSnapshot = ({
 
       {/* KPI grid */}
       <div className="mb-6 grid grid-cols-3 gap-3">
-        <Kpi label="Overall Score"     value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
-        <Kpi label="Investment"        value={report.financials.investmentRange} sub={cur} />
+        <Kpi label="Overall Score"     value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART-O weighted" />
+        <Kpi label="Investment"        value={compactCurrencyString(report.financials.investmentRange)} sub={cur} />
         <Kpi label="Break-Even"        value={report.financials.breakEvenSummary} />
-        <Kpi label="Market TAM"        value={report.market.tamValue} sub={`CAGR ${report.market.tamCagr}`} />
+        <Kpi label="Market TAM"        value={compactCurrencyString(report.market.tamValue)} sub={`CAGR ${report.market.tamCagr}`} />
+
         <Kpi label="Research Signals"  value={`${researchCount || "—"}`} sub={research?.confidence ? `${research.confidence} confidence` : "Free public sources"} />
         <Kpi label="Verdict"           value={report.scores.verdict} sub={`Report ${report.reportId}`} />
       </div>
