@@ -619,7 +619,7 @@ function MobileCard({
         <Link to={`/reports/${group.latest.id}`} className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-medium">{group.latest.title}</div>
           <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-            {(group.latest.industry || "—")} · {hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1"}
+            {(group.latest.industry || "—")} · {hasMulti ? `Latest: v${group.versions.length} · ${group.versions.length} versions` : "v1"}
           </div>
         </Link>
         <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />
