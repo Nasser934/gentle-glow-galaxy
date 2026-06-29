@@ -105,5 +105,32 @@ export const compactCurrencyString = (input?: string | null): string => {
   return s;
 };
 
+/** Canonical title-case label for a status value. Internal value stays lowercase. */
+export const statusLabel = (s?: string | null): string => {
+  switch ((s || "").toLowerCase()) {
+    case "draft": return "Draft";
+    case "in_review": return "In Review";
+    case "approved": return "Approved";
+    case "rejected": return "Rejected";
+    default: return s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
+  }
+};
 
+/**
+ * Pretty source label for a citation. Prefer the URL hostname (sans "www.")
+ * over generic provider labels like "Tavily web". Falls back to the
+ * citation source/title.
+ */
+export const prettifySource = (c?: { source?: string | null; title?: string | null; url?: string | null } | null): string => {
+  if (!c) return "Source";
+  const raw = (c.source || "").trim();
+  const generic = /^(tavily(\s+web)?|web|search|google|bing)$/i.test(raw);
+  if (c.url && (generic || !raw)) {
+    try {
+      const host = new URL(c.url).hostname.replace(/^www\./, "");
+      if (host) return host;
+    } catch { /* ignore */ }
+  }
+  return raw || c.title || "Source";
+};
 

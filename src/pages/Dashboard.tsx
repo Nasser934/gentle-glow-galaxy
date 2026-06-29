@@ -47,6 +47,7 @@ import {
   type ReportScope,
   type ReportRow,
 } from "@/lib/reports";
+import { statusLabel } from "@/lib/format";
 import { toast } from "sonner";
 
 const statusStyle: Record<string, string> = {
@@ -213,7 +214,7 @@ const Dashboard = () => {
       await updateReportStatus(rowId, s);
       // Optimistic local update so the chip refreshes immediately.
       setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
-      toast.success(`Status updated: ${s.replace("_", " ")}`);
+      toast.success(`Status updated: ${statusLabel(s)}`);
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -484,7 +485,7 @@ function RowActions({
               s.key === "rejected" ? "bg-destructive" : "bg-muted-foreground/60"
             }`} />
             {s.label}
-            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">current</span>}
+            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">Current</span>}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
@@ -549,7 +550,7 @@ function DesktopGroup({
         <td className="px-4 py-3 text-muted-foreground">{group.latest.industry || "—"}</td>
         <td className="px-4 py-3">
           <Badge variant="outline" className={`border ${statusStyle[group.latest.status] || statusStyle.draft}`}>
-            {(group.latest.status || "draft").replace("_", " ")}
+            {statusLabel(group.latest.status)}
           </Badge>
         </td>
         <td className="px-4 py-3 text-muted-foreground">{versionLabel}</td>
@@ -566,14 +567,14 @@ function DesktopGroup({
             <td />
             <td className="px-4 py-2 pl-8 text-muted-foreground">
               <span className="font-medium text-foreground">v{group.versions.length - idx}</span>
-              {idx === 0 && <span className="ml-2 text-[11px] font-semibold text-primary">latest</span>}
+              {idx === 0 && <span className="ml-2 text-[11px] font-semibold uppercase tracking-wider text-primary">Latest</span>}
               {idx === group.versions.length - 1 && idx !== 0 && <span className="ml-2 text-[11px]">original</span>}
 
             </td>
             <td className="px-4 py-2 text-muted-foreground">{v.industry || "—"}</td>
             <td className="px-4 py-2">
               <Badge variant="outline" className={`border ${statusStyle[v.status] || statusStyle.draft}`}>
-                {(v.status || "draft").replace("_", " ")}
+                {statusLabel(v.status)}
               </Badge>
             </td>
             <td />
@@ -627,7 +628,7 @@ function MobileCard({
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={`border ${statusStyle[group.latest.status] || statusStyle.draft}`}>
-            {(group.latest.status || "draft").replace("_", " ")}
+            {statusLabel(group.latest.status)}
           </Badge>
           {group.latest.archived_at && (
             <Badge variant="outline" className="border-muted-foreground/30 text-[10px] text-muted-foreground">

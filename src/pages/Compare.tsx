@@ -89,24 +89,43 @@ const Compare = () => {
         <GitCompare className="h-5 w-5 text-primary" />
         <h1 className="font-display text-2xl font-medium tracking-tight">Compare analyses</h1>
       </div>
-      <p className="mb-6 text-sm text-muted-foreground">Pick up to 3 saved reports to compare side-by-side.</p>
+      <p className="mb-3 text-sm text-muted-foreground">Pick up to 3 saved reports to compare side-by-side.</p>
 
 
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
         ) : (
           <>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12px] text-muted-foreground" aria-live="polite">
+                {picked.length} of 3 selected
+              </p>
+              {picked.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPicked([])}
+                  aria-label="Clear all selected reports"
+                  className="h-7 px-2 text-[12px]"
+                >
+                  Clear selection
+                </Button>
+              )}
+            </div>
             <div className="mb-8 flex flex-wrap gap-2">
               {rows.map((r) => {
                 const isPicked = picked.includes(r.id);
+                const atLimit = picked.length >= 3 && !isPicked;
                 return (
                   <Button
                     key={r.id}
                     variant={isPicked ? "default" : "outline"}
                     size="sm"
                     onClick={() => toggle(r.id)}
+                    disabled={atLimit}
                     aria-pressed={isPicked}
                     aria-label={`${isPicked ? "Remove from" : "Add to"} comparison: ${r.title}`}
+                    className={atLimit ? "opacity-50" : undefined}
                   >
                     {r.title}
                   </Button>
