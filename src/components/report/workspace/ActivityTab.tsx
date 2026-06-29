@@ -32,7 +32,7 @@ const pill = (s: string | null) => (
  * Activity tab — surfaces the report's status history. Read-only.
  * Falls back to a friendly empty state when there are no events yet.
  */
-export const ActivityTab = ({ reportId }: { reportId: string }) => {
+export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; refreshKey?: number }) => {
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,7 +53,7 @@ export const ActivityTab = ({ reportId }: { reportId: string }) => {
     return () => {
       cancelled = true;
     };
-  }, [reportId]);
+  }, [reportId, refreshKey]);
 
   if (loading) {
     return (

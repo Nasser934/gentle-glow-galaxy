@@ -155,6 +155,7 @@ const Analyze = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setInputs(data.draft);
+      setFieldErrors({});
       setShowBrief(false);
       toast.success("Draft generated. Review & edit before running analysis.");
     } catch (e: any) {

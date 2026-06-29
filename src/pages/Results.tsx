@@ -47,7 +47,9 @@ const Results = () => {
   };
 
   const captureRootRef = useRef<HTMLDivElement>(null);
-  const [downloading, setDownloading] = useState(false);
+  const [exporting, setExporting] = useState<null | "pdf" | "pptx" | "xlsx">(null);
+  const downloading = exporting !== null;
+  const [activityRefresh, setActivityRefresh] = useState(0);
   const [captureMounted, setCaptureMounted] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(routeReportId ?? null);
@@ -268,7 +270,7 @@ const Results = () => {
     });
 
   const handleDownload = async () => {
-    setDownloading(true);
+    setExporting("pdf");
     setCaptureMounted(true);
     const toastId = toast.loading("Generating PDF report…");
     try {
@@ -285,12 +287,12 @@ const Results = () => {
       toast.error(msg, { id: toastId });
     } finally {
       setCaptureMounted(false);
-      setDownloading(false);
+      setExporting(null);
     }
   };
 
   const handleExportPptx = async () => {
-    setDownloading(true);
+    setExporting("pptx");
     const id = toast.loading("Generating PowerPoint deck…");
     try {
       const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
@@ -298,11 +300,11 @@ const Results = () => {
       toast.success("Deck downloaded", { id });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "PPTX export failed", { id });
-    } finally { setDownloading(false); }
+    } finally { setExporting(null); }
   };
 
   const handleExportXlsx = async () => {
-    setDownloading(true);
+    setExporting("xlsx");
     const id = toast.loading("Generating Excel workbook…");
     try {
       const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
@@ -310,7 +312,7 @@ const Results = () => {
       toast.success("Workbook downloaded", { id });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "XLSX export failed", { id });
-    } finally { setDownloading(false); }
+    } finally { setExporting(null); }
   };
 
   const handleShare = async () => {
@@ -378,7 +380,7 @@ const Results = () => {
             {canEdit && reportId && (
               <StatusControl
                 report={{ id: reportId, status } as ReportRow}
-                onChanged={(s) => setStatus(s)}
+                onChanged={(s) => { setStatus(s); setActivityRefresh((n) => n + 1); }}
               />
             )}
             <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
@@ -397,9 +399,18 @@ const Results = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDownload} disabled={downloading} className="gap-2">
+                  {exporting === "pdf" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
+                  {exporting === "pdf" ? "Generating PDF…" : "PDF report (.pdf)"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPptx} disabled={downloading} className="gap-2">
+                  {exporting === "pptx" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Presentation className="h-4 w-4 text-primary" />}
+                  {exporting === "pptx" ? "Generating deck…" : "Executive deck (.pptx)"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXlsx} disabled={downloading} className="gap-2">
+                  {exporting === "xlsx" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <FileSpreadsheet className="h-4 w-4 text-primary" />}
+                  {exporting === "xlsx" ? "Generating workbook…" : "Financial workbook (.xlsx)"}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
@@ -446,15 +457,19 @@ const Results = () => {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleDownload} disabled={downloading} className="gap-2">
-                  {downloading
+                  {exporting === "pdf"
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
                     : <><FileText className="h-4 w-4" /> Download PDF</>}
                 </Button>
                 <Button variant="outline" onClick={handleExportXlsx} disabled={downloading} className="gap-2">
-                  <FileSpreadsheet className="h-4 w-4" /> Excel
+                  {exporting === "xlsx"
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating Excel…</>
+                    : <><FileSpreadsheet className="h-4 w-4" /> Excel</>}
                 </Button>
                 <Button variant="outline" onClick={handleExportPptx} disabled={downloading} className="gap-2">
-                  <Presentation className="h-4 w-4" /> PowerPoint
+                  {exporting === "pptx"
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PowerPoint…</>
+                    : <><Presentation className="h-4 w-4" /> PowerPoint</>}
                 </Button>
               </div>
             </div>
@@ -478,7 +493,7 @@ const Results = () => {
         {/* ACTIVITY — status history timeline */}
         <TabsContent value="activity" className="mt-0">
           {reportId ? (
-            <ActivityTab reportId={reportId} />
+            <ActivityTab reportId={reportId} refreshKey={activityRefresh} />
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
               Activity will appear here once the report is saved.
