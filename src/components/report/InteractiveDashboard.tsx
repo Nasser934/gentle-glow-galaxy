@@ -40,12 +40,12 @@ import { EvidenceChips } from "./EvidenceChips";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 const CHART_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--success))",
-  "hsl(var(--warning))",
-  "hsl(var(--destructive))",
-  "hsl(var(--accent-foreground))",
-  "hsl(var(--muted-foreground))",
+  "hsl(186 72% 45%)", // teal
+  "hsl(152 60% 45%)", // green
+  "hsl(38 92% 55%)",  // amber
+  "hsl(0 75% 58%)",   // red
+  "hsl(258 75% 62%)", // violet
+  "hsl(220 75% 58%)", // blue
 ];
 
 const verdictTone = (v: string) =>
