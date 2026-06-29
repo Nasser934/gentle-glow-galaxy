@@ -24,7 +24,12 @@ const autoWidth = (ws: ExcelJS.Worksheet) => {
 
 const num = (s?: string) => { const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : 0; };
 
-export async function exportReportToXlsx(report: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+export async function exportReportToXlsx(rawReport: FeasibilityReport, inputs: ConceptInputs, fileName: string) {
+  // Canonical export pack — verdict, break-even, financial labels & risk counts
+  // match PDF and PPTX.
+  const pack = buildExportDecisionPack(rawReport, inputs);
+  const report = applyCanonicalToReport(rawReport, pack);
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Concept AI";
   wb.created = new Date();
