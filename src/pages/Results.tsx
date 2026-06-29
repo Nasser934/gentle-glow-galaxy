@@ -48,6 +48,7 @@ const Results = () => {
 
   const captureRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [captureMounted, setCaptureMounted] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(routeReportId ?? null);
   const [savingShare, setSavingShare] = useState(false);
