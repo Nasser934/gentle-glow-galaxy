@@ -86,7 +86,11 @@ export async function exportReportToPdf(
     throw new Error("Missing report data for PDF export.");
   const { report: rawReport, inputs, versionFamily } = data as ExportPdfPayload;
 
-  const report = ensureEvidenceFields(rawReport, inputs);
+  const baseReport = ensureEvidenceFields(rawReport, inputs);
+  // Canonical export pack — single source of truth for verdict, break-even,
+  // investment range and risk counts across PDF/PPTX/XLSX.
+  const pack: ExportDecisionPack = buildExportDecisionPack(baseReport, inputs, { versionFamily });
+  const report = applyCanonicalToReport(baseReport, pack);
   const iq = assessInputQuality(inputs);
 
   resetScorecardGuards();
