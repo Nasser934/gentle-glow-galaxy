@@ -237,7 +237,7 @@ export async function exportReportToPdf(
       ]
     : [
         { label: "Investment Range", value: pack.financial.investmentRange },
-        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) },
         { label: "LTV:CAC", value: pack.financial.ltvCac },
         { label: "CapEx (Mid)", value: pack.financial.capexMid },
         { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
