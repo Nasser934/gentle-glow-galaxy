@@ -399,9 +399,18 @@ const Results = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={handleDownload} className="gap-2"><FileText className="h-4 w-4 text-primary" /> PDF report (.pdf)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPptx} className="gap-2"><Presentation className="h-4 w-4 text-primary" /> Executive deck (.pptx)</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportXlsx} className="gap-2"><FileSpreadsheet className="h-4 w-4 text-primary" /> Financial workbook (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDownload} disabled={downloading} className="gap-2">
+                  {exporting === "pdf" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
+                  {exporting === "pdf" ? "Generating PDF…" : "PDF report (.pdf)"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPptx} disabled={downloading} className="gap-2">
+                  {exporting === "pptx" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Presentation className="h-4 w-4 text-primary" />}
+                  {exporting === "pptx" ? "Generating deck…" : "Executive deck (.pptx)"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXlsx} disabled={downloading} className="gap-2">
+                  {exporting === "xlsx" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <FileSpreadsheet className="h-4 w-4 text-primary" />}
+                  {exporting === "xlsx" ? "Generating workbook…" : "Financial workbook (.xlsx)"}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
