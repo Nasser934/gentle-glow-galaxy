@@ -260,10 +260,19 @@ const Results = () => {
     }
   };
 
+  const waitForCaptureMount = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
   const handleDownload = async () => {
     setDownloading(true);
+    setCaptureMounted(true);
     const toastId = toast.loading("Generating PDF report…");
     try {
+      await waitForCaptureMount();
       const versionFamily = await fetchVersionFamilySafe();
       const result = await exportReportToPdf(
         captureRootRef.current,
@@ -275,6 +284,7 @@ const Results = () => {
       const msg = e instanceof Error ? e.message : "PDF export failed.";
       toast.error(msg, { id: toastId });
     } finally {
+      setCaptureMounted(false);
       setDownloading(false);
     }
   };
