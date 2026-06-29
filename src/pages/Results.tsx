@@ -48,6 +48,7 @@ const Results = () => {
 
   const captureRootRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [captureMounted, setCaptureMounted] = useState(false);
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(routeReportId ?? null);
   const [savingShare, setSavingShare] = useState(false);
@@ -259,10 +260,19 @@ const Results = () => {
     }
   };
 
+  const waitForCaptureMount = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
   const handleDownload = async () => {
     setDownloading(true);
+    setCaptureMounted(true);
     const toastId = toast.loading("Generating PDF report…");
     try {
+      await waitForCaptureMount();
       const versionFamily = await fetchVersionFamilySafe();
       const result = await exportReportToPdf(
         captureRootRef.current,
@@ -274,6 +284,7 @@ const Results = () => {
       const msg = e instanceof Error ? e.message : "PDF export failed.";
       toast.error(msg, { id: toastId });
     } finally {
+      setCaptureMounted(false);
       setDownloading(false);
     }
   };
@@ -397,12 +408,14 @@ const Results = () => {
 
       {/* Tabs synced to ?tab= */}
       <Tabs value={tab} onValueChange={setTab} className="no-print">
-        <TabsList className="mb-6 inline-flex h-9 w-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-card/40 p-1">
-          <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
-          <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
-          <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
-          <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
-        </TabsList>
+        <div className="mb-6 max-w-full overflow-x-auto overflow-y-hidden">
+          <TabsList className="inline-flex h-auto min-h-9 w-max max-w-none flex-nowrap justify-start gap-1 rounded-lg border border-border bg-card/40 p-1">
+            <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
+            <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
+            <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
+            <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
+          </TabsList>
+        </div>
 
 
 
@@ -478,28 +491,30 @@ const Results = () => {
       {/* ============== OFFSCREEN CHART CAPTURE ROOT ==============
           Hidden from users; rendered solely so the PDF exporter can capture
           chart images via [data-pdf-chart="..."]. Not interactive. */}
-      <div
-        ref={captureRootRef}
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: "-10000px",
-          top: 0,
-          width: "794px",
-          pointerEvents: "none",
-          background: "#ffffff",
-        }}
-      >
-        <div data-pdf-chart="fmart-radar" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <FMARTRadar scores={report.scores} />
+      {captureMounted && (
+        <div
+          ref={captureRootRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "-10000px",
+            top: 0,
+            width: "794px",
+            pointerEvents: "none",
+            background: "#ffffff",
+          }}
+        >
+          <div data-pdf-chart="fmart-radar" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <FMARTRadar scores={report.scores} />
+          </div>
+          <div data-pdf-chart="market-growth" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
+          </div>
+          <div data-pdf-chart="capex-breakdown" style={{ width: 720, padding: 16, background: "#ffffff" }}>
+            <CapExBarChart data={report.financials.capEx} currency={report.financials.currency} />
+          </div>
         </div>
-        <div data-pdf-chart="market-growth" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} />
-        </div>
-        <div data-pdf-chart="capex-breakdown" style={{ width: 720, padding: 16, background: "#ffffff" }}>
-          <CapExBarChart data={report.financials.capEx} currency={report.financials.currency} />
-        </div>
-      </div>
+      )}
     </div>
   );
 };

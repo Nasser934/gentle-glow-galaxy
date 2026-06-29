@@ -60,17 +60,20 @@ const riskTone = (level: string) =>
   : "bg-destructive/10 text-destructive border-destructive/20";
 
 const Kpi = ({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) => (
-  <Card className="overflow-hidden">
-    <CardContent className="p-5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="h-5 w-5" />
+  <Card className="h-full">
+    <CardContent className="flex h-full items-center gap-4 p-5">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div
+          className="mt-1 font-display text-lg font-semibold leading-snug text-foreground whitespace-normal break-words"
+          title={String(value ?? "")}
+        >
+          {value || "—"}
         </div>
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
-          <div className="truncate font-display text-lg font-bold text-foreground">{value}</div>
-          {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}
-        </div>
+        {sub && <div className="mt-1 text-[11px] leading-snug text-muted-foreground whitespace-normal break-words">{sub}</div>}
       </div>
     </CardContent>
   </Card>
@@ -147,7 +150,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         </Badge>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-5 [&>*]:h-full">
         <Kpi icon={Target} label="Overall Score" value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART weighted" />
         <Kpi icon={DollarSign} label="Investment" value={report.financials.investmentRange} sub={cur} />
         <Kpi icon={Clock} label="Break-Even" value={report.financials.breakEvenSummary} />

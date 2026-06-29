@@ -171,14 +171,19 @@ const Analyze = () => {
   };
 
   const validateStep = () => {
+    const errors: string[] = [];
     if (step === 0) {
-      if (!inputs.projectName.trim()) { toast.error("Project name is required"); return false; }
-      if (!inputs.industry) { toast.error("Please select an industry"); return false; }
-      if (!inputs.description.trim()) { toast.error("Description is required"); return false; }
+      if (!inputs.projectName.trim()) errors.push("Project name is required");
+      if (!inputs.industry) errors.push("Industry is required");
+      if (!inputs.description.trim()) errors.push("Description is required");
     }
     if (step === 1) {
-      if (!inputs.budgetRange) { toast.error("Please select a budget range"); return false; }
-      if (!inputs.timeline) { toast.error("Please select a timeline"); return false; }
+      if (!inputs.budgetRange) errors.push("Budget range is required");
+      if (!inputs.timeline) errors.push("Timeline is required");
+    }
+    if (errors.length > 0) {
+      toast.error(`Please complete: ${errors.join(", ")}`);
+      return false;
     }
     return true;
   };
