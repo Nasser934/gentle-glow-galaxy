@@ -65,7 +65,13 @@ function cleanRecommendationLabel(verdict: string, label: string): string {
   const v = (verdict || "").trim();
   const l = (label || "").trim();
   if (!l || !v) return l;
-  if (l.toUpperCase() === v.toUpperCase()) return "";
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  const dupes = new Set([
+    "proceed", "conditional proceed", "proceed with caution", "proceed with validation",
+    "revise", "do not proceed", "reject", "caution", "with caution", "improve inputs",
+  ]);
+  if (norm(l) === norm(v)) return "";
+  if (dupes.has(norm(l))) return "";
   const tokens = v.split(/\s+/);
   let stripped = l;
   for (const t of tokens) {
@@ -73,9 +79,21 @@ function cleanRecommendationLabel(verdict: string, label: string): string {
     if (re.test(stripped)) stripped = stripped.replace(re, "");
   }
   stripped = stripped.replace(/^[\s,:.;—-]+/, "").trim();
-  if (!stripped || stripped.toUpperCase() === v.toUpperCase()) return "";
+  if (!stripped) return "";
+  if (norm(stripped) === norm(v)) return "";
+  if (dupes.has(norm(stripped))) return "";
   return stripped;
 }
+
+/** Concise sub-label for a break-even KPI; suppresses prose and duplicates. */
+export const conciseBreakEvenSub = (main: string, raw: string | undefined | null): string | undefined => {
+  const t = (raw || "").toString().trim();
+  if (!t || t === main) return undefined;
+  const range = t.match(/\b\d{1,3}\s*(?:–|-|to)\s*\d{1,3}\s*months?\b/i)?.[0];
+  if (range) return range.replace(/\s+/g, " ");
+  if (/expects to reach break-even|projected|based on|depends on/i.test(t)) return undefined;
+  return t.length <= 32 ? t : undefined;
+};
 
 function provenanceBar(
   pdf: jsPDF, x: number, y: number, width: number, height: number,
