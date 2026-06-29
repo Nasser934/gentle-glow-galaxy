@@ -62,6 +62,26 @@ const num = (s?: string) => {
   return value;
 };
 
+const sourceConfidenceLabel = (value: unknown): string => {
+  const t = String(value ?? "").trim().toLowerCase();
+
+  if (!t) return "—";
+  if (t.startsWith("high")) return "High";
+  if (t.startsWith("med")) return "Medium";
+  if (t.startsWith("low")) return "Low";
+
+  // Numeric scores like 76 should not render as raw consumer-facing confidence.
+  const n = Number(t);
+  if (Number.isFinite(n)) {
+    if (n >= 75) return "High";
+    if (n >= 50) return "Medium";
+    return "Low";
+  }
+
+  return "—";
+};
+
+
 export async function exportReportToXlsx(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
