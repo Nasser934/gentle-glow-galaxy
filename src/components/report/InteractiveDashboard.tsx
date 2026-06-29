@@ -408,16 +408,36 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
             <Card>
               <CardHeader><CardTitle className="text-base">Funding Mix</CardTitle></CardHeader>
               <CardContent>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={fundingData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
-                        {fundingData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="h-80 w-full">
+                  {(() => {
+                    const fundingTotal = fundingData.reduce((s, d) => s + (d.value || 0), 0) || 1;
+                    const withPct = fundingData.map((d) => ({ ...d, pct: (d.value / fundingTotal) * 100 }));
+                    return (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                          <Pie
+                            data={withPct}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius="42%"
+                            outerRadius="68%"
+                            paddingAngle={2}
+                            label={({ pct, name }: any) =>
+                              pct >= 6 ? `${name.length > 18 ? name.slice(0, 16) + "…" : name} · ${pct.toFixed(0)}%` : `${pct.toFixed(0)}%`
+                            }
+                            labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                          >
+                            {withPct.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                            formatter={(value: any, name: any, entry: any) => [`${entry?.payload?.pct?.toFixed(1)}%`, name]}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
