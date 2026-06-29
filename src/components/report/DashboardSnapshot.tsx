@@ -1,6 +1,8 @@
 import { BarChart, Bar, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FMARTRadar } from "./FMARTRadar";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { compactCurrencyString } from "@/lib/format";
+
 
 /**
  * Print-only snapshot of the live dashboard. Uses a fixed hex palette
