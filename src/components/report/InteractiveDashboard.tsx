@@ -38,6 +38,8 @@ import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
 import { EvidenceChips } from "./EvidenceChips";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { compactCurrencyString } from "@/lib/format";
+
 
 const CHART_COLORS = [
   "hsl(186 72% 45%)", // teal
@@ -120,13 +122,8 @@ const extractShortBreakEven = (text?: string | null) => {
   return "See insight";
 };
 
-const normalizeCurrencyDisplay = (value?: string | null) => {
-  if (value == null) return "—";
-  return String(value)
-    .replace(/\.000\b/g, "")
-    .replace(/\.00\b/g, "")
-    .replace(/\s*-\s*/g, "–");
-};
+const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
+
 
 const toNumber = (value?: string) => {
   const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
@@ -330,7 +327,8 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <Card key={label}>
                 <CardContent className="p-5">
                   <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
-                  <div className="mt-1 font-display text-2xl font-bold text-primary">{value}</div>
+                  <div className="mt-1 font-display text-2xl font-bold text-primary break-words" title={String(value ?? "")}>{compactCurrencyString(value as string)}</div>
+
                   <p className="mt-2 text-sm text-foreground">{desc}</p>
                   <Badge variant="outline" className="mt-3">CAGR {cagr}</Badge>
                 </CardContent>
