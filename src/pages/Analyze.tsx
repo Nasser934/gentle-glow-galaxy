@@ -424,8 +424,10 @@ const Analyze = () => {
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="description">Project Description *</EssayLabel>
-                  <Textarea value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} />
+                  <Textarea value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} className={errorClass("description")} aria-invalid={!!fieldErrors.description} />
+                  <InlineError field="description" />
                 </div>
+
                 <div className="space-y-2">
                   <EssayLabel field="strategicObjectives">Strategic Objectives</EssayLabel>
                   <Textarea value={inputs.strategicObjectives} onChange={(e) => set("strategicObjectives", e.target.value)} placeholder="Key strategic objectives this project aims to achieve…" rows={3} maxLength={1500} />
