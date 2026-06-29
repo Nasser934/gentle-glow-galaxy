@@ -122,13 +122,8 @@ const extractShortBreakEven = (text?: string | null) => {
   return "See insight";
 };
 
-const normalizeCurrencyDisplay = (value?: string | null) => {
-  if (value == null) return "—";
-  return String(value)
-    .replace(/\.000\b/g, "")
-    .replace(/\.00\b/g, "")
-    .replace(/\s*-\s*/g, "–");
-};
+const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
+
 
 const toNumber = (value?: string) => {
   const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
