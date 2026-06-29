@@ -434,13 +434,15 @@ function RowActions({
     { key: "approved", label: "Approved" },
     { key: "rejected", label: "Rejected" },
   ];
+  const reportTitle = group.latest.title || "Untitled report";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="ghost" aria-label="More actions">
+        <Button size="sm" variant="ghost" aria-label={`More actions for ${reportTitle}`}>
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem asChild>
           <Link to={`/reports/${group.latest.id}`}>
@@ -468,6 +470,8 @@ function RowActions({
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Set status
         </DropdownMenuLabel>
+        <p className="px-2 pb-1 text-[10px] text-muted-foreground">Applies to latest version</p>
+
         {STATUS_OPTIONS.map((s) => (
           <DropdownMenuItem
             key={s.key}
@@ -520,7 +524,8 @@ function DesktopGroup({
   onChangeStatus: (s: ReportRow["status"]) => void;
 }) {
   const hasMulti = group.versions.length > 1;
-  const versionLabel = hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1";
+  const versionLabel = hasMulti ? `Latest: v${group.versions.length} · ${group.versions.length} versions` : "v1";
+
   return (
     <>
       <tr className="hover:bg-background/60">
@@ -561,8 +566,9 @@ function DesktopGroup({
             <td />
             <td className="px-4 py-2 pl-8 text-muted-foreground">
               <span className="font-medium text-foreground">v{group.versions.length - idx}</span>
-              {idx === 0 && <span className="ml-2 text-[11px] text-primary">current</span>}
+              {idx === 0 && <span className="ml-2 text-[11px] font-semibold text-primary">latest</span>}
               {idx === group.versions.length - 1 && idx !== 0 && <span className="ml-2 text-[11px]">original</span>}
+
             </td>
             <td className="px-4 py-2 text-muted-foreground">{v.industry || "—"}</td>
             <td className="px-4 py-2">
@@ -613,7 +619,7 @@ function MobileCard({
         <Link to={`/reports/${group.latest.id}`} className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-medium">{group.latest.title}</div>
           <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-            {(group.latest.industry || "—")} · {hasMulti ? `v${group.versions.length} · ${group.versions.length} versions` : "v1"}
+            {(group.latest.industry || "—")} · {hasMulti ? `Latest: v${group.versions.length} · ${group.versions.length} versions` : "v1"}
           </div>
         </Link>
         <RowActions group={group} scope={scope} onArchive={onArchive} onRestore={onRestore} onCopyShare={onCopyShare} onChangeStatus={onChangeStatus} />

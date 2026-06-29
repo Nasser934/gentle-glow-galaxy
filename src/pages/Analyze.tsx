@@ -47,8 +47,19 @@ const Analyze = () => {
   const [showBrief, setShowBrief] = useState(!isReRun);
   const [completing, setCompleting] = useState<EssayField | null>(null);
 
-  const set = (field: keyof ConceptInputs, value: string) =>
+  // Per-field validation errors collected by validateStep(). Cleared on field change.
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ConceptInputs, string>>>({});
+
+  const set = (field: keyof ConceptInputs, value: string) => {
     setInputs((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
 
   // Pre-fill from previous report when ?reportId= is present — owner only.
   useEffect(() => {
@@ -171,22 +182,35 @@ const Analyze = () => {
   };
 
   const validateStep = () => {
-    const errors: string[] = [];
+    const errs: Partial<Record<keyof ConceptInputs, string>> = {};
     if (step === 0) {
-      if (!inputs.projectName.trim()) errors.push("Project name is required");
-      if (!inputs.industry) errors.push("Industry is required");
-      if (!inputs.description.trim()) errors.push("Description is required");
+      if (!inputs.projectName.trim()) errs.projectName = "Project name is required";
+      if (!inputs.industry) errs.industry = "Industry is required";
+      if (!inputs.description.trim()) errs.description = "Description is required";
     }
     if (step === 1) {
-      if (!inputs.budgetRange) errors.push("Budget range is required");
-      if (!inputs.timeline) errors.push("Timeline is required");
+      if (!inputs.budgetRange) errs.budgetRange = "Budget range is required";
+      if (!inputs.timeline) errs.timeline = "Timeline is required";
     }
-    if (errors.length > 0) {
-      toast.error(`Please complete: ${errors.join(", ")}`);
+    setFieldErrors(errs);
+    const list = Object.values(errs);
+    if (list.length > 0) {
+      toast.error(`Please complete: ${list.join(", ")}`);
       return false;
     }
     return true;
   };
+
+  const errorClass = (field: keyof ConceptInputs) =>
+    fieldErrors[field] ? "border-destructive ring-1 ring-destructive/40" : "";
+  const InlineError = ({ field }: { field: keyof ConceptInputs }) =>
+    fieldErrors[field] ? (
+      <p id={`${field}-error`} className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
+        <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{fieldErrors[field]}</span>
+      </p>
+    ) : null;
+
 
   const next = () => { if (validateStep()) setStep((s) => Math.min(s + 1, 3)); };
   const prev = () => setStep((s) => Math.max(s - 1, 0));
@@ -251,6 +275,7 @@ const Analyze = () => {
       <Button
         type="button" variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary hover:bg-accent"
         onClick={() => completeField(field)} disabled={completing === field}
+        aria-label={`AI complete ${typeof children === "string" ? children : field}`}
       >
         {completing === field
           ? <><Loader2 className="h-3 w-3 animate-spin" /> Writing…</>
@@ -258,6 +283,7 @@ const Analyze = () => {
       </Button>
     </div>
   );
+
 
   // Phase 4 hardening: render a safe blocked view instead of the wizard.
   if (isReRun && rerunBlocked) {
@@ -363,15 +389,19 @@ const Analyze = () => {
               <>
                 <div className="space-y-2">
                   <Label>Project Name *</Label>
-                  <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} />
+                  <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} className={errorClass("projectName")} aria-invalid={!!fieldErrors.projectName} />
+                  <InlineError field="projectName" />
                 </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Industry / Sector *</Label>
                     <Select value={inputs.industry} onValueChange={(v) => set("industry", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("industry")} aria-invalid={!!fieldErrors.industry}><SelectValue placeholder="Select industry" /></SelectTrigger>
                       <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="industry" />
+
                     {(() => {
                       const tpl = findTemplate(inputs.industry);
                       if (!tpl) return null;
@@ -394,8 +424,10 @@ const Analyze = () => {
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="description">Project Description *</EssayLabel>
-                  <Textarea value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} />
+                  <Textarea value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} className={errorClass("description")} aria-invalid={!!fieldErrors.description} />
+                  <InlineError field="description" />
                 </div>
+
                 <div className="space-y-2">
                   <EssayLabel field="strategicObjectives">Strategic Objectives</EssayLabel>
                   <Textarea value={inputs.strategicObjectives} onChange={(e) => set("strategicObjectives", e.target.value)} placeholder="Key strategic objectives this project aims to achieve…" rows={3} maxLength={1500} />
@@ -433,18 +465,21 @@ const Analyze = () => {
                   <div className="space-y-2">
                     <Label>Estimated Budget Range *</Label>
                     <Select value={inputs.budgetRange} onValueChange={(v) => set("budgetRange", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select budget range" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("budgetRange")} aria-invalid={!!fieldErrors.budgetRange}><SelectValue placeholder="Select budget range" /></SelectTrigger>
                       <SelectContent>{BUDGET_RANGES.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="budgetRange" />
                   </div>
                   <div className="space-y-2">
                     <Label>Expected Timeline *</Label>
                     <Select value={inputs.timeline} onValueChange={(v) => set("timeline", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select timeline" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("timeline")} aria-invalid={!!fieldErrors.timeline}><SelectValue placeholder="Select timeline" /></SelectTrigger>
                       <SelectContent>{TIMELINES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="timeline" />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Team Size</Label>
                   <Select value={inputs.teamSize} onValueChange={(v) => set("teamSize", v)}>

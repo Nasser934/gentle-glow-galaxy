@@ -97,11 +97,22 @@ const Compare = () => {
         ) : (
           <>
             <div className="mb-8 flex flex-wrap gap-2">
-              {rows.map((r) => (
-                <Button key={r.id} variant={picked.includes(r.id) ? "default" : "outline"} size="sm" onClick={() => toggle(r.id)}>
-                  {r.title}
-                </Button>
-              ))}
+              {rows.map((r) => {
+                const isPicked = picked.includes(r.id);
+                return (
+                  <Button
+                    key={r.id}
+                    variant={isPicked ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggle(r.id)}
+                    aria-pressed={isPicked}
+                    aria-label={`${isPicked ? "Remove from" : "Add to"} comparison: ${r.title}`}
+                  >
+                    {r.title}
+                  </Button>
+                );
+              })}
+
             </div>
 
             {cells.length > 0 && (

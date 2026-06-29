@@ -458,13 +458,23 @@ export const ReportFamilyPanel = ({
         <ul className="divide-y divide-border rounded-md border border-border">
           {rows.map((r, i) => {
             const isCurrent = r.id === currentReportId;
+            const isLatest = i === rows.length - 1;
             return (
               <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">v{i + 1}</Badge>
                     <span className="truncate font-medium text-foreground">{r.title}</span>
-                    {isCurrent && <span className="text-[10px] uppercase tracking-wider text-primary">current</span>}
+                    {isLatest && (
+                      <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                        Latest
+                      </span>
+                    )}
+                    {isCurrent && (
+                      <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                        Viewing now
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                 </div>
@@ -481,6 +491,7 @@ export const ReportFamilyPanel = ({
               </li>
             );
           })}
+
         </ul>
         {canEdit && (
           <p className="mt-2 text-[11px] text-muted-foreground">

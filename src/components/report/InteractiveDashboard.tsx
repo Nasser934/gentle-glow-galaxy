@@ -115,14 +115,15 @@ const KpiCard = ({
 
 const extractShortBreakEven = (text?: string | null) => {
   if (!text) return "—";
-  const monthMatch = text.match(/(\d+)\s*[-–]?\s*month/i);
-  if (monthMatch) return `${monthMatch[1]} months`;
-  const yearMatch = text.match(/(\d+(?:\.\d+)?)\s*year/i);
-  if (yearMatch) return `${yearMatch[1]} years`;
-  return "See insight";
+  const monthMatch = text.match(/month\s*(\d+)/i) || text.match(/(\d+)\s*[-–]?\s*month/i);
+  if (monthMatch) return `Month ${monthMatch[1]}`;
+  const yearMatch = text.match(/year\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*year/i);
+  if (yearMatch) return `Year ${yearMatch[1]}`;
+  return "View rationale";
 };
 
 const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
+
 
 
 const toNumber = (value?: string) => {
