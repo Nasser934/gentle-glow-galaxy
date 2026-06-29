@@ -465,18 +465,21 @@ const Analyze = () => {
                   <div className="space-y-2">
                     <Label>Estimated Budget Range *</Label>
                     <Select value={inputs.budgetRange} onValueChange={(v) => set("budgetRange", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select budget range" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("budgetRange")} aria-invalid={!!fieldErrors.budgetRange}><SelectValue placeholder="Select budget range" /></SelectTrigger>
                       <SelectContent>{BUDGET_RANGES.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="budgetRange" />
                   </div>
                   <div className="space-y-2">
                     <Label>Expected Timeline *</Label>
                     <Select value={inputs.timeline} onValueChange={(v) => set("timeline", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select timeline" /></SelectTrigger>
+                      <SelectTrigger className={errorClass("timeline")} aria-invalid={!!fieldErrors.timeline}><SelectValue placeholder="Select timeline" /></SelectTrigger>
                       <SelectContent>{TIMELINES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
+                    <InlineError field="timeline" />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Team Size</Label>
                   <Select value={inputs.teamSize} onValueChange={(v) => set("teamSize", v)}>
