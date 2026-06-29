@@ -380,11 +380,11 @@ export async function exportReportToPdf(
   /* ===== 7. Risk & Mitigation ===== */
   if (report.risks?.length) {
     startSection(doc, "Risk & Mitigation");
-    const critical = report.risks.filter((r) => /high|critical/i.test(`${r.level} ${r.impact}`));
-    if (critical.length) {
+    const highCount = pack.risk.highRiskCount;
+    if (highCount > 0) {
       notice(
         doc,
-        `${critical.length} high-severity risk${critical.length > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
+        `${highCount} high-severity risk${highCount > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
         "warn",
       );
     }
