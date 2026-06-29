@@ -59,25 +59,74 @@ const riskTone = (level: string) =>
   : level === "Med" ? "bg-warning/10 text-warning border-warning/20"
   : "bg-destructive/10 text-destructive border-destructive/20";
 
-const Kpi = ({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) => (
-  <Card className="h-full">
-    <CardContent className="flex h-full items-center gap-4 p-5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div
-          className="mt-1 font-display text-lg font-semibold leading-snug text-foreground whitespace-normal break-words"
-          title={String(value ?? "")}
-        >
-          {value || "—"}
+const KpiCard = ({
+  label,
+  value,
+  insight,
+  caption,
+  fullValue,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  insight?: string;
+  caption?: string;
+  fullValue?: string | null;
+  icon?: any;
+}) => (
+  <div className="flex h-full min-h-[148px] flex-col rounded-xl border border-border bg-card p-5">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
         </div>
-        {sub && <div className="mt-1 text-[11px] leading-snug text-muted-foreground whitespace-normal break-words">{sub}</div>}
       </div>
-    </CardContent>
-  </Card>
+      {Icon && (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </div>
+      )}
+    </div>
+
+    <div className="mt-4">
+      <div
+        className="font-display text-2xl font-semibold leading-tight text-foreground whitespace-normal break-words"
+        title={String(fullValue ?? value ?? "")}
+      >
+        {value || "—"}
+      </div>
+      {caption && (
+        <div className="mt-1 text-xs leading-snug text-muted-foreground">{caption}</div>
+      )}
+    </div>
+
+    {insight && (
+      <div
+        className="mt-4 rounded-md border border-border/60 bg-muted/25 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground"
+        title={insight}
+      >
+        {insight}
+      </div>
+    )}
+  </div>
 );
+
+const extractShortBreakEven = (text?: string | null) => {
+  if (!text) return "—";
+  const monthMatch = text.match(/(\d+)\s*[-–]?\s*month/i);
+  if (monthMatch) return `${monthMatch[1]} months`;
+  const yearMatch = text.match(/(\d+(?:\.\d+)?)\s*year/i);
+  if (yearMatch) return `${yearMatch[1]} years`;
+  return "See insight";
+};
+
+const normalizeCurrencyDisplay = (value?: string | null) => {
+  if (value == null) return "—";
+  return String(value)
+    .replace(/\.000\b/g, "")
+    .replace(/\.00\b/g, "")
+    .replace(/\s*-\s*/g, "–");
+};
 
 const toNumber = (value?: string) => {
   const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
