@@ -167,7 +167,7 @@ const Dashboard = () => {
   const statusFilters: { key: StatusKey; label: string }[] = [
     { key: "all", label: "All status" },
     { key: "approved", label: "Approved" },
-    { key: "in_review", label: "In review" },
+    { key: "in_review", label: "In Review" },
     { key: "draft", label: "Draft" },
     { key: "rejected", label: "Rejected" },
   ];
@@ -257,7 +257,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Projects" value={stats.total} icon={FolderOpen} />
         <StatCard label="Approved" value={stats.approved} icon={CheckCircle2} tone="success" />
-        <StatCard label="In review" value={stats.inReview} icon={ClipboardList} tone="warning" />
+        <StatCard label="In Review" value={stats.inReview} icon={ClipboardList} tone="warning" />
         <StatCard label="Drafts" value={stats.drafts} icon={Gauge} />
       </div>
 
@@ -431,7 +431,7 @@ function RowActions({
   const current = group.latest.status as ReportRow["status"];
   const STATUS_OPTIONS: { key: ReportRow["status"]; label: string }[] = [
     { key: "draft", label: "Draft" },
-    { key: "in_review", label: "In review" },
+    { key: "in_review", label: "In Review" },
     { key: "approved", label: "Approved" },
     { key: "rejected", label: "Rejected" },
   ];

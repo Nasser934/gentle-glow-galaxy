@@ -159,7 +159,7 @@ const Compare = () => {
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium">Investment</td>
-                      {cells.map((c) => <td key={c.id} className="px-4 py-3">{c.report?.financials.investmentRange || "—"}</td>)}
+                      {cells.map((c) => <td key={c.id} className="px-4 py-3"><span title={c.report?.financials.investmentRange || ""}>{compactCurrencyString(c.report?.financials.investmentRange) || "—"}</span></td>)}
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium">Break-even</td>
