@@ -434,13 +434,15 @@ function RowActions({
     { key: "approved", label: "Approved" },
     { key: "rejected", label: "Rejected" },
   ];
+  const reportTitle = group.latest.title || "Untitled report";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="ghost" aria-label="More actions">
+        <Button size="sm" variant="ghost" aria-label={`More actions for ${reportTitle}`}>
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem asChild>
           <Link to={`/reports/${group.latest.id}`}>
