@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, History } from "lucide-react";
+import { statusLabel } from "@/lib/format";
 
 interface StatusEvent {
   id: string;
@@ -22,8 +23,8 @@ const fmt = (iso: string) =>
   });
 
 const pill = (s: string | null) => (
-  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
-    {s ? s.replace(/_/g, " ") : "—"}
+  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+    {s ? statusLabel(s) : "—"}
   </span>
 );
 

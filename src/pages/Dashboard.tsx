@@ -47,6 +47,7 @@ import {
   type ReportScope,
   type ReportRow,
 } from "@/lib/reports";
+import { statusLabel } from "@/lib/format";
 import { toast } from "sonner";
 
 const statusStyle: Record<string, string> = {
@@ -213,7 +214,7 @@ const Dashboard = () => {
       await updateReportStatus(rowId, s);
       // Optimistic local update so the chip refreshes immediately.
       setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
-      toast.success(`Status updated: ${s.replace("_", " ")}`);
+      toast.success(`Status updated: ${statusLabel(s)}`);
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -484,7 +485,7 @@ function RowActions({
               s.key === "rejected" ? "bg-destructive" : "bg-muted-foreground/60"
             }`} />
             {s.label}
-            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">current</span>}
+            {current === s.key && <span className="ml-auto text-[10px] text-muted-foreground">Current</span>}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
