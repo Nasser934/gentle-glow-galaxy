@@ -381,11 +381,18 @@ export async function exportReportToPdf(
   if (report.risks?.length) {
     startSection(doc, "Risk & Mitigation");
     const highCount = pack.risk.highRiskCount;
+    const materialCount = pack.risk.materialRiskCount;
     if (highCount > 0) {
       notice(
         doc,
         `${highCount} high-severity risk${highCount > 1 ? "s" : ""} require explicit mitigation review before funding approval.`,
         "warn",
+      );
+    } else if (materialCount > 0) {
+      notice(
+        doc,
+        `${materialCount} material risk${materialCount > 1 ? "s" : ""} require mitigation review.`,
+        "info",
       );
     }
     placeTable(doc, {
