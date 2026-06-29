@@ -12,14 +12,21 @@ import {
 import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 import { projectLabels } from "../project";
 import { sanitizeForConsumer } from "@/lib/evidence";
+import type { ExportDecisionPack } from "@/lib/exportDecisionPack";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
-/** Trim to a single short bullet (≤ ~90 chars), one sentence — guarantees 2-line fit in cover cards. */
+/**
+ * Keep the first 1–2 sentences of each item and let the cover card wrap them
+ * over two lines. We deliberately do NOT add an ellipsis here — Phase 2A
+ * requires readable cover bullets with no awkward truncation.
+ */
 function trimBullets(items: string[], max: number): string[] {
   return (items || []).slice(0, max).map((it) => {
-    const first = (it || "").split(/(?<=[.!?])\s/)[0] || it;
-    return first.length > 90 ? first.slice(0, 87).trimEnd() + "…" : first;
+    const sentences = (it || "").split(/(?<=[.!?])\s/);
+    let out = sentences[0] || it || "";
+    if (out.length < 70 && sentences[1]) out = `${out} ${sentences[1]}`;
+    return out.trim();
   }).filter(Boolean);
 }
 
