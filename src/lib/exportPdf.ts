@@ -504,7 +504,7 @@ export async function exportReportToPdf(
         return [
           { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },
           s(c.claimText),
-          s(c.confidence),
+          shortConfidence(s(c.confidence)),
           sourcesText,
           s(raw?.userCanImproveBy || ""),
         ];
