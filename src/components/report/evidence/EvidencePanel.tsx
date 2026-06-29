@@ -411,7 +411,37 @@ export const ReportFamilyPanel = ({
     return () => { cancelled = true; };
   }, [reportId]);
   if (loading) return null;
-  if (!rows || rows.length <= 1) return null;
+  if (!rows || rows.length <= 1) {
+    if (!showEmpty) return null;
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GitBranch className="h-4 w-4 text-primary" /> Report family
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Only one version exists for this analysis.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-dashed border-border bg-muted/20 p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Re-run this analysis to create v2 and start comparing versions.
+            </p>
+            {canEdit && currentReportId && (
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => navigate(`/analyze?reportId=${currentReportId}`)}
+              >
+                Re-run analysis
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
   const currentIdx = rows.findIndex((r) => r.id === currentReportId);
   return (
     <Card>
