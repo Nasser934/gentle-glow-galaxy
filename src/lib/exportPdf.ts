@@ -36,7 +36,7 @@ import {
   C, CONTENT_W, MARGIN, ensureSpace, reserveBlock,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
-import { drawCover } from "./pdf/templates/cover";
+import { drawCover, conciseBreakEvenSub } from "./pdf/templates/cover";
 import { resetScorecardGuards } from "./pdf/templates/scorecard";
 import { placeChartCommentary } from "./pdf/templates/chartCommentary";
 import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
@@ -150,8 +150,8 @@ export async function exportReportToPdf(
     { label: "Decision confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment Range", value: pack.financial.investmentRange, sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: "Operational savings" }
-      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : "Base case" },
+      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) }
+      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) ?? (pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : undefined) },
   ];
   reserveBlock(doc, 200);
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
@@ -229,7 +229,7 @@ export async function exportReportToPdf(
   const finKpis: KpiItem[] = labels.isInternal
     ? [
         { label: "Investment Range", value: pack.financial.investmentRange },
-        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) },
         { label: "CapEx (Mid)", value: pack.financial.capexMid },
         { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
         { label: "Initial Funding Need", value: pack.financial.initialFundingNeed, sub: "CapEx + 6mo OpEx" },
@@ -237,7 +237,7 @@ export async function exportReportToPdf(
       ]
     : [
         { label: "Investment Range", value: pack.financial.investmentRange },
-        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.breakEvenRange && pack.financial.breakEvenRange !== pack.financial.breakEvenDisplay ? pack.financial.breakEvenRange : undefined },
+        { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) },
         { label: "LTV:CAC", value: pack.financial.ltvCac },
         { label: "CapEx (Mid)", value: pack.financial.capexMid },
         { label: "Monthly OpEx", value: pack.financial.monthlyOpex },
@@ -491,7 +491,7 @@ export async function exportReportToPdf(
   if (topClaims.length) {
     subTitle(doc, "Top claims and their evidence");
     placeTable(doc, {
-      head: [["ID", "Claim", "Confidence", "Source(s)", "How to strengthen"]],
+      head: [["ID", "Claim", "Conf.", "Source(s)", "How to strengthen"]],
       body: topClaims.map((c, idx) => {
         const raw = claimsRaw[idx];
         const sourcesText = c.sources.length
@@ -506,11 +506,11 @@ export async function exportReportToPdf(
         ];
       }),
       columnStyles: {
-        0: { cellWidth: 40, halign: "center", fontStyle: "bold" },
-        1: { cellWidth: 170 },
-        2: { cellWidth: 56, halign: "center" },
-        3: { cellWidth: 100 },
-        4: { cellWidth: CONTENT_W - 40 - 170 - 56 - 100 },
+        0: { cellWidth: 36, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 158 },
+        2: { cellWidth: 38, halign: "center" },
+        3: { cellWidth: 124 },
+        4: { cellWidth: CONTENT_W - 36 - 158 - 38 - 124 },
       },
       styles: { fontSize: 8.6, cellPadding: 6 },
     });

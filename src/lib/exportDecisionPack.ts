@@ -207,7 +207,22 @@ function compactMoney(value: number, currency: string): string {
   return cur ? `${cur} ${compact}` : compact;
 }
 
-/* ---------------------------- Risk normalization -------------------------- */
+/* ----------------------------- Market helpers ----------------------------- */
+
+/**
+ * Normalize a market value string. If the raw input already contains a
+ * compact currency expression (e.g. "$500M 2025 (Forecasted)"), extract
+ * only that expression so years/notes don't get compacted (e.g. "2K").
+ */
+function canonicalMarketValue(raw: string | undefined | null): string {
+  const t = (raw || "").toString().trim();
+  if (!t) return "Requires validation";
+  const compact = t.match(
+    /(?:USD|SAR|AED|EUR|GBP|\$|€|£)?\s*\d+(?:\.\d+)?\s*(?:K|M|B|T|million|billion|trillion)\b/i,
+  );
+  if (compact) return compact[0].replace(/\s+/g, " ").trim();
+  return compactCurrencyString(t) || t;
+}
 
 const riskLevelText = (r: RiskRow): string =>
   `${(r as any).severity ?? ""} ${r.level ?? ""}`.trim();
@@ -307,9 +322,9 @@ export function buildExportDecisionPack(
   // Market
   const market: CanonicalMarket = {
     currency: report.market.currency || currency,
-    tam: compactCurrencyString(report.market.tamValue),
-    sam: compactCurrencyString(report.market.samValue),
-    som: compactCurrencyString(report.market.somValue),
+    tam: canonicalMarketValue(report.market.tamValue),
+    sam: canonicalMarketValue(report.market.samValue),
+    som: canonicalMarketValue(report.market.somValue),
     cagr: report.market.tamCagr || "",
     growthSeries: report.market.growthChart || [],
   };
