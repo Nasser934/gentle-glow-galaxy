@@ -617,7 +617,11 @@ export async function exportReportToPdf(
       placeTable(doc, {
         head: [["Assumption", "Source", "Conf.", "Risk if wrong", "What to add"]],
         body: capped.map((r) => [
-          s(r.assumption), s(r.sourceType), s(r.confidence), s(r.riskIfWrong), s(r.whatToAdd),
+          cleanAssumptionText(s(r.assumption)),
+          s(r.sourceType),
+          s(r.confidence),
+          cleanAssumptionText(s(r.riskIfWrong)),
+          cleanAssumptionText(s(r.whatToAdd)),
         ]),
         columnStyles: {
           0: { cellWidth: 150, fontStyle: "bold" },
