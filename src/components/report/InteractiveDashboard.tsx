@@ -422,10 +422,8 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                             innerRadius="42%"
                             outerRadius="68%"
                             paddingAngle={2}
-                            label={({ pct, name }: any) =>
-                              pct >= 6 ? `${name.length > 18 ? name.slice(0, 16) + "…" : name} · ${pct.toFixed(0)}%` : `${pct.toFixed(0)}%`
-                            }
-                            labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                            label={({ pct }: any) => `${pct.toFixed(0)}%`}
+                            labelLine={false}
                           >
                             {withPct.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                           </Pie>
