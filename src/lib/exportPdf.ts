@@ -530,7 +530,7 @@ export async function exportReportToPdf(
         { content: s(c.source), styles: { fontStyle: "bold" as const } },
         s(c.title),
         s(c.takeaway),
-        inferCitationConfidence(c),
+        shortConfidence(inferCitationConfidence(c)),
       ]),
       columnStyles: {
         0: { cellWidth: 100 },
