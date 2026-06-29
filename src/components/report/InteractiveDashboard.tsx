@@ -38,6 +38,8 @@ import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
 import { EvidenceChips } from "./EvidenceChips";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { compactCurrencyString } from "@/lib/format";
+
 
 const CHART_COLORS = [
   "hsl(186 72% 45%)", // teal
