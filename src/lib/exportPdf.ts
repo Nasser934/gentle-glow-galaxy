@@ -51,6 +51,14 @@ import { cleanCitations } from "./pdf/citations";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
+/** Strip duplicated lead-ins like "Break-even occurs around Break-even is projected…". */
+const cleanAssumptionText = (text: string): string =>
+  (text || "")
+    .replace(/Break-even occurs around\s+Break-even is projected/gi, "Break-even is projected")
+    .replace(/\b(\w[\w\s-]{3,40}?)\s+\1\b/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
 /** Compact a break-even/payback string for KPI cards (e.g. "Month 20"). */
 function shortBE(raw: string | undefined): string {
   const t = s(raw || "").trim();
