@@ -42,12 +42,12 @@ import { compactCurrencyString } from "@/lib/format";
 
 
 const CHART_COLORS = [
-  "hsl(186 72% 45%)", // teal
-  "hsl(152 60% 45%)", // green
-  "hsl(38 92% 55%)",  // amber
-  "hsl(0 75% 58%)",   // red
-  "hsl(258 75% 62%)", // violet
-  "hsl(220 75% 58%)", // blue
+  "#6366f1", // indigo
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#f59e0b", // amber
+  "#10b981", // emerald
+  "#8b5cf6", // violet
 ];
 
 const verdictTone = (v: string) =>
