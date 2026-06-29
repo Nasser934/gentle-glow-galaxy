@@ -383,7 +383,7 @@ export async function exportReportToXlsx(
       domainOf(c.url),
       c.url || "",
       c.takeaway || "",
-      "",
+      "—",
     ]);
     borderRow(row);
     row.getCell(4).alignment = { wrapText: true, vertical: "top" };
