@@ -139,11 +139,11 @@ export async function exportReportToPdf(
   const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
-    { label: "Decision confidence", value: decision?.overallConfidencePct != null ? `${decision.overallConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
-    { label: "Investment range", value: s(report.financials.investmentRange) || "Requires validation", sub: report.financials.currency || undefined },
+    { label: "Decision confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
+    { label: "Investment Range", value: pack.financial.investmentRange, sub: report.financials.currency || undefined },
     labels.isInternal
-      ? { label: "Payback / Break-even", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: "Operational savings" }
-      : { label: "Break-even (base)", value: shortBE(report.financials.breakEvenSummary) || "Requires validation", sub: report.financials.ltvCacRatio ? `LTV : CAC ${s(report.financials.ltvCacRatio)}` : undefined },
+      ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: "Operational savings" }
+      : { label: "Break-even", value: pack.financial.breakEvenDisplay, sub: pack.financial.ltvCac && pack.financial.ltvCac !== "—" ? `LTV:CAC ${pack.financial.ltvCac}` : "Base case" },
   ];
   reserveBlock(doc, 200);
   doc.y = drawKpiGrid(doc.pdf, MARGIN, doc.y, CONTENT_W, snapshotKpis, { cols: 4, rowH: 70, gap: 10 }) + 18;
