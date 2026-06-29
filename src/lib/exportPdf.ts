@@ -36,7 +36,7 @@ import {
   C, CONTENT_W, MARGIN, ensureSpace, reserveBlock,
 } from "./pdf/engine";
 import { captureActiveCharts } from "./pdf/chartRegistry";
-import { drawCover } from "./pdf/templates/cover";
+import { drawCover, conciseBreakEvenSub } from "./pdf/templates/cover";
 import { resetScorecardGuards } from "./pdf/templates/scorecard";
 import { placeChartCommentary } from "./pdf/templates/chartCommentary";
 import { startAppendix, resetAppendixCounter } from "./pdf/templates/appendix";
