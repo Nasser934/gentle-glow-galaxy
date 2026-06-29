@@ -213,7 +213,7 @@ export function drawCover(
     { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
     labels.isInternal
       ? { label: "Investment Range", value: investment, sub: report.financials.currency || undefined }
-      : { label: "Break-even", value: beValue, sub: beValue !== "Requires validation" ? "Base case" : undefined },
+      : { label: "Break-even", value: beValue, sub: conciseBreakEvenSub(beValue, pack?.financial.breakEvenRange ?? report.financials.breakEvenSummary) },
     fourth,
   ];
   y = drawKpiGrid(pdf, MARGIN, y, CONTENT_W, kpis, { cols: 4, rowH: 70, gap: 10 });
