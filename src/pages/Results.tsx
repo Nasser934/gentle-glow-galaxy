@@ -270,7 +270,7 @@ const Results = () => {
     });
 
   const handleDownload = async () => {
-    setDownloading(true);
+    setExporting("pdf");
     setCaptureMounted(true);
     const toastId = toast.loading("Generating PDF report…");
     try {
@@ -287,12 +287,12 @@ const Results = () => {
       toast.error(msg, { id: toastId });
     } finally {
       setCaptureMounted(false);
-      setDownloading(false);
+      setExporting(null);
     }
   };
 
   const handleExportPptx = async () => {
-    setDownloading(true);
+    setExporting("pptx");
     const id = toast.loading("Generating PowerPoint deck…");
     try {
       const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
@@ -300,11 +300,11 @@ const Results = () => {
       toast.success("Deck downloaded", { id });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "PPTX export failed", { id });
-    } finally { setDownloading(false); }
+    } finally { setExporting(null); }
   };
 
   const handleExportXlsx = async () => {
-    setDownloading(true);
+    setExporting("xlsx");
     const id = toast.loading("Generating Excel workbook…");
     try {
       const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
@@ -312,7 +312,7 @@ const Results = () => {
       toast.success("Workbook downloaded", { id });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "XLSX export failed", { id });
-    } finally { setDownloading(false); }
+    } finally { setExporting(null); }
   };
 
   const handleShare = async () => {
