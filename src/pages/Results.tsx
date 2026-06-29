@@ -457,15 +457,19 @@ const Results = () => {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleDownload} disabled={downloading} className="gap-2">
-                  {downloading
+                  {exporting === "pdf"
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PDF…</>
                     : <><FileText className="h-4 w-4" /> Download PDF</>}
                 </Button>
                 <Button variant="outline" onClick={handleExportXlsx} disabled={downloading} className="gap-2">
-                  <FileSpreadsheet className="h-4 w-4" /> Excel
+                  {exporting === "xlsx"
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating Excel…</>
+                    : <><FileSpreadsheet className="h-4 w-4" /> Excel</>}
                 </Button>
                 <Button variant="outline" onClick={handleExportPptx} disabled={downloading} className="gap-2">
-                  <Presentation className="h-4 w-4" /> PowerPoint
+                  {exporting === "pptx"
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating PowerPoint…</>
+                    : <><Presentation className="h-4 w-4" /> PowerPoint</>}
                 </Button>
               </div>
             </div>
