@@ -62,6 +62,26 @@ const num = (s?: string) => {
   return value;
 };
 
+const sourceConfidenceLabel = (value: unknown): string => {
+  const t = String(value ?? "").trim().toLowerCase();
+
+  if (!t) return "—";
+  if (t.startsWith("high")) return "High";
+  if (t.startsWith("med")) return "Medium";
+  if (t.startsWith("low")) return "Low";
+
+  // Numeric scores like 76 should not render as raw consumer-facing confidence.
+  const n = Number(t);
+  if (Number.isFinite(n)) {
+    if (n >= 75) return "High";
+    if (n >= 50) return "Medium";
+    return "Low";
+  }
+
+  return "—";
+};
+
+
 export async function exportReportToXlsx(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
@@ -190,6 +210,7 @@ export async function exportReportToXlsx(
   }
   capTotal.font = { bold: true, color: { argb: PRIMARY } };
   [2, 3, 4].forEach((i) => (capTotal.getCell(i).numFmt = "#,##0"));
+  capTotal.getCell(5).value = "";
 
   fin.addRow([]);
   fin.addRow(["OpEx Items"]).font = { bold: true, color: { argb: PRIMARY } };
@@ -362,7 +383,7 @@ export async function exportReportToXlsx(
       domainOf(c.url),
       c.url || "",
       c.takeaway || "",
-      "",
+      "—",
     ]);
     borderRow(row);
     row.getCell(4).alignment = { wrapText: true, vertical: "top" };
@@ -373,14 +394,13 @@ export async function exportReportToXlsx(
   if (topClaims.length) {
     src.addRow([]);
     src.addRow(["Top claims & source confidence"]).font = { bold: true, color: { argb: PRIMARY } };
-    styleHeader(src.addRow(["Claim ID", "Claim", "Confidence", "Source domains", ""]));
+    styleHeader(src.addRow(["Claim ID", "Claim", "Confidence", "Source domains"]));
     topClaims.forEach((c) => {
       const row = src.addRow([
         c.claimId,
         c.claimText,
         c.confidence,
         c.sources.map((s) => s.domain || s.title).filter(Boolean).join(", "),
-        "",
       ]);
       borderRow(row);
       row.getCell(2).alignment = { wrapText: true, vertical: "top" };
