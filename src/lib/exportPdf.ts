@@ -491,7 +491,7 @@ export async function exportReportToPdf(
   if (topClaims.length) {
     subTitle(doc, "Top claims and their evidence");
     placeTable(doc, {
-      head: [["ID", "Claim", "Confidence", "Source(s)", "How to strengthen"]],
+      head: [["ID", "Claim", "Conf.", "Source(s)", "How to strengthen"]],
       body: topClaims.map((c, idx) => {
         const raw = claimsRaw[idx];
         const sourcesText = c.sources.length
@@ -506,11 +506,11 @@ export async function exportReportToPdf(
         ];
       }),
       columnStyles: {
-        0: { cellWidth: 40, halign: "center", fontStyle: "bold" },
-        1: { cellWidth: 170 },
-        2: { cellWidth: 56, halign: "center" },
-        3: { cellWidth: 100 },
-        4: { cellWidth: CONTENT_W - 40 - 170 - 56 - 100 },
+        0: { cellWidth: 36, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 158 },
+        2: { cellWidth: 38, halign: "center" },
+        3: { cellWidth: 124 },
+        4: { cellWidth: CONTENT_W - 36 - 158 - 38 - 124 },
       },
       styles: { fontSize: 8.6, cellPadding: 6 },
     });
