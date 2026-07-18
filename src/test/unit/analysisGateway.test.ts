@@ -8,7 +8,7 @@ import {
 
 const baseArgs = {
   apiKey: "test-key",
-  modelId: "google/gemini-3-flash-preview",
+  modelId: "google/gemini-2.5-flash",
   systemPrompt: "system",
   userPrompt: "user",
   schema: { type: "object" },
@@ -27,6 +27,24 @@ describe("analysis gateway resilience", () => {
     const result = await requestStructuredReport({ ...baseArgs, fetchImpl });
     expect(result.parsed).toEqual({ executiveSummary: "ok" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(requestBody.model).toBe("google/gemini-2.5-flash");
+    expect(requestBody.max_tokens).toBe(7_000);
+  });
+
+  it("rejects the incompatible preview model immediately without a provider call", async () => {
+    const fetchImpl = vi.fn();
+    await expect(requestStructuredReport({
+      ...baseArgs,
+      modelId: "google/gemini-3-flash-preview",
+      fetchImpl,
+    })).rejects.toMatchObject({
+      category: "upstream_error",
+      status: 400,
+      retryable: true,
+      modelId: "google/gemini-3-flash-preview",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("marks timeout failures as retryable", async () => {
