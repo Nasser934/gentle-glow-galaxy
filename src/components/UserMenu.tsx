@@ -1,16 +1,19 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, User as UserIcon, FolderOpen, GitCompare } from "lucide-react";
+import { LogOut, FolderOpen, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
-
+import { toast } from "sonner";
 
 export const UserMenu = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
   if (!user) {
     return (
       <Button size="sm" variant="outline" onClick={() => navigate("/auth")}
@@ -19,12 +22,31 @@ export const UserMenu = () => {
       </Button>
     );
   }
+
   const initial = (user.user_metadata?.display_name || user.email || "?")[0].toUpperCase();
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate("/");
+    } catch {
+      toast.error("Sign out failed. Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary ring-1 ring-inset ring-primary/30 hover:bg-primary/25">
+          <button
+            type="button"
+            aria-label="Open account menu"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary ring-1 ring-inset ring-primary/30 hover:bg-primary/25"
+          >
             {initial}
           </button>
         </DropdownMenuTrigger>
@@ -38,8 +60,8 @@ export const UserMenu = () => {
             <GitCompare className="mr-2 h-4 w-4" /> Compare
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => signOut().then(() => navigate("/"))}>
-            <LogOut className="mr-2 h-4 w-4" /> Sign out
+          <DropdownMenuItem disabled={signingOut} onSelect={() => void handleSignOut()}>
+            <LogOut className="mr-2 h-4 w-4" /> {signingOut ? "Signing out…" : "Sign out"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
