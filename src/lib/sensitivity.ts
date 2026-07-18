@@ -19,7 +19,7 @@ export const DEFAULT_SENSITIVITY: SensitivityInputs = {
 };
 
 export function baseCase(report: FeasibilityReport) {
-  const projectType = isInternalProject(report) ? "internal" : "commercial";
+  const projectType: "commercial" | "internal" = isInternalProject(report) ? "internal" : "commercial";
   const baseScenario = report.financials.scenarios.find((scenario) => scenario.scenario === "Base Case")
     ?? report.financials.scenarios[0];
   const internalBenefit = numericValue(baseScenario?.annualFinancialBenefit, 0)
