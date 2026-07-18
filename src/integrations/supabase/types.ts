@@ -14,84 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      analysis_rate_limits: {
-        Row: {
-          function_name: string
-          request_count: number
-          subject_key: string
-          updated_at: string
-          window_kind: string
-          window_start: string
-        }
-        Insert: {
-          function_name: string
-          request_count?: number
-          subject_key: string
-          updated_at?: string
-          window_kind: string
-          window_start: string
-        }
-        Update: {
-          function_name?: string
-          request_count?: number
-          subject_key?: string
-          updated_at?: string
-          window_kind?: string
-          window_start?: string
-        }
-        Relationships: []
-      }
-      analysis_requests: {
-        Row: {
-          completed_at: string | null
-          completion_status: string
-          failure_category: string | null
-          function_name: string
-          id: string
-          idempotency_key: string
-          ip_hash: string | null
-          model_id: string | null
-          prompt_version: string | null
-          request_hash: string
-          research_status: string
-          started_at: string
-          usage_metadata: Json
-          user_id: string
-        }
-        Insert: {
-          completed_at?: string | null
-          completion_status?: string
-          failure_category?: string | null
-          function_name: string
-          id?: string
-          idempotency_key: string
-          ip_hash?: string | null
-          model_id?: string | null
-          prompt_version?: string | null
-          request_hash: string
-          research_status?: string
-          started_at?: string
-          usage_metadata?: Json
-          user_id: string
-        }
-        Update: {
-          completed_at?: string | null
-          completion_status?: string
-          failure_category?: string | null
-          function_name?: string
-          id?: string
-          idempotency_key?: string
-          ip_hash?: string | null
-          model_id?: string | null
-          prompt_version?: string | null
-          request_hash?: string
-          research_status?: string
-          started_at?: string
-          usage_metadata?: Json
-          user_id?: string
-        }
-        Relationships: []
-      }
       edge_rate_limits: {
         Row: {
           action: string
@@ -227,7 +149,6 @@ export type Database = {
       }
       report_status_history: {
         Row: {
-          change_source: string
           changed_by: string
           created_at: string
           from_status: Database["public"]["Enums"]["report_status"] | null
@@ -237,7 +158,6 @@ export type Database = {
           to_status: Database["public"]["Enums"]["report_status"]
         }
         Insert: {
-          change_source?: string
           changed_by: string
           created_at?: string
           from_status?: Database["public"]["Enums"]["report_status"] | null
@@ -247,7 +167,6 @@ export type Database = {
           to_status: Database["public"]["Enums"]["report_status"]
         }
         Update: {
-          change_source?: string
           changed_by?: string
           created_at?: string
           from_status?: Database["public"]["Enums"]["report_status"] | null
@@ -287,8 +206,8 @@ export type Database = {
           report_schema_version: string | null
           research_timestamp: string | null
           root_report_id: string | null
-          scoring_engine_version: string | null
           save_operation_key: string | null
+          scoring_engine_version: string | null
           slug: string
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
@@ -316,8 +235,8 @@ export type Database = {
           report_schema_version?: string | null
           research_timestamp?: string | null
           root_report_id?: string | null
-          scoring_engine_version?: string | null
           save_operation_key?: string | null
+          scoring_engine_version?: string | null
           slug?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
@@ -345,8 +264,8 @@ export type Database = {
           report_schema_version?: string | null
           research_timestamp?: string | null
           root_report_id?: string | null
-          scoring_engine_version?: string | null
           save_operation_key?: string | null
+          scoring_engine_version?: string | null
           slug?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
@@ -365,32 +284,6 @@ export type Database = {
           {
             foreignKeyName: "reports_root_report_id_fkey"
             columns: ["root_report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      report_slug_aliases: {
-        Row: {
-          migrated_at: string
-          old_slug: string
-          report_id: string
-        }
-        Insert: {
-          migrated_at?: string
-          old_slug: string
-          report_id: string
-        }
-        Update: {
-          migrated_at?: string
-          old_slug?: string
-          report_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "report_slug_aliases_report_id_fkey"
-            columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
             referencedColumns: ["id"]
@@ -423,39 +316,46 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      begin_analysis_request: {
-        Args: {
-          p_function_name: string
-          p_idempotency_key: string
-          p_ip_hash?: string | null
-          p_request_hash: string
-        }
-        Returns: {
-          allowed: boolean
-          reason: string
-          request_id: string | null
-          retry_after_seconds: number
-        }[]
-      }
-      can_view_report: {
-        Args: { _report_id: string }
-        Returns: boolean
-      }
-      complete_analysis_request: {
-        Args: {
-          p_completion_status: string
-          p_failure_category?: string | null
-          p_model_id?: string | null
-          p_prompt_version?: string | null
-          p_request_id: string
-          p_research_status?: string
-          p_usage_metadata?: Json
-        }
-        Returns: boolean
-      }
+      can_view_report: { Args: { _report_id: string }; Returns: boolean }
+      generate_report_display_id: { Args: never; Returns: string }
+      generate_report_slug: { Args: never; Returns: string }
       get_report_by_slug: {
         Args: { p_slug: string }
-        Returns: Database["public"]["Tables"]["reports"]["Row"][]
+        Returns: {
+          archived_at: string | null
+          canonical_validated: boolean
+          created_at: string
+          display_id: string
+          generation_seed: number | null
+          generation_timestamp: string | null
+          id: string
+          industry: string | null
+          input_hash: string | null
+          inputs: Json
+          is_public: boolean
+          legacy_report_id: string | null
+          model_id: string | null
+          output: Json
+          parent_report_id: string | null
+          prompt_version: string | null
+          report_schema_version: string | null
+          research_timestamp: string | null
+          root_report_id: string | null
+          save_operation_key: string | null
+          scoring_engine_version: string | null
+          slug: string
+          source_snapshot_metadata: Json
+          status: Database["public"]["Enums"]["report_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "reports"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       has_role: {
         Args: {

@@ -343,9 +343,11 @@ const Analyze = () => {
           const saved = await saveRerunReport({ parentReportId: reportId, inputs: analyzedInputs, report: enriched, saveOperationKey });
           navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs: analyzedInputs, slug: saved.slug, reportId: saved.id } });
           return;
-        } catch {
+        } catch (saveErr) {
+          console.error("saveRerunReport failed", saveErr);
           setPendingSave({ report: enriched, inputs: analyzedInputs, mode: "rerun", saveOperationKey });
-          toast.error("Analysis completed, but the new version was not saved. Retry saving without running AI again.");
+          const detail = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          toast.error(`Analysis completed, but the new version was not saved: ${detail}. Retry saving without running AI again.`);
           return;
         }
       }
@@ -356,9 +358,11 @@ const Analyze = () => {
         const saved = await saveReport(analyzedInputs, enriched, saveOperationKey);
         navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs: analyzedInputs, slug: saved.slug, reportId: saved.id } });
         return;
-      } catch {
+      } catch (saveErr) {
+        console.error("saveReport failed", saveErr);
         setPendingSave({ report: enriched, inputs: analyzedInputs, mode: "new", saveOperationKey });
-        toast.error("Analysis completed, but the report was not saved. Retry saving without running AI again.");
+        const detail = saveErr instanceof Error ? saveErr.message : String(saveErr);
+        toast.error(`Analysis completed, but the report was not saved: ${detail}. Retry saving without running AI again.`);
         return;
       }
     } catch (error: unknown) {
