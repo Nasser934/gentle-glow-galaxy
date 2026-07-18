@@ -23,6 +23,30 @@ revoke update on public.notifications from anon, authenticated;
 grant update (read_at) on public.notifications to authenticated;
 revoke insert, update, delete on public.report_status_history from anon, authenticated;
 
+-- Table privileges and RLS are separate gates in PostgreSQL. Make the final
+-- API surface explicit so a clean Supabase project behaves exactly like the
+-- existing hosted project without relying on dashboard-created grants.
+revoke all on table public.reports from anon, authenticated;
+grant select, insert, update, delete on table public.reports to authenticated;
+
+revoke all on table public.report_comments from anon, authenticated;
+grant select on table public.report_comments to anon;
+grant select, insert, delete on table public.report_comments to authenticated;
+
+revoke all on table public.report_status_history from anon, authenticated;
+grant select on table public.report_status_history to anon, authenticated;
+
+revoke all on table public.profiles from anon, authenticated;
+grant select on table public.profiles to anon, authenticated;
+grant insert, update on table public.profiles to authenticated;
+
+revoke all on table public.user_roles from anon, authenticated;
+grant select, insert, update, delete on table public.user_roles to authenticated;
+
+revoke all on table public.notifications from anon, authenticated;
+grant select, delete on table public.notifications to authenticated;
+grant update (read_at) on table public.notifications to authenticated;
+
 -- Status history is derived from the actual report update. Clients cannot
 -- fabricate an audit entry that does not correspond to a real transition.
 alter table public.report_status_history
