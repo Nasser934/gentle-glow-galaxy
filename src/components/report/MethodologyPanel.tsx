@@ -44,7 +44,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
             <div className="font-display text-[14px] font-medium tracking-tight">FMART-O 6-Dimension Weighted Scoring</div>
             <div className="text-[12px] text-muted-foreground">
               Weighted overall: <span className="font-mono text-foreground">{scores.overall.toFixed(1)}</span>
-              {avgConf != null && <> · Average analyst confidence: <span className="font-mono text-foreground">{avgConf}%</span></>}
+              {avgConf != null && <> · Average model-estimated confidence: <span className="font-mono text-foreground">{avgConf}%</span></>}
             </div>
           </div>
         </div>
@@ -94,7 +94,7 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
                   <th className="px-3 py-2 text-left">Dimension</th>
                   <th className="px-3 py-2 text-right">Score</th>
                   <th className="px-3 py-2 text-right">Weight</th>
-                  <th className="px-3 py-2 text-right">Confidence</th>
+                  <th className="px-3 py-2 text-right" title="Model-estimated indicator constrained by evidence and input completeness; not statistical certainty.">Model-estimated confidence</th>
                   <th className="px-3 py-2 text-left">Rationale</th>
                 </tr>
               </thead>
@@ -122,9 +122,8 @@ export const MethodologyPanel = ({ scores }: { scores: FMARTScores }) => {
           </div>
 
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-            <strong className="text-foreground">How to read this:</strong> each dimension is scored 0–10 by the AI engine using your inputs and the public + Tavily-grounded research context.
-            The overall score is a weighted average. Confidence reflects how much of the score is anchored in evidence vs. inferred.
-            A low-confidence dimension is a signal to gather more data before committing.
+            <strong className="text-foreground">How to read this:</strong> each dimension is scored 0–10 from user inputs, available external evidence, calculations, and explicit AI assumptions.
+            The server validates the weights and recalculates the overall score. Model-estimated confidence is capped by input completeness and direct evidence support; it is not accuracy or statistical certainty.
           </p>
         </div>
       )}

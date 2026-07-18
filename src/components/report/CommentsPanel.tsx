@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 interface Comment {
   id: string; report_id: string; user_id: string; section: string | null; body: string; created_at: string;
 }
+type CommentProfile = { user_id: string; display_name: string | null; avatar_url: string | null };
 
 export const CommentsPanel = ({ reportId, section }: { reportId: string; section?: string }) => {
   const { user } = useAuth();
@@ -19,24 +20,24 @@ export const CommentsPanel = ({ reportId, section }: { reportId: string; section
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, { display_name: string | null; avatar_url: string | null }>>({});
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     let q = supabase.from("report_comments").select("*").eq("report_id", reportId).order("created_at", { ascending: true });
     if (section) q = q.eq("section", section);
     const { data, error } = await q;
     if (error) { toast.error(error.message); setLoading(false); return; }
     setComments((data ?? []) as Comment[]);
-    const ids = Array.from(new Set((data ?? []).map((c: any) => c.user_id)));
+    const ids = Array.from(new Set((data ?? []).map((comment) => comment.user_id)));
     if (ids.length) {
       const { data: profs } = await supabase.from("profiles").select("user_id, display_name, avatar_url").in("user_id", ids);
-      const map: any = {};
-      (profs ?? []).forEach((p: any) => { map[p.user_id] = p; });
+      const map: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+      (profs as CommentProfile[] | null ?? []).forEach((profile) => { map[profile.user_id] = profile; });
       setProfiles(map);
     }
     setLoading(false);
-  };
+  }, [reportId, section]);
 
-  useEffect(() => { load(); }, [reportId, section]);
+  useEffect(() => { void load(); }, [load]);
 
   const submit = async () => {
     if (!user) { toast.error("Sign in to comment"); return; }

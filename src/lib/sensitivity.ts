@@ -1,16 +1,14 @@
-// Lightweight Monte Carlo + sensitivity engine for feasibility reports.
-// All math is dimensionless multipliers around the base case.
-
 import type { FeasibilityReport } from "@/types/analysis";
+import { numericValue } from "@/lib/numbers";
+import { detectProjectType, SIMULATION_DISCLAIMER } from "../../supabase/functions/_shared/analysis/simulation";
 
 export interface SensitivityInputs {
-  revenueMultiplier: number;   // 0.5 - 1.5
-  costMultiplier: number;      // 0.5 - 1.5
-  cacMultiplier: number;       // 0.5 - 2.0
-  conversionMultiplier: number;// 0.5 - 1.5
-  marketAdoptionMultiplier: number; // 0.5 - 1.5
+  revenueMultiplier: number;
+  costMultiplier: number;
+  cacMultiplier: number;
+  conversionMultiplier: number;
+  marketAdoptionMultiplier: number;
 }
-
 export const DEFAULT_SENSITIVITY: SensitivityInputs = {
   revenueMultiplier: 1,
   costMultiplier: 1,
@@ -19,112 +17,165 @@ export const DEFAULT_SENSITIVITY: SensitivityInputs = {
   marketAdoptionMultiplier: 1,
 };
 
-const num = (s?: string) => {
-  const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  return m ? Number(m[0]) : 0;
-};
-
 export function baseCase(report: FeasibilityReport) {
-  const baseRev =
-    num(report.financials.scenarios.find((s) => s.scenario === "Base Case")?.annualRevenue) ||
-    num(report.financials.scenarios[0]?.annualRevenue) || 1_000_000;
-  const baseOpex = report.financials.opEx.reduce((sum, item) => sum + (item.annual || 0), 0) || baseRev * 0.6;
-  const baseCapex = report.financials.capExTotal.mid || (report.financials.capExTotal.low + report.financials.capExTotal.high) / 2 || baseRev * 0.3;
-  return { baseRev, baseOpex, baseCapex };
+  const projectType = report.financials.projectType ?? detectProjectType({
+    businessModel: report.financials.ltvCacRatio?.includes("internal") ? "internal" : "commercial",
+    revenueModel: report.financials.ltvCacRatio,
+  });
+  const baseScenario = report.financials.scenarios.find((scenario) => scenario.scenario === "Base Case")
+    ?? report.financials.scenarios[0];
+  const internalBenefit = baseScenario?.annualFinancialBenefit
+    ?? (baseScenario?.annualLabourCostAvoided ?? 0) + (baseScenario?.annualProductivityBenefit ?? 0);
+  const commercialRevenue = numericValue(baseScenario?.annualRevenue, 0);
+  const baseValue = projectType === "internal"
+    ? internalBenefit || 1_000_000
+    : commercialRevenue || 1_000_000;
+  const baseOpex = report.financials.opEx.reduce((sum, item) => sum + (item.annual || 0), 0) || baseValue * 0.6;
+  const baseCapex = report.financials.capExTotal.mid
+    || (report.financials.capExTotal.low + report.financials.capExTotal.high) / 2
+    || baseValue * 0.3;
+  return { projectType, baseValue, baseRev: baseValue, baseOpex, baseCapex };
 }
 
 export interface ScenarioOutcome {
+  projectType: "commercial" | "internal";
+  financialValue: number;
   revenue: number;
   opex: number;
   capex: number;
   grossProfit: number;
   netProfit: number;
   paybackMonths: number;
-  roi: number; // 1y ROI on capex
+  roi: number;
 }
 
-export function projectOutcome(report: FeasibilityReport, s: SensitivityInputs): ScenarioOutcome {
-  const { baseRev, baseOpex, baseCapex } = baseCase(report);
-  const revenue = baseRev * s.revenueMultiplier * s.conversionMultiplier * s.marketAdoptionMultiplier;
-  const opex = baseOpex * s.costMultiplier * (0.7 + 0.3 * s.cacMultiplier); // CAC partially impacts opex
-  const capex = baseCapex * (0.9 + 0.1 * s.costMultiplier);
-  const grossProfit = revenue - opex;
-  const netProfit = grossProfit - capex * 0.2; // 20% capex amortization year 1
+export function projectOutcome(report: FeasibilityReport, sensitivity: SensitivityInputs): ScenarioOutcome {
+  const { projectType, baseValue, baseOpex, baseCapex } = baseCase(report);
+  const commercialGrowth = sensitivity.conversionMultiplier * sensitivity.marketAdoptionMultiplier;
+  const internalAdoption = sensitivity.marketAdoptionMultiplier;
+  const financialValue = baseValue * sensitivity.revenueMultiplier
+    * (projectType === "internal" ? internalAdoption : commercialGrowth);
+  const acquisitionFactor = projectType === "internal" ? 1 : 0.7 + 0.3 * sensitivity.cacMultiplier;
+  const opex = baseOpex * sensitivity.costMultiplier * acquisitionFactor;
+  const capex = baseCapex * (0.9 + 0.1 * sensitivity.costMultiplier);
+  const grossProfit = financialValue - opex;
+  const netProfit = grossProfit - capex * 0.2;
   const monthlyContribution = Math.max(grossProfit / 12, 1);
   const paybackMonths = capex > 0 ? capex / monthlyContribution : 0;
   const roi = capex > 0 ? netProfit / capex : 0;
-  return { revenue, opex, capex, grossProfit, netProfit, paybackMonths, roi };
+  return { projectType, financialValue, revenue: financialValue, opex, capex, grossProfit, netProfit, paybackMonths, roi };
 }
 
-// Box-Muller normal sample
-function randn() {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4_294_967_296;
+  };
+}
+
+function randn(random: () => number) {
+  let u = random();
+  let v = random();
+  if (u <= Number.EPSILON) u = Number.EPSILON;
+  if (v <= Number.EPSILON) v = Number.EPSILON;
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
 export interface MonteCarloResult {
   iterations: number;
+  seed: number;
+  projectType: "commercial" | "internal";
+  disclaimer: string;
+  distributions: Array<{ name: string; standardDeviation: number }>;
   netProfit: { p10: number; p50: number; p90: number; mean: number };
   paybackMonths: { p10: number; p50: number; p90: number; mean: number };
   roi: { p10: number; p50: number; p90: number; mean: number };
-  successProbability: number; // % of trials with positive net profit
+  positiveOutcomeProbability: number;
+  successProbability: number;
   histogram: Array<{ bucket: string; count: number }>;
 }
 
-const pct = (arr: number[], p: number) => {
-  const sorted = [...arr].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * sorted.length)));
-  return sorted[idx];
+const percentile = (values: number[], percentage: number) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((percentage / 100) * (sorted.length - 1))));
+  return sorted[index];
 };
 
-export function runMonteCarlo(report: FeasibilityReport, base: SensitivityInputs, iterations = 2000): MonteCarloResult {
+export function runMonteCarlo(
+  report: FeasibilityReport,
+  base: SensitivityInputs,
+  iterations = 2_000,
+  seed = 2_026,
+): MonteCarloResult {
+  if (!Number.isInteger(iterations) || iterations < 10 || iterations > 100_000) throw new Error("Invalid simulation iteration count");
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xFFFFFFFF) throw new Error("Invalid simulation seed");
+  const projectType = baseCase(report).projectType;
+  const random = seededRandom(seed);
   const profits: number[] = [];
   const paybacks: number[] = [];
   const rois: number[] = [];
-  let successes = 0;
+  let positive = 0;
 
-  for (let i = 0; i < iterations; i++) {
+  for (let index = 0; index < iterations; index += 1) {
     const sample: SensitivityInputs = {
-      revenueMultiplier: Math.max(0.2, base.revenueMultiplier * (1 + 0.18 * randn())),
-      costMultiplier: Math.max(0.4, base.costMultiplier * (1 + 0.12 * randn())),
-      cacMultiplier: Math.max(0.4, base.cacMultiplier * (1 + 0.20 * randn())),
-      conversionMultiplier: Math.max(0.3, base.conversionMultiplier * (1 + 0.15 * randn())),
-      marketAdoptionMultiplier: Math.max(0.3, base.marketAdoptionMultiplier * (1 + 0.18 * randn())),
+      revenueMultiplier: Math.max(0.2, base.revenueMultiplier * (1 + 0.18 * randn(random))),
+      costMultiplier: Math.max(0.4, base.costMultiplier * (1 + 0.12 * randn(random))),
+      cacMultiplier: projectType === "internal" ? 1 : Math.max(0.4, base.cacMultiplier * (1 + 0.2 * randn(random))),
+      conversionMultiplier: projectType === "internal" ? 1 : Math.max(0.3, base.conversionMultiplier * (1 + 0.15 * randn(random))),
+      marketAdoptionMultiplier: Math.max(0.3, base.marketAdoptionMultiplier * (1 + 0.18 * randn(random))),
     };
     const outcome = projectOutcome(report, sample);
     profits.push(outcome.netProfit);
     paybacks.push(Math.min(outcome.paybackMonths, 120));
     rois.push(outcome.roi);
-    if (outcome.netProfit > 0) successes++;
+    if (outcome.netProfit > 0) positive += 1;
   }
 
-  // Histogram of net profit (10 buckets)
-  const min = Math.min(...profits);
-  const max = Math.max(...profits);
-  const buckets = 10;
-  const step = (max - min) / buckets || 1;
-  const histogram = Array.from({ length: buckets }, (_, i) => ({
-    bucket: formatShort(min + step * i),
+  const minimum = Math.min(...profits);
+  const maximum = Math.max(...profits);
+  const bucketCount = 10;
+  const step = (maximum - minimum) / bucketCount || 1;
+  const histogram = Array.from({ length: bucketCount }, (_, index) => ({
+    bucket: formatShort(minimum + step * index),
     count: 0,
   }));
-  for (const p of profits) {
-    const idx = Math.min(buckets - 1, Math.floor((p - min) / step));
-    histogram[idx].count++;
+  for (const profit of profits) {
+    const index = Math.min(bucketCount - 1, Math.floor((profit - minimum) / step));
+    histogram[index].count += 1;
   }
-
+  const positiveOutcomeProbability = positive / iterations * 100;
+  const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   return {
     iterations,
-    netProfit: { p10: pct(profits, 10), p50: pct(profits, 50), p90: pct(profits, 90), mean: profits.reduce((a, b) => a + b, 0) / profits.length },
-    paybackMonths: { p10: pct(paybacks, 10), p50: pct(paybacks, 50), p90: pct(paybacks, 90), mean: paybacks.reduce((a, b) => a + b, 0) / paybacks.length },
-    roi: { p10: pct(rois, 10), p50: pct(rois, 50), p90: pct(rois, 90), mean: rois.reduce((a, b) => a + b, 0) / rois.length },
-    successProbability: (successes / iterations) * 100,
+    seed,
+    projectType,
+    disclaimer: SIMULATION_DISCLAIMER,
+    distributions: projectType === "internal"
+      ? [
+          { name: "Cost savings and productivity benefit", standardDeviation: 0.18 },
+          { name: "Operating cost", standardDeviation: 0.12 },
+          { name: "Internal adoption", standardDeviation: 0.18 },
+        ]
+      : [
+          { name: "Revenue", standardDeviation: 0.18 },
+          { name: "Operating cost", standardDeviation: 0.12 },
+          { name: "Customer acquisition cost", standardDeviation: 0.2 },
+          { name: "Conversion", standardDeviation: 0.15 },
+          { name: "Market adoption", standardDeviation: 0.18 },
+        ],
+    netProfit: { p10: percentile(profits, 10), p50: percentile(profits, 50), p90: percentile(profits, 90), mean: mean(profits) },
+    paybackMonths: { p10: percentile(paybacks, 10), p50: percentile(paybacks, 50), p90: percentile(paybacks, 90), mean: mean(paybacks) },
+    roi: { p10: percentile(rois, 10), p50: percentile(rois, 50), p90: percentile(rois, 90), mean: mean(rois) },
+    positiveOutcomeProbability,
+    successProbability: positiveOutcomeProbability,
     histogram,
   };
 }
 
-// Tornado: hold all at base, swing one variable -25% / +25%, measure net profit delta
 export interface TornadoBar {
   variable: string;
   low: number;
@@ -133,31 +184,33 @@ export interface TornadoBar {
 }
 
 export function tornado(report: FeasibilityReport, base: SensitivityInputs): TornadoBar[] {
+  const projectType = baseCase(report).projectType;
   const baseProfit = projectOutcome(report, base).netProfit;
-  const vars: Array<keyof SensitivityInputs> = [
-    "revenueMultiplier", "costMultiplier", "cacMultiplier", "conversionMultiplier", "marketAdoptionMultiplier",
-  ];
-  const labels: Record<string, string> = {
-    revenueMultiplier: "Revenue per unit",
+  const variables: Array<keyof SensitivityInputs> = projectType === "internal"
+    ? ["revenueMultiplier", "costMultiplier", "marketAdoptionMultiplier"]
+    : ["revenueMultiplier", "costMultiplier", "cacMultiplier", "conversionMultiplier", "marketAdoptionMultiplier"];
+  const labels: Record<keyof SensitivityInputs, string> = {
+    revenueMultiplier: projectType === "internal" ? "Financial benefit" : "Revenue per unit",
     costMultiplier: "Operating costs",
     cacMultiplier: "Customer acquisition cost",
     conversionMultiplier: "Conversion rate",
-    marketAdoptionMultiplier: "Market adoption",
+    marketAdoptionMultiplier: projectType === "internal" ? "Internal adoption" : "Market adoption",
   };
-  return vars
-    .map((v) => {
-      const low = projectOutcome(report, { ...base, [v]: base[v] * 0.75 }).netProfit - baseProfit;
-      const high = projectOutcome(report, { ...base, [v]: base[v] * 1.25 }).netProfit - baseProfit;
-      return { variable: labels[v], low, high, span: Math.abs(high - low) };
+  return variables
+    .map((variable) => {
+      const low = projectOutcome(report, { ...base, [variable]: base[variable] * 0.75 }).netProfit - baseProfit;
+      const high = projectOutcome(report, { ...base, [variable]: base[variable] * 1.25 }).netProfit - baseProfit;
+      return { variable: labels[variable], low, high, span: Math.abs(high - low) };
     })
-    .sort((a, b) => b.span - a.span);
+    .sort((left, right) => right.span - left.span);
 }
 
-export function formatShort(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}${abs.toFixed(0)}`;
+export function formatShort(value: number): string {
+  const absolute = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (absolute >= 1e12) return `${sign}${(absolute / 1e12).toFixed(1)}T`;
+  if (absolute >= 1e9) return `${sign}${(absolute / 1e9).toFixed(1)}B`;
+  if (absolute >= 1e6) return `${sign}${(absolute / 1e6).toFixed(1)}M`;
+  if (absolute >= 1e3) return `${sign}${(absolute / 1e3).toFixed(1)}K`;
+  return `${sign}${absolute.toFixed(0)}`;
 }

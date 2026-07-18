@@ -24,11 +24,6 @@ const STATUS_LABEL: Record<InputStatus, string> = {
   complete: "Strong input", needs_improvement: "Needs detail",
   weak: "Needs detail", missing: "Missing",
 };
-const confidenceTone = (c: "High" | "Medium" | "Low") =>
-  c === "High" ? "border-success/40 text-success"
-  : c === "Medium" ? "border-warning/40 text-warning"
-  : "border-destructive/40 text-destructive";
-
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
   : v.startsWith("CONDITIONAL") ? "bg-warning text-warning-foreground"
@@ -53,7 +48,7 @@ export const DecisionHeader = ({ report }: { report: FeasibilityReport }) => {
                 {d.verdict}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                Score {report.scores.overall.toFixed(1)}/10 · Confidence {d.overallConfidencePct}%
+                Score {report.scores.overall.toFixed(1)}/10 · Model-estimated confidence {d.overallConfidencePct}%
               </span>
             </div>
             <p className="mt-3 text-sm text-foreground">
@@ -121,7 +116,12 @@ export const WhyThisScore = ({ report }: { report: FeasibilityReport }) => {
   );
 };
 
-const Block = ({ icon: Icon, tone, title, children }: any) => (
+const Block = ({ icon: Icon, tone, title, children }: {
+  icon: typeof CheckCircle2;
+  tone: "success" | "warning" | "primary";
+  title: string;
+  children: React.ReactNode;
+}) => (
   <div>
     <div className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider ${
       tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : "text-primary"
@@ -145,7 +145,7 @@ export const InputQualityPanel = ({
   const navigate = useNavigate();
   const overall = report.inputQualityScore ?? 0;
   const overallStatus: InputStatus = overall >= 80 ? "complete" : overall >= 60 ? "needs_improvement" : overall >= 30 ? "weak" : "missing";
-  const fields: InputFieldAssessment[] = (report as any)._inputFields || [];
+  const fields: InputFieldAssessment[] = report.inputFieldAssessments || [];
   const problemFields = fields.filter((f) => f.status !== "complete");
   const contradictions = report.inputCompleteness?.contradictoryFields || [];
 
@@ -160,7 +160,7 @@ export const InputQualityPanel = ({
             {STATUS_LABEL[overallStatus]} · {overall}%
           </Badge>
           <span className="text-xs text-muted-foreground">
-            Stronger inputs raise confidence — they don't automatically raise the score.
+            Stronger inputs can raise the model-estimated confidence indicator — they don't automatically raise the score.
           </span>
         </div>
       </CardHeader>
@@ -219,7 +219,7 @@ export const InputQualityPanel = ({
   );
 };
 
-/* -------- Evidence Mix -------- */
+/* -------- Estimated Evidence Composition -------- */
 export const EvidenceMixPanel = ({ report }: { report: FeasibilityReport }) => {
   const mix = report.evidenceMix;
   if (!mix) return null;
@@ -228,19 +228,19 @@ export const EvidenceMixPanel = ({ report }: { report: FeasibilityReport }) => {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Info className="h-4 w-4 text-primary" /> Evidence mix
+          <Info className="h-4 w-4 text-primary" /> Estimated Evidence Composition
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Where the analysis got its information.
+          Heuristic estimate based on input completeness and available sources. Claim provenance below is authoritative.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <Bar label="From your inputs" pct={mix.userInputPercent} tone="primary" />
-        <Bar label="From web research" pct={mix.webResearchPercent} tone="success" />
-        <Bar label="AI assumptions" pct={mix.aiAssumptionPercent} tone={aiHeavy ? "warning" : "muted"} />
+        <Bar label="Available external evidence" pct={mix.webResearchPercent} tone="success" />
+        <Bar label="AI inference" pct={mix.aiAssumptionPercent} tone={aiHeavy ? "warning" : "muted"} />
         {aiHeavy && (
           <div className="rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Some parts of this report rely on assumptions because input data or public evidence is incomplete. Add more project details to improve confidence.
+            Some parts of this report rely on AI inference because input data or public evidence is incomplete. Add direct evidence to improve the analysis indicator.
           </div>
         )}
       </CardContent>
@@ -279,20 +279,20 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
           <Sparkles className="h-4 w-4 text-primary" /> Evidence behind this report
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          For each major claim — how much came from you, from the web, and from AI inference.
+          Stable claim IDs, provenance categories, explicit supporting/conflicting source IDs, and unsupported status.
         </p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left">Claim</th>
                 <th className="px-3 py-2 text-left">Section</th>
-                <th className="px-3 py-2 text-right">You</th>
-                <th className="px-3 py-2 text-right">Web</th>
-                <th className="px-3 py-2 text-right">AI</th>
-                <th className="px-3 py-2 text-left">Confidence</th>
+                <th className="px-3 py-2 text-left">Provenance</th>
+                <th className="px-3 py-2 text-left">Support status</th>
+                <th className="px-3 py-2 text-left">Direct sources</th>
+                <th className="px-3 py-2 text-left">Conflicts</th>
                 <th className="px-3 py-2 text-left">How to strengthen</th>
               </tr>
             </thead>
@@ -301,14 +301,10 @@ export const ClaimEvidenceTable = ({ report }: { report: FeasibilityReport }) =>
                 <tr key={r.claimId} className="align-top">
                   <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 font-medium text-foreground">{r.claimText}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">{r.reportSection}</td>
-                  <td className="px-3 py-2 text-right font-mono">{r.userInputPercent}%</td>
-                  <td className="px-3 py-2 text-right font-mono">{r.webResearchPercent}%</td>
-                  <td className={`px-3 py-2 text-right font-mono ${r.aiAssumptionPercent > 40 ? "text-warning" : ""}`}>
-                    {r.aiAssumptionPercent}%
-                  </td>
-                  <td className="px-3 py-2">
-                    <Badge variant="outline" className={confidenceTone(r.confidence)}>{r.confidence}</Badge>
-                  </td>
+                  <td className="px-3 py-2"><Badge variant="outline">{r.provenance || "Unknown"}</Badge></td>
+                  <td className="px-3 py-2 text-xs">{r.displayStatus || r.supportStatus || "Requires validation"}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{r.supportingSourceIds?.join(", ") || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{r.conflictingSourceIds?.join(", ") || "—"}</td>
                   <td className="max-w-[260px] whitespace-normal break-words px-3 py-2 text-xs text-muted-foreground">{r.userCanImproveBy}</td>
                 </tr>
               ))}
@@ -340,7 +336,7 @@ export const VersionComparison = ({ report }: { report: FeasibilityReport }) => 
                 <div className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</div>
                 <div className="flex items-center gap-2 text-xs">
                   <Delta label="Score" prev={v.previousScore} next={v.newScore} fmt={(n) => n.toFixed(1)} />
-                  <Delta label="Confidence" prev={v.previousConfidence} next={v.newConfidence} fmt={(n) => `${Math.round(n)}%`} />
+                  <Delta label="Model-estimated confidence" prev={v.previousConfidence} next={v.newConfidence} fmt={(n) => `${Math.round(n)}%`} />
                   <Delta label="AI assumptions" prev={v.previousAiAssumptionPercent} next={v.newAiAssumptionPercent} fmt={(n) => `${Math.round(n)}%`} invert />
                 </div>
               </div>
@@ -382,7 +378,7 @@ export const LegacyEvidenceNotice = ({ report, reportId, canEdit }: { report: Fe
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
       <span>
-        Evidence detail is estimated for this report. Re-run analysis to calculate full input quality and evidence mix.
+        Evidence detail is estimated for this legacy report. Re-run analysis to create explicit claim provenance and source mappings.
       </span>
       {canEdit && reportId && (
         <Button size="sm" variant="outline" onClick={() => navigate(`/analyze?reportId=${reportId}`)} className="gap-1.5">
@@ -405,7 +401,7 @@ export const ReportFamilyPanel = ({
     let cancelled = false;
     setLoading(true);
     listReportVersions(reportId)
-      .then((data) => { if (!cancelled) setRows((data as any) || []); })
+      .then((data) => { if (!cancelled) setRows((data as FamilyRow[]) || []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

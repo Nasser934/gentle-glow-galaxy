@@ -8,18 +8,32 @@ import { UserMenu } from "@/components/UserMenu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  ConceptInputs, INDUSTRIES, BUDGET_RANGES, TIMELINES, TEAM_SIZES, TECHNOLOGY_READINESS,
+  ConceptInputs, FeasibilityReport, INDUSTRIES, BUDGET_RANGES, TIMELINES, TEAM_SIZES, TECHNOLOGY_READINESS,
   BUSINESS_MODELS, REVENUE_MODELS, initialInputs,
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 import { getReportById, saveReport, saveRerunReport } from "@/lib/reports";
 import { assessInputQuality, ensureEvidenceFields, buildVersionEntry } from "@/lib/evidence";
+import { INPUT_KEYS, validateConceptInputs, type FieldOrigin } from "@/lib/inputValidation";
+import { isInternalConcept } from "@/lib/format";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
+const FOCUS_TO_STEP: Record<string, number> = {
+  projectName: 0, industry: 0, location: 0, description: 0, strategicObjectives: 0,
+  businessModel: 0, revenueModel: 0, founderExperience: 0, competitorUrls: 0,
+  budgetRange: 1, timeline: 1, teamSize: 1, dependencies: 1,
+  assumptions: 2, constraints: 2, successFactors: 2,
+  knownRisks: 3, regulatoryConsiderations: 3, technologyReadiness: 3,
+};
 
 type EssayField =
   | "description" | "strategicObjectives" | "dependencies"
@@ -37,7 +51,7 @@ const Analyze = () => {
   const [inputs, setInputs] = useState<ConceptInputs>(initialInputs);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadingPrevious, setLoadingPrevious] = useState(isReRun);
-  const [previousReport, setPreviousReport] = useState<any>(null);
+  const [previousReport, setPreviousReport] = useState<FeasibilityReport | null>(null);
   const [previousInputs, setPreviousInputs] = useState<ConceptInputs | null>(null);
   // Phase 4 hardening: gate the entire re-run flow on ownership + presence of inputs.
   const [rerunBlocked, setRerunBlocked] = useState<null | { reason: "not_owner" | "no_inputs" | "not_found" | "not_signed_in"; message: string }>(null);
@@ -46,12 +60,24 @@ const Analyze = () => {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [showBrief, setShowBrief] = useState(!isReRun);
   const [completing, setCompleting] = useState<EssayField | null>(null);
+  const [fieldOrigins, setFieldOrigins] = useState<Partial<Record<keyof ConceptInputs, FieldOrigin>>>({});
+  const [draftSuggestions, setDraftSuggestions] = useState<Partial<ConceptInputs> | null>(null);
+  const [selectedSuggestionKeys, setSelectedSuggestionKeys] = useState<Set<keyof ConceptInputs>>(new Set());
+  const [fieldSuggestion, setFieldSuggestion] = useState<{ field: EssayField; text: string } | null>(null);
+  const [pendingSave, setPendingSave] = useState<{ report: FeasibilityReport; mode: "new" | "rerun" } | null>(null);
+  const [retryingSave, setRetryingSave] = useState(false);
 
   // Per-field validation errors collected by validateStep(). Cleared on field change.
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ConceptInputs, string>>>({});
 
   const set = (field: keyof ConceptInputs, value: string) => {
     setInputs((prev) => ({ ...prev, [field]: value }));
+    setFieldOrigins((prev) => ({
+      ...prev,
+      [field]: prev[field] === "accepted_ai_suggestion" || prev[field] === "ai_suggestion"
+        ? "edited_after_ai_suggestion"
+        : "user_input",
+    }));
     setFieldErrors((prev) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
@@ -97,11 +123,14 @@ const Analyze = () => {
           return;
         }
         setInputs(savedInputs);
+        setFieldOrigins((row.output as FeasibilityReport).inputOrigins ?? Object.fromEntries(
+          INPUT_KEYS.filter((key) => savedInputs[key]?.trim()).map((key) => [key, "user_input" as const]),
+        ));
         setPreviousInputs(savedInputs);
         setPreviousReport(row.output);
         toast.success("Previous inputs loaded. Edit weak fields, then re-run.");
-      } catch (e: any) {
-        setRerunBlocked({ reason: "not_found", message: e?.message || "Could not load previous report." });
+      } catch (error: unknown) {
+        setRerunBlocked({ reason: "not_found", message: error instanceof Error ? error.message : "Could not load previous report." });
       } finally {
         if (!cancelled) setLoadingPrevious(false);
       }
@@ -110,13 +139,6 @@ const Analyze = () => {
   }, [isReRun, reportId]);
 
   // Map focus field → wizard step, jump there once inputs are loaded.
-  const FOCUS_TO_STEP: Record<string, number> = {
-    projectName: 0, industry: 0, location: 0, description: 0, strategicObjectives: 0,
-    businessModel: 0, revenueModel: 0, founderExperience: 0, competitorUrls: 0,
-    budgetRange: 1, timeline: 1, teamSize: 1, dependencies: 1,
-    assumptions: 2, constraints: 2, successFactors: 2,
-    knownRisks: 3, regulatoryConsiderations: 3, technologyReadiness: 3,
-  };
   useEffect(() => {
     if (!focusField || loadingPrevious) return;
     const target = FOCUS_TO_STEP[focusField];
@@ -126,6 +148,7 @@ const Analyze = () => {
 
   // Input quality assessment (live)
   const quality = useMemo(() => assessInputQuality(inputs), [inputs]);
+  const internalBrief = isInternalConcept(inputs);
   const weakKeys = useMemo(
     () => new Set(quality.fields.filter((f) => f.status === "missing" || f.status === "weak" || f.status === "needs_improvement").map((f) => f.key)),
     [quality],
@@ -151,15 +174,18 @@ const Analyze = () => {
     }
     setIsAutoFilling(true);
     try {
-      const { data, error } = await supabase.functions.invoke("autofill-brief", { body: { brief } });
+      const { data, error } = await supabase.functions.invoke("autofill-brief", {
+        body: { brief, idempotencyKey: `autofill-${crypto.randomUUID()}` },
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setInputs(data.draft);
-      setFieldErrors({});
-      setShowBrief(false);
-      toast.success("Draft generated. Review & edit before running analysis.");
-    } catch (e: any) {
-      toast.error(e?.message || "Could not generate draft.");
+      const draft = (data?.draft ?? {}) as Partial<ConceptInputs>;
+      const available = INPUT_KEYS.filter((key) => typeof draft[key] === "string" && draft[key]!.trim() && draft[key] !== inputs[key]);
+      setDraftSuggestions(draft);
+      setSelectedSuggestionKeys(new Set(available.filter((key) => !inputs[key]?.trim())));
+      toast.success("Draft suggestions are ready for your review.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not generate draft.");
     } finally {
       setIsAutoFilling(false);
     }
@@ -169,17 +195,48 @@ const Analyze = () => {
     setCompleting(field);
     try {
       const { data, error } = await supabase.functions.invoke("complete-field", {
-        body: { field, partial: inputs[field], inputs },
+        body: { field, partial: inputs[field], inputs, idempotencyKey: `field-${crypto.randomUUID()}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      if (data?.text) set(field, data.text);
-      toast.success("Field completed by AI.");
-    } catch (e: any) {
-      toast.error(e?.message || "AI completion failed.");
+      if (data?.text) {
+        setFieldSuggestion({ field, text: data.text });
+        toast.success("AI suggestion ready. Review it before applying.");
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "AI completion failed.");
     } finally {
       setCompleting(null);
     }
+  };
+
+  const applyDraftSuggestions = () => {
+    if (!draftSuggestions) return;
+    setInputs((current) => {
+      const next = { ...current };
+      for (const key of selectedSuggestionKeys) {
+        const suggestion = draftSuggestions[key];
+        if (typeof suggestion === "string" && suggestion.trim()) next[key] = suggestion.trim();
+      }
+      return next;
+    });
+    setFieldOrigins((current) => ({
+      ...current,
+      ...Object.fromEntries([...selectedSuggestionKeys].map((key) => [key, "accepted_ai_suggestion" as const])),
+    }));
+    setFieldErrors({});
+    setDraftSuggestions(null);
+    setSelectedSuggestionKeys(new Set());
+    setShowBrief(false);
+    toast.success("Selected AI suggestions applied. You can edit every field before analysis.");
+  };
+
+  const acceptFieldSuggestion = () => {
+    if (!fieldSuggestion) return;
+    const { field, text } = fieldSuggestion;
+    setInputs((current) => ({ ...current, [field]: text }));
+    setFieldOrigins((current) => ({ ...current, [field]: "accepted_ai_suggestion" }));
+    setFieldSuggestion(null);
   };
 
   const validateStep = () => {
@@ -212,21 +269,53 @@ const Analyze = () => {
       </p>
     ) : null;
 
+  const OriginBadge = ({ field }: { field: keyof ConceptInputs }) => {
+    const suggestionAvailable = (draftSuggestions && typeof draftSuggestions[field] === "string")
+      || fieldSuggestion?.field === field;
+    const origin: FieldOrigin | undefined = suggestionAvailable ? "ai_suggestion" : fieldOrigins[field];
+    if (!origin) return null;
+    const label: Record<FieldOrigin, string> = {
+      user_input: "Entered by user",
+      ai_suggestion: "Suggested by AI",
+      accepted_ai_suggestion: "Accepted AI suggestion",
+      edited_after_ai_suggestion: "Edited after AI suggestion",
+    };
+    return <Badge variant="outline" className="text-[9px] font-normal normal-case">{label[origin]}</Badge>;
+  };
+
 
   const next = () => { if (validateStep()) setStep((s) => Math.min(s + 1, 3)); };
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
+    const validated = validateConceptInputs(inputs);
+    if (!validated.success) {
+      const nextErrors: Partial<Record<keyof ConceptInputs, string>> = {};
+      let firstStep = step;
+      for (const issue of validated.issues) {
+        if (!issue.field || !INPUT_KEYS.includes(issue.field as typeof INPUT_KEYS[number])) continue;
+        const field = issue.field as keyof ConceptInputs;
+        nextErrors[field] ??= issue.message;
+        firstStep = Math.min(firstStep, FOCUS_TO_STEP[field] ?? step);
+      }
+      setFieldErrors(nextErrors);
+      setStep(firstStep);
+      toast.error("Correct the highlighted brief fields before analysis.");
+      return;
+    }
     setIsAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
+      const idempotencyKey = `analysis-${crypto.randomUUID()}`;
+      const { data, error } = await supabase.functions.invoke("analyze-concept", {
+        body: { inputs, inputOrigins: fieldOrigins, idempotencyKey },
+      });
       if (error) {
         let detail = error.message;
         try {
-          const ctx: any = (error as any).context;
-          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
-          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
+          const ctx = (error as { context?: { json?: () => Promise<{ error?: string }>; text?: () => Promise<string> } }).context;
+          if (ctx?.json) { const parsed = await ctx.json(); if (parsed.error) detail = parsed.error; }
+          else if (ctx?.text) { const text = await ctx.text(); if (text) detail = text; }
         } catch (_) { /* ignore */ }
         throw new Error(detail);
       }
@@ -243,11 +332,12 @@ const Analyze = () => {
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
         try {
           const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
-          navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
+          navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
           return;
-        } catch (e) {
-          console.warn("Save new version failed", e);
-          // fall through — still navigate so user sees results
+        } catch {
+          setPendingSave({ report: enriched, mode: "rerun" });
+          toast.error("Analysis completed, but the new version was not saved. Retry saving without running AI again.");
+          return;
         }
       }
 
@@ -255,16 +345,33 @@ const Analyze = () => {
       // workspace. This prevents Results.tsx from auto-saving a duplicate row.
       try {
         const saved = await saveReport(inputs, enriched);
-        navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
+        navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
         return;
-      } catch (e) {
-        console.warn("Initial save failed; falling back to /results", e);
+      } catch {
+        setPendingSave({ report: enriched, mode: "new" });
+        toast.error("Analysis completed, but the report was not saved. Retry saving without running AI again.");
+        return;
       }
-      navigate("/results", { state: { report: enriched, inputs } });
-    } catch (e: any) {
-      toast.error(e?.message || "Analysis failed.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Analysis failed.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const retryPendingSave = async () => {
+    if (!pendingSave) return;
+    setRetryingSave(true);
+    try {
+      const saved = pendingSave.mode === "rerun"
+        ? await saveRerunReport({ parentReportId: reportId, inputs, report: pendingSave.report })
+        : await saveReport(inputs, pendingSave.report);
+      setPendingSave(null);
+      navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Save retry failed");
+    } finally {
+      setRetryingSave(false);
     }
   };
 
@@ -272,7 +379,7 @@ const Analyze = () => {
 
   const EssayLabel = ({ field, children }: { field: EssayField; children: React.ReactNode }) => (
     <div className="flex items-center justify-between">
-      <Label>{children}</Label>
+      <div className="flex flex-wrap items-center gap-2"><Label>{children}</Label><OriginBadge field={field} /></div>
       <Button
         type="button" variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary hover:bg-accent"
         onClick={() => completeField(field)} disabled={completing === field}
@@ -310,9 +417,95 @@ const Analyze = () => {
   return (
     <div className="min-h-screen bg-background">
 
+      <Dialog open={!!draftSuggestions} onOpenChange={(open) => !open && setDraftSuggestions(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review AI draft suggestions</DialogTitle>
+            <DialogDescription>
+              Nothing is applied automatically. Empty fields are selected by default; existing user text remains protected unless you explicitly select its replacement.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {draftSuggestions && INPUT_KEYS.flatMap((key) => {
+              const suggestion = draftSuggestions[key];
+              if (typeof suggestion !== "string" || !suggestion.trim() || suggestion === inputs[key]) return [];
+              const checked = selectedSuggestionKeys.has(key);
+              return [(
+                <label key={key} className="flex cursor-pointer gap-3 rounded-md border border-border p-3">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(value) => setSelectedSuggestionKeys((current) => {
+                      const next = new Set(current);
+                      if (value === true) next.add(key); else next.delete(key);
+                      return next;
+                    })}
+                    aria-label={`Accept AI suggestion for ${key}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{key}</span>
+                      <Badge variant="outline" className="text-[9px] normal-case">Suggested by AI</Badge>
+                      {inputs[key]?.trim() && <Badge variant="outline" className="text-[9px] normal-case">Will replace user text</Badge>}
+                    </div>
+                    {inputs[key]?.trim() && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">Current: {inputs[key]}</p>}
+                    <p className="mt-1 text-sm text-foreground">Suggestion: {suggestion}</p>
+                  </div>
+                </label>
+              )];
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDraftSuggestions(null)}>Keep current fields</Button>
+            <Button onClick={applyDraftSuggestions} disabled={selectedSuggestionKeys.size === 0}>Apply selected suggestions</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!fieldSuggestion} onOpenChange={(open) => !open && setFieldSuggestion(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review field suggestion</DialogTitle>
+            <DialogDescription>
+              The AI suggestion will replace this field only after you accept it. You can edit it afterward.
+            </DialogDescription>
+          </DialogHeader>
+          {fieldSuggestion && (
+            <div className="space-y-3">
+              {inputs[fieldSuggestion.field]?.trim() && (
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Current user text</div>
+                  <p className="mt-1 text-sm">{inputs[fieldSuggestion.field]}</p>
+                </div>
+              )}
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-primary">Suggested by AI</div>
+                <p className="mt-1 text-sm">{fieldSuggestion.text}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFieldSuggestion(null)}>Keep current text</Button>
+            <Button onClick={acceptFieldSuggestion}>Accept suggestion</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
 
       <div className="container mx-auto max-w-2xl px-6 py-10">
+        {pendingSave && (
+          <div className="mb-6 rounded-xl border border-destructive/40 bg-destructive/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-semibold text-foreground">Analysis ready — save still required</div>
+                <p className="mt-1 text-xs text-muted-foreground">Retrying here saves the validated result without making another AI request.</p>
+              </div>
+              <Button onClick={retryPendingSave} disabled={retryingSave} className="gap-2">
+                {retryingSave && <Loader2 className="h-4 w-4 animate-spin" />} Retry save
+              </Button>
+            </div>
+          </div>
+        )}
         {isReRun && (
           <div className="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-4">
             <div className="flex items-start gap-2 text-sm">
@@ -326,7 +519,7 @@ const Analyze = () => {
                 </p>
                 {focusField && !loadingPrevious && (
                   <p className="mt-1 text-xs font-medium text-warning">
-                    Editing field: {quality.fields.find((f) => f.key === (focusField as any))?.label || focusField}
+                    Editing field: {quality.fields.find((field) => String(field.key) === focusField)?.label || focusField}
                   </p>
                 )}
               </div>
@@ -389,14 +582,14 @@ const Analyze = () => {
             {step === 0 && (
               <>
                 <div className="space-y-2">
-                  <Label>Project Name *</Label>
+                  <div className="flex flex-wrap items-center gap-2"><Label>Project Name *</Label><OriginBadge field="projectName" /></div>
                   <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} className={errorClass("projectName")} aria-invalid={!!fieldErrors.projectName} />
                   <InlineError field="projectName" />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Industry / Sector *</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>Industry / Sector *</Label><OriginBadge field="industry" /></div>
                     <Select value={inputs.industry} onValueChange={(v) => set("industry", v)}>
                       <SelectTrigger className={errorClass("industry")} aria-invalid={!!fieldErrors.industry}><SelectValue placeholder="Select industry" /></SelectTrigger>
                       <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
@@ -419,7 +612,7 @@ const Analyze = () => {
                     })()}
                   </div>
                   <div className="space-y-2">
-                    <Label>Location (City / Country)</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>Location (City / Country)</Label><OriginBadge field="location" /></div>
                     <Input value={inputs.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g., Riyadh, Saudi Arabia" maxLength={120} />
                   </div>
                 </div>
@@ -435,16 +628,16 @@ const Analyze = () => {
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Business Model</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>Business Model</Label><OriginBadge field="businessModel" /></div>
                     <Select value={inputs.businessModel} onValueChange={(v) => set("businessModel", v)}>
                       <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
                       <SelectContent>{BUSINESS_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Revenue Model</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>{internalBrief ? "Internal Value Model" : "Revenue Model"}</Label><OriginBadge field="revenueModel" /></div>
                     <Select value={inputs.revenueModel} onValueChange={(v) => set("revenueModel", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select revenue model" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={internalBrief ? "Select internal value model" : "Select revenue model"} /></SelectTrigger>
                       <SelectContent>{REVENUE_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
@@ -454,8 +647,9 @@ const Analyze = () => {
                   <Textarea value={inputs.founderExperience} onChange={(e) => set("founderExperience", e.target.value)} placeholder="Years of experience, prior exits, domain expertise…" rows={2} maxLength={1000} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Competitor URLs <span className="text-xs text-muted-foreground">(optional · one per line)</span></Label>
-                  <Textarea value={inputs.competitorUrls} onChange={(e) => set("competitorUrls", e.target.value)} placeholder={"https://competitor1.com\nhttps://competitor2.com"} rows={2} maxLength={800} />
+                  <div className="flex flex-wrap items-center gap-2"><Label>Competitor URLs <span className="text-xs text-muted-foreground">(optional · one per line)</span></Label><OriginBadge field="competitorUrls" /></div>
+                  <Textarea value={inputs.competitorUrls} onChange={(e) => set("competitorUrls", e.target.value)} placeholder={"https://competitor1.com\nhttps://competitor2.com"} rows={2} maxLength={800} className={errorClass("competitorUrls")} aria-invalid={!!fieldErrors.competitorUrls} />
+                  <InlineError field="competitorUrls" />
                 </div>
               </>
             )}
@@ -464,7 +658,7 @@ const Analyze = () => {
               <>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Estimated Budget Range *</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>Estimated Budget Range *</Label><OriginBadge field="budgetRange" /></div>
                     <Select value={inputs.budgetRange} onValueChange={(v) => set("budgetRange", v)}>
                       <SelectTrigger className={errorClass("budgetRange")} aria-invalid={!!fieldErrors.budgetRange}><SelectValue placeholder="Select budget range" /></SelectTrigger>
                       <SelectContent>{BUDGET_RANGES.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
@@ -472,7 +666,7 @@ const Analyze = () => {
                     <InlineError field="budgetRange" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Expected Timeline *</Label>
+                    <div className="flex flex-wrap items-center gap-2"><Label>Expected Timeline *</Label><OriginBadge field="timeline" /></div>
                     <Select value={inputs.timeline} onValueChange={(v) => set("timeline", v)}>
                       <SelectTrigger className={errorClass("timeline")} aria-invalid={!!fieldErrors.timeline}><SelectValue placeholder="Select timeline" /></SelectTrigger>
                       <SelectContent>{TIMELINES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
@@ -482,7 +676,7 @@ const Analyze = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Team Size</Label>
+                  <div className="flex flex-wrap items-center gap-2"><Label>Team Size</Label><OriginBadge field="teamSize" /></div>
                   <Select value={inputs.teamSize} onValueChange={(v) => set("teamSize", v)}>
                     <SelectTrigger><SelectValue placeholder="Select team size" /></SelectTrigger>
                     <SelectContent>{TEAM_SIZES.map((ts) => <SelectItem key={ts} value={ts}>{ts}</SelectItem>)}</SelectContent>
@@ -523,7 +717,7 @@ const Analyze = () => {
                   <Textarea value={inputs.regulatoryConsiderations} onChange={(e) => set("regulatoryConsiderations", e.target.value)} placeholder="Relevant regulations, standards, or compliance requirements…" rows={3} maxLength={1500} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Technology Readiness</Label>
+                  <div className="flex flex-wrap items-center gap-2"><Label>Technology Readiness</Label><OriginBadge field="technologyReadiness" /></div>
                   <Select value={inputs.technologyReadiness} onValueChange={(v) => set("technologyReadiness", v)}>
                     <SelectTrigger><SelectValue placeholder="Select readiness level" /></SelectTrigger>
                     <SelectContent>{TECHNOLOGY_READINESS.map((tr) => <SelectItem key={tr} value={tr}>{tr}</SelectItem>)}</SelectContent>

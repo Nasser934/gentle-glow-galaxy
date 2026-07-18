@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface ReportRow {
   id: string;
@@ -11,10 +12,46 @@ export interface ReportRow {
   output: FeasibilityReport;
   status: "draft" | "in_review" | "approved" | "rejected";
   is_public: boolean;
+  canonical_validated: boolean;
+  legacy_report_id: string | null;
   parent_report_id: string | null;
+  root_report_id: string | null;
   archived_at: string | null;
+  display_id: string;
+  model_id: string | null;
+  prompt_version: string | null;
+  scoring_engine_version: string | null;
+  research_timestamp: string | null;
+  source_snapshot_metadata: Record<string, unknown>;
+  input_hash: string | null;
+  report_schema_version: string | null;
+  generation_timestamp: string | null;
+  generation_seed: number | null;
   created_at: string;
   updated_at: string;
+}
+
+function reportAuditFields(output: FeasibilityReport) {
+  const quality = output.qualityMetadata;
+  return {
+    model_id: quality?.modelId ?? null,
+    prompt_version: quality?.promptVersion ?? null,
+    scoring_engine_version: quality?.scoringEngineVersion ?? output.scoringAudit?.scoringEngineVersion ?? null,
+    research_timestamp: quality?.researchTimestamp ?? null,
+    source_snapshot_metadata: {
+      sourceCount: output.sources?.length ?? 0,
+      sources: (output.sources ?? []).map((source) => ({
+        sourceId: source.sourceId,
+        url: source.url,
+        publicationDate: source.publicationDate ?? null,
+        accessDate: source.accessDate,
+        quality: source.quality,
+      })),
+    },
+    input_hash: quality?.inputHash ?? null,
+    report_schema_version: output.reportSchemaVersion ?? quality?.reportSchemaVersion ?? null,
+    generation_timestamp: quality?.generationTimestamp ?? null,
+  };
 }
 
 export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
@@ -26,13 +63,23 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       user_id: user.id,
       title: inputs.projectName || "Untitled analysis",
       industry: inputs.industry || null,
-      inputs: inputs as any,
-      output: output as any,
+      inputs: inputs as unknown as Json,
+      output: output as unknown as Json,
+      ...reportAuditFields(output),
     })
-    .select("id, slug")
+    .select("id, slug, display_id, output")
     .single();
-  if (error) throw error;
-  return data;
+  if (error) {
+    console.error(JSON.stringify({ event: "report_save_failed", category: error.code || "database" }));
+    throw error;
+  }
+  console.info(JSON.stringify({ event: "report_save_completed", reportId: data.id, reportSchemaVersion: output.reportSchemaVersion ?? "legacy" }));
+  return {
+    id: data.id,
+    slug: data.slug,
+    displayId: data.display_id,
+    report: data.output as unknown as FeasibilityReport,
+  };
 }
 
 /**
@@ -62,14 +109,24 @@ export async function saveRerunReport(params: {
       user_id: user.id,
       title: params.inputs.projectName || "Untitled analysis",
       industry: params.inputs.industry || null,
-      inputs: params.inputs as any,
-      output: params.report as any,
+      inputs: params.inputs as unknown as Json,
+      output: params.report as unknown as Json,
       parent_report_id: rootId,
-    } as any)
-    .select("id, slug")
+      ...reportAuditFields(params.report),
+    })
+    .select("id, slug, display_id, output")
     .single();
-  if (error) throw error;
-  return data;
+  if (error) {
+    console.error(JSON.stringify({ event: "report_version_save_failed", category: error.code || "database" }));
+    throw error;
+  }
+  console.info(JSON.stringify({ event: "report_version_save_completed", reportId: data.id, parentReportId: rootId, reportSchemaVersion: params.report.reportSchemaVersion ?? "legacy" }));
+  return {
+    id: data.id,
+    slug: data.slug,
+    displayId: data.display_id,
+    report: data.output as unknown as FeasibilityReport,
+  };
 }
 
 /** Back-compat shim. */
@@ -79,7 +136,8 @@ export async function saveReportVersion(inputs: ConceptInputs, output: Feasibili
 
 export async function getReportBySlug(slug: string) {
   const { data, error } = await supabase
-    .from("reports").select("*").eq("slug", slug).maybeSingle();
+    .rpc("get_report_by_slug", { p_slug: slug })
+    .maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
 }
@@ -97,6 +155,30 @@ export async function getReportWithOwnership(id: string) {
     .from("reports").select("id, user_id, parent_report_id, slug, is_public").eq("id", id).maybeSingle();
   if (error) throw error;
   return data as { id: string; user_id: string; parent_report_id: string | null; slug: string; is_public: boolean } | null;
+}
+
+/**
+ * Change visibility only after verifying the authenticated owner. The update
+ * is also protected by reports RLS; the explicit user_id filter prevents a
+ * successful-looking no-op when a non-owner attempts the request.
+ */
+export async function setReportVisibility(id: string, isPublic: boolean) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sign in to manage sharing.");
+
+  const { data, error } = await supabase
+    .from("reports")
+    .update({ is_public: isPublic })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id, slug, is_public")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data || data.is_public !== isPublic) {
+    throw new Error("Visibility was not updated. Only the report owner can manage sharing.");
+  }
+  return data as { id: string; slug: string; is_public: boolean };
 }
 
 /**
@@ -134,14 +216,14 @@ export type ReportScope = "active" | "archived" | "all";
 export async function listMyReports(scope: ReportScope = "active") {
   let q = supabase
     .from("reports")
-    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, archived_at" as any)
+    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, archived_at")
     .order("created_at", { ascending: false })
     .limit(200);
-  if (scope === "active") q = q.is("archived_at" as any, null);
-  else if (scope === "archived") q = q.not("archived_at" as any, "is", null);
+  if (scope === "active") q = q.is("archived_at", null);
+  else if (scope === "archived") q = q.not("archived_at", "is", null);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as any[];
+  return data ?? [];
 }
 
 export async function deleteReport(id: string) {
@@ -155,12 +237,12 @@ export async function archiveReportGroup(reportId: string) {
   const now = new Date().toISOString();
   const { error: e1 } = await supabase
     .from("reports")
-    .update({ archived_at: now } as any)
+    .update({ archived_at: now })
     .eq("id", rootId);
   if (e1) throw e1;
   const { error: e2 } = await supabase
     .from("reports")
-    .update({ archived_at: now } as any)
+    .update({ archived_at: now })
     .eq("parent_report_id", rootId);
   if (e2) throw e2;
 }
@@ -170,23 +252,26 @@ export async function restoreReportGroup(reportId: string) {
   const rootId = await getReportRootId(reportId);
   const { error: e1 } = await supabase
     .from("reports")
-    .update({ archived_at: null } as any)
+    .update({ archived_at: null })
     .eq("id", rootId);
   if (e1) throw e1;
   const { error: e2 } = await supabase
     .from("reports")
-    .update({ archived_at: null } as any)
+    .update({ archived_at: null })
     .eq("parent_report_id", rootId);
   if (e2) throw e2;
 }
 
-export async function updateReportStatus(id: string, status: ReportRow["status"], note?: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in");
-  const { data: prev } = await supabase.from("reports").select("status").eq("id", id).single();
-  const { error } = await supabase.from("reports").update({ status }).eq("id", id);
+export async function updateReportStatus(id: string, status: ReportRow["status"]) {
+  const { data, error } = await supabase
+    .from("reports")
+    .update({ status })
+    .eq("id", id)
+    .select("id, status")
+    .maybeSingle();
   if (error) throw error;
-  await supabase.from("report_status_history").insert({
-    report_id: id, changed_by: user.id, from_status: prev?.status ?? null, to_status: status, note: note ?? null,
-  });
+  if (!data || data.status !== status) {
+    throw new Error("Status was not updated. Only the report owner can change it.");
+  }
+  return data;
 }

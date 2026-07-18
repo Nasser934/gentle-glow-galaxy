@@ -1,95 +1,115 @@
 # Concept AI
 
-AI-powered feasibility analysis for project, IT, telecom, infrastructure, government and real-estate concepts. Capture an idea in a guided 4-step brief, get a transparent FMART feasibility report grounded in live web research, run financial sensitivity, collaborate with your team, and export to PDF, PowerPoint or Excel.
+Concept AI is an evidence-aware feasibility-analysis MVP prepared for the ADAPT 2026 Global AI Hackathon in Project Management. A guided concept brief becomes a server-validated FMART-O report, an Analysis Dashboard, an Executive Decision Room, and consistent PDF, PowerPoint, and Excel exports.
 
-- Live preview: https://id-preview--51d58cb5-2265-4414-a562-40b8cac715bf.lovable.app
 - Published app: https://gentle-glow-galaxy.lovable.app
+- Synthetic judge demo: https://gentle-glow-galaxy.lovable.app/demo
 - Lovable project: https://lovable.dev/projects/51d58cb5-2265-4414-a562-40b8cac715bf
 
-## What it does
+## Current MVP capabilities
 
-Concept AI turns a short concept brief into a structured feasibility report:
+- Guided four-step brief with AI suggestions that the user must explicitly accept; accepted and subsequently edited fields retain origin metadata.
+- Tavily research and guarded competitor-page extraction, with canonical URLs, source-quality classes, recency flags, independent-domain coverage, and explicit claim-to-source IDs.
+- Deterministic FMART-O scoring across Financial, Market, Achievability, Risk, Timing, and Operational dimensions. The server validates scores and weights, recalculates the authoritative score, and applies evidence, input-quality, and critical-risk governance rules.
+- Financial consistency checks for CapEx, OpEx, funding shares, scenario probabilities, investment runway, currency, and TAM ≥ SAM ≥ SOM. Unsupported precise figures are labelled as estimates or as requiring validation.
+- Analysis Dashboard, seeded internal/commercial scenario simulation, risk register, explicit provenance, report comparison, flat comments, status history, version families, and owner-controlled public links.
+- Canonical PDF, PowerPoint, and Excel exports. Excel preserves numeric cells and formulas; PowerPoint uses broadly available font fallbacks; PDF text is generated as selectable text.
+- Authenticated user workspace with owner-controlled reports and explicit shared review links. Public reports are read-only.
+- Stable public demo using synthetic internal-project data. It does not write to the database unless a signed-in user separately creates and saves an analysis.
 
-- **Guided intake** — four-step form (Overview, Scope, Assumptions, Risks) with AI autofill and per-field completion.
-- **Industry templates** — one-click pre-fill for SaaS, Telecom, Infrastructure, Government, Real Estate and Healthcare.
-- **Grounded research** — live web search via Tavily plus targeted scraping of competitor URLs, Reddit, Hacker News and Wikipedia. Every finding is backed by citations.
-- **FMART scoring** — Financial, Market, Achievability, Risk, Timing and Operational dimensions, each with a confidence score, rationale and configurable weights.
-- **Interactive dashboard** — radar chart, risk heatmap, market and CapEx visuals, methodology panel, evidence chips that link findings back to sources.
-- **Financial sensitivity** — driver sliders, tornado chart and a 2,000-iteration Monte Carlo simulation (P10 / P50 / P90 outcomes).
-- **Collaboration** — share via `/r/:slug`, threaded comments, status workflow (draft → in review → approved / rejected), in-app notifications.
-- **Comparison mode** — pick any two saved reports and view them side by side.
-- **Multi-format export** — single PDF, executive PPTX deck, and a 7-sheet XLSX workbook with live formulas.
-- **Authentication** — email/password and Google sign-in. Reports are owner-only by default and shareable by slug.
+Model-estimated confidence is an analysis indicator constrained by input completeness and evidence support. It is not accuracy, statistical certainty, or a calibrated prediction interval. Estimated Evidence Composition is a heuristic based on input completeness and available sources; claim provenance categories are the authoritative provenance display.
 
-## Tech stack
+## Not current capabilities
 
-- **Frontend** — Vite, React 18, TypeScript, Tailwind CSS, shadcn/ui, framer-motion, recharts, react-markdown.
-- **Backend** — Lovable Cloud (Supabase): Postgres with Row-Level Security, Auth, Edge Functions (Deno).
-- **AI** — Lovable AI Gateway (Google Gemini 2.5 family).
-- **Research** — Tavily Search API.
-- **Exports** — `jspdf` + `html2canvas-pro`, `pptxgenjs`, `exceljs`.
+The following are roadmap items, not implemented product claims:
+
+- Trained predictive cost or schedule models, historical organization learning, or statistically calibrated accuracy.
+- ERP, PPM, ServiceNow, Primavera, or Microsoft Project integrations.
+- Organizations, workspaces, portfolio optimization, committee roles, autonomous approvals, or enterprise tenant governance.
+- Independent Finance, Market, Risk, or Product review agents.
+- Proven production adoption, paying customers, or measured time-reduction outcomes.
+
+The current access model is an authenticated user workspace with report ownership and revocable public review links. Organization and portfolio governance belongs on the roadmap.
+
+## Evidence and calculation model
+
+Every major claim has a stable claim ID and one provenance category: User input, Cited source, Calculation, AI inference, Mixed, or Unknown. Sources have stable IDs, publisher/domain/date metadata, and quality levels. Community discussions are directional signals and are not treated as equivalent to official, government, academic, or primary evidence.
+
+The model may propose dimension scores, weights, an overall score, a verdict, and confidence indicators. The authoritative server pipeline ignores the proposed overall score and verdict, validates or replaces weights, calculates the weighted score precisely, caps confidence deterministically, validates financial relationships, and stores audit metadata. Screens and exports consume that canonical object.
 
 ## Architecture
 
 ```text
 src/pages
-  Index            Landing
-  Auth             Sign in / sign up (email + Google)
-  Analyze          4-step concept brief
-  Results          Report + export dropdown
-  Dashboard        My saved reports
-  SharedReport     Public-by-slug view (/r/:slug)
-  Compare         Side-by-side comparison
+  Index             Landing and truthful MVP positioning
+  Analyze           Guided brief and explicit AI-suggestion acceptance
+  Results           Owner workspace, Analysis Dashboard, evidence, exports
+  DecisionRoom      Executive Decision Room / 90-Second Judge Mode
+  SharedReport      Exact-slug, read-only public view
+  Compare           Up to three owner-accessible report versions
 
 supabase/functions
-  analyze-concept  Tavily + scraping + Gemini → FeasibilityReport
-  autofill-brief   Bulk AI fill of empty brief fields
-  complete-field   Single-field AI suggestion
+  analyze-concept   Validation, research, AI, canonical score/report pipeline
+  autofill-brief    AI draft suggestions for empty/selected brief fields
+  complete-field    Single-field AI suggestion
 
-Database (public schema)
-  reports                   — concept inputs + FMART output, slug, status, public flag
-  report_comments           — threaded comments (RLS: visible when report visible)
-  report_status_history     — append-only status changes
-  notifications             — owner alerts (DB triggers on comments + status)
-  profiles                  — display name + avatar
-  user_roles                — separate roles table (admin / user) used by `has_role`
+Database
+  reports                    Private-by-default reports and version audit data
+  report_slug_aliases        Safe aliases preserving legacy report links
+  report_comments            Flat review comments
+  report_status_history      Database-derived status audit trail
+  notifications              Comment notifications and recipient isolation
+  analysis_requests          Privacy-safe request lifecycle and idempotency
+  analysis_rate_limits       Persistent user/IP/function usage windows
+  profiles                   Restricted profile data
 ```
 
-## Local development
+## Configuration
 
-Requires Node.js 18+.
-
-```bash
-npm install
-npm run dev      # start Vite at http://localhost:5173
-npm test         # run Vitest unit tests
-npm run build    # production build
-```
-
-The `.env` file is generated and managed by Lovable Cloud — do not edit it manually. It exposes:
+Frontend variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_PROJECT_ID`
 
-Server-side secrets live in Lovable Cloud and are injected into Edge Functions:
+Edge Function secrets/configuration:
 
-- `LOVABLE_API_KEY` — AI Gateway access
-- `TAVILY_API_KEY` — web search
+- `LOVABLE_API_KEY`
+- `TAVILY_API_KEY`
+- `ANALYSIS_MODEL_ID` (optional; the saved report records the actual configured model ID)
+- `ALLOWED_ORIGINS` (optional comma-separated production origins)
+- `RATE_LIMIT_HASH_SALT` (optional dedicated salt; the Edge Function otherwise uses its server-only Supabase service key as the hash salt)
 
-## Deployment
+Never commit secrets. The repository contains only public client configuration expected by Supabase and additive migrations.
 
-Open the Lovable project and click **Share → Publish**. To attach a custom domain go to **Project → Settings → Domains → Connect Domain**.
+## Local development and verification
 
-## GitHub sync
+Requires Node.js 20.19.5 or newer.
 
-Lovable has a bidirectional GitHub integration. Once the repository is connected via **Connectors → GitHub**, every change made inside Lovable is auto-committed and pushed, and any commit pushed to GitHub is auto-pulled back into Lovable.
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run check:edge
+npm run test
+npm run build
+```
 
-## Editing this code
+Database migrations are additive under `supabase/migrations`. Database policy tests are under `supabase/tests/database` and require a linked or local Supabase/Postgres environment with pgTAP.
 
-- Open the project in Lovable and prompt your changes, or
-- Clone the GitHub repository and use your own IDE (changes pushed to `main` will sync back into Lovable), or
-- Edit files directly on GitHub or via Codespaces.
+## GitHub and Lovable synchronization
+
+The Lovable project is connected bidirectionally to this GitHub repository. Work is developed and verified on a feature branch, then merged into the Lovable-connected active branch. That Git commit becomes the restorable Lovable history point; no Lovable prompt or credit is required for repository-originated changes.
+
+## Hackathon judge demo
+
+1. Open `/demo` without signing in.
+2. Confirm both synthetic-data labels at the top.
+3. Review the guided brief summary and server-validated FMART-O score.
+4. Inspect financial assumptions, risks, source coverage, and claim provenance in Overview.
+5. Open **90-Second Judge Mode** for the Executive Decision Room.
+6. Return to `/demo`, open Export, and generate PDF, PowerPoint, or Excel.
+7. Note that the demo is read-only and creates no database row.
 
 ## License
 

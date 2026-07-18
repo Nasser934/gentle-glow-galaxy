@@ -1,49 +1,60 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
+import { deepSanitize } from "../_shared/sanitize.ts";
+import { pseudonymousIpHash } from "../_shared/rateLimit.ts";
+import { buildCanonicalReport } from "../_shared/analysis/canonical.ts";
+import { validateConceptInputs, validateInputOrigins } from "../_shared/analysis/input.ts";
+import {
+  assessCoverage,
+  canonicalizeUrl,
+  domainForUrl,
+  finalizeCitations,
+  isPublicResearchUrl,
+  qualityForWebDomain,
+  type CitationCandidate,
+} from "../_shared/analysis/research.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://gentle-glow-galaxy.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+];
+
+function allowedOrigins() {
+  const configured = (Deno.env.get("ALLOWED_ORIGINS") || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured]);
+}
+
+function buildCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin");
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, idempotency-key, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+  if (origin && allowedOrigins().has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
 
 const textFrom = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 
-// Per-IP rate limiting (in-memory; resets on cold start). Protects against budget abuse.
-const RATE_LIMIT_MAX = 8;        // requests per window per IP
-const RATE_LIMIT_WINDOW_MS = 60_000 * 10; // 10 minutes
-const ipHits = new Map<string, number[]>();
-function rateLimit(ip: string): { ok: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (arr.length >= RATE_LIMIT_MAX) {
-    return { ok: false, retryAfter: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - arr[0])) / 1000) };
-  }
-  arr.push(now);
-  ipHits.set(ip, arr);
-  if (ipHits.size > 5000) {
-    // Prevent unbounded growth
-    for (const [k, v] of ipHits) if (v.every((t) => now - t > RATE_LIMIT_WINDOW_MS)) ipHits.delete(k);
-  }
-  return { ok: true };
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// Server-side input length caps (defense in depth — clients also enforce maxLength).
-const MAX_FIELD_LEN = 3000;
-const MAX_TOTAL_LEN = 18000;
-function sanitizeInputs(raw: Record<string, unknown>): { ok: true; inputs: Record<string, string> } | { ok: false; error: string } {
-  if (!raw || typeof raw !== "object") return { ok: false, error: "Invalid inputs payload" };
-  const cleaned: Record<string, string> = {};
-  let total = 0;
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof v !== "string") continue;
-    const trimmed = v.slice(0, MAX_FIELD_LEN);
-    cleaned[k] = trimmed;
-    total += trimmed.length;
-    if (total > MAX_TOTAL_LEN) return { ok: false, error: "Input too large" };
-  }
-  return { ok: true, inputs: cleaned };
+function safeUsageMetadata(raw: unknown) {
+  if (!raw || typeof raw !== "object") return {};
+  const usage = raw as Record<string, unknown>;
+  const allowed = ["prompt_tokens", "completion_tokens", "total_tokens"];
+  return Object.fromEntries(allowed.flatMap((key) => {
+    const value = Number(usage[key]);
+    return Number.isFinite(value) && value >= 0 ? [[key, value]] : [];
+  }));
 }
 
 async function safeJson(url: string, init?: RequestInit) {
@@ -58,67 +69,6 @@ async function safeJson(url: string, init?: RequestInit) {
   } catch (_) { return null; }
 }
 
-// SSRF guard — reject private/loopback/link-local/metadata IPs
-function isPrivateIp(ip: string): boolean {
-  if (!ip) return true;
-  if (ip === "127.0.0.1" || ip === "0.0.0.0" || ip === "::1") return true;
-  if (ip.startsWith("169.254.")) return true; // link-local & cloud metadata
-  if (ip.startsWith("10.")) return true;
-  if (ip.startsWith("192.168.")) return true;
-  const m = ip.match(/^172\.(\d+)\./);
-  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
-  if (ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
-  return false;
-}
-
-async function isUrlSafe(url: string): Promise<boolean> {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname;
-    // Block obvious local hostnames
-    if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false;
-    // If host is already a literal IP, check directly
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
-      return !isPrivateIp(host);
-    }
-    // Resolve DNS and reject if any A record is private
-    try {
-      const ips = await Deno.resolveDns(host, "A");
-      if (!ips.length || ips.some(isPrivateIp)) return false;
-    } catch { return false; }
-    return true;
-  } catch { return false; }
-}
-
-async function safeText(url: string) {
-  if (!(await isUrlSafe(url))) return null;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "ConceptAIResearchBot/1.0", "Accept": "text/html,application/xhtml+xml" },
-      signal: AbortSignal.timeout(4000),
-      redirect: "manual",
-    });
-    if (!res.ok) return null;
-    const txt = await res.text();
-    return txt.slice(0, 200_000);
-  } catch (_) { return null; }
-}
-
-function stripHtml(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractTitle(html: string) {
-  const m = html.match(/<title[^>]*>([^<]{3,200})<\/title>/i);
-  return m ? m[1].trim() : null;
-}
-
 async function tavilySearch(query: string) {
   const key = Deno.env.get("TAVILY_API_KEY");
   if (!key) return null;
@@ -129,6 +79,7 @@ async function tavilySearch(query: string) {
       body: JSON.stringify({
         api_key: key, query, search_depth: "basic",
         max_results: 8, include_answer: true, include_raw_content: false,
+        time_range: "year",
       }),
       signal: AbortSignal.timeout(8000),
     });
@@ -137,22 +88,48 @@ async function tavilySearch(query: string) {
   } catch (e) { console.warn("Tavily err", e); return null; }
 }
 
-async function scrapeCompetitors(rawUrls: string) {
+async function extractCompetitors(rawUrls: string) {
+  const key = Deno.env.get("TAVILY_API_KEY");
+  if (!key) return [];
   const urls = (rawUrls || "")
-    .split(/[\s,]+/).map((u) => u.trim()).filter(Boolean)
-    .filter((u) => /^https?:\/\//i.test(u)).slice(0, 4);
+    .split(/[\s,]+/)
+    .map((value) => canonicalizeUrl(value.trim()))
+    .filter((value) => value && isPublicResearchUrl(value))
+    .slice(0, 4);
   if (!urls.length) return [];
-  const out: Array<{ url: string; title: string | null; excerpt: string }> = [];
-  await Promise.all(urls.map(async (url) => {
-    const html = await safeText(url);
-    if (!html) return;
-    out.push({
-      url,
-      title: extractTitle(html),
-      excerpt: stripHtml(html).slice(0, 1200),
+  try {
+    const response = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        urls,
+        extract_depth: "basic",
+        format: "text",
+        timeout: 8,
+        include_usage: false,
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
-  }));
-  return out;
+    if (!response.ok) {
+      console.warn("Tavily extract HTTP", response.status);
+      return [];
+    }
+    const payload = await response.json();
+    return (Array.isArray(payload?.results) ? payload.results : []).flatMap((result: unknown) => {
+      if (!result || typeof result !== "object") return [];
+      const item = result as Record<string, unknown>;
+      const url = canonicalizeUrl(textFrom(item.url));
+      const excerpt = textFrom(item.raw_content).replace(/\s+/g, " ").trim().slice(0, 1200);
+      if (!url || !urls.includes(url) || !excerpt) return [];
+      return [{ url, title: domainForUrl(url) || null, excerpt }];
+    });
+  } catch (error) {
+    console.warn("Tavily extract failed", error instanceof Error ? error.name : "unknown");
+    return [];
+  }
 }
 
 async function fetchPublicResearch(inputs: Record<string, string>) {
@@ -166,10 +143,10 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
     safeJson(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encoded}&limit=5&format=json&origin=*`),
     safeJson(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`),
     tavilySearch(tavilyQuery),
-    scrapeCompetitors(inputs.competitorUrls || ""),
+    extractCompetitors(inputs.competitorUrls || ""),
   ]);
 
-  const citations: Array<{ title: string; url: string; source: string; takeaway: string }> = [];
+  const candidates: CitationCandidate[] = [];
   const redditSignals: string[] = [];
   const webSignals: string[] = [];
 
@@ -181,7 +158,27 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
     if (!title || !url) continue;
     const snippet = textFrom(r?.content).slice(0, 260);
     webSignals.push(`${title} — ${snippet}`);
-    citations.push({ title, source: "Tavily web", url, takeaway: snippet || "Web search citation." });
+    const canonicalUrl = canonicalizeUrl(url);
+    const domain = domainForUrl(canonicalUrl);
+    const quality = qualityForWebDomain(domain);
+    const sourceType = [
+      "Primary official source",
+      "Government or regulator",
+      "Academic or institutional",
+      "Reputable industry research",
+    ].includes(quality)
+      ? "Verified market evidence" as const
+      : "General background" as const;
+    candidates.push({
+      title,
+      source: "Web research",
+      publisher: domain,
+      url: canonicalUrl,
+      takeaway: snippet || "Public web context; direct claim support must be checked.",
+      publicationDate: textFrom(r?.published_date) || null,
+      sourceType,
+      quality,
+    });
   }
 
   const redditPosts = reddit?.data?.children ?? [];
@@ -193,10 +190,13 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
     const comments = Number(post?.num_comments ?? 0);
     const subreddit = textFrom(post?.subreddit, "reddit");
     redditSignals.push(`${title} — r/${subreddit}, ${score} upvotes, ${comments} comments`);
-    citations.push({
+    candidates.push({
       title, source: `Reddit · r/${subreddit}`,
       url: `https://www.reddit.com${textFrom(post?.permalink, "/search")}`,
       takeaway: `Community signal with ${comments} comments and ${score} upvotes.`,
+      publicationDate: post?.created_utc ? new Date(Number(post.created_utc) * 1000).toISOString() : null,
+      sourceType: "Community discussion",
+      quality: "Community signal",
     });
   }
 
@@ -206,41 +206,73 @@ async function fetchPublicResearch(inputs: Record<string, string>) {
     const points = Number(hit?.points ?? 0);
     const comments = Number(hit?.num_comments ?? 0);
     webSignals.push(`${title} — Hacker News, ${points} points, ${comments} comments`);
-    citations.push({ title, source: "Hacker News", url: textFrom(hit?.url || `https://news.ycombinator.com/item?id=${hit?.objectID}`), takeaway: `Tech-market discussion signal with ${comments} comments.` });
+    candidates.push({
+      title,
+      source: "Hacker News",
+      url: textFrom(hit?.url || `https://news.ycombinator.com/item?id=${hit?.objectID}`),
+      takeaway: `Community discussion signal with ${comments} comments.`,
+      publicationDate: textFrom(hit?.created_at) || null,
+      sourceType: "Community discussion",
+      quality: "Community signal",
+    });
   }
 
   const wikiTitles = Array.isArray(wiki?.[1]) ? wiki[1] : [];
   const wikiUrls = Array.isArray(wiki?.[3]) ? wiki[3] : [];
   wikiTitles.slice(0, 5).forEach((title: string, i: number) => {
     webSignals.push(`${title} — Wikipedia/reference coverage`);
-    citations.push({ title, source: "Wikipedia", url: textFrom(wikiUrls[i], "https://www.wikipedia.org"), takeaway: "Reference coverage related to market/category context." });
+    candidates.push({
+      title,
+      source: "Wikipedia",
+      url: textFrom(wikiUrls[i], "https://www.wikipedia.org"),
+      takeaway: "General background only; not direct verification of a report figure.",
+      sourceType: "General background",
+      quality: "General reference",
+    });
   });
 
   const abstract = textFrom(duck?.AbstractText).trim();
-  if (abstract) webSignals.unshift(abstract.slice(0, 260));
+  if (abstract) {
+    webSignals.unshift(abstract.slice(0, 260));
+    const abstractUrl = textFrom(duck?.AbstractURL);
+    if (abstractUrl) candidates.push({
+      title: textFrom(duck?.Heading, "Reference result"),
+      source: textFrom(duck?.AbstractSource, "DuckDuckGo reference"),
+      url: abstractUrl,
+      takeaway: abstract.slice(0, 260),
+      sourceType: "General background",
+      quality: "General reference",
+    });
+  }
 
   // Competitor scrapes — directly cited
   for (const c of competitors) {
-    citations.push({
+    candidates.push({
       title: c.title || c.url,
-      source: "User-supplied competitor",
+      source: "Competitor-provided information",
       url: c.url,
       takeaway: c.excerpt.slice(0, 240),
+      sourceType: "Competitor-provided information",
+      quality: "Company source",
     });
     webSignals.push(`${c.title || c.url} — homepage excerpt: ${c.excerpt.slice(0, 220)}`);
   }
 
-  const hasGroundedSearch = !!tavily;
+  const citations = finalizeCitations(candidates);
+  const coverageAssessment = assessCoverage(citations);
   return {
     query, generatedAt: new Date().toISOString(),
     redditSignals: redditSignals.slice(0, 8),
     webSignals: webSignals.slice(0, 14),
-    citations: citations.slice(0, 16),
+    citations,
     competitorScrapes: competitors,
-    coverage: hasGroundedSearch && citations.length >= 6 ? "High"
-            : citations.length >= 6 ? "Medium"
-            : citations.length >= 2 ? "Low" : "Limited",
-    grounded: hasGroundedSearch,
+    verifiedMarketEvidence: citations.filter((citation) => citation.sourceType === "Verified market evidence"),
+    communityDiscussion: citations.filter((citation) => citation.sourceType === "Community discussion"),
+    generalBackground: citations.filter((citation) => citation.sourceType === "General background"),
+    competitorProvidedInformation: citations.filter((citation) => citation.sourceType === "Competitor-provided information"),
+    coverage: coverageAssessment.coverage,
+    coverageMetrics: coverageAssessment.metrics,
+    reliableExternalEvidence: coverageAssessment.reliableExternalEvidence,
   };
 }
 
@@ -267,7 +299,7 @@ const reportSchema = {
         operationalFinding:   { type: "string" },
         weights: {
           type: "object",
-          description: "FMART dimension weights as decimals 0-1, summing to 1.0. Adapt to industry: capex-heavy projects weight Financial+Risk higher; tech startups weight Market+Timing higher.",
+          description: "FMART-O dimension weights as decimals 0-1, summing to 1.0. Adapt to industry: capex-heavy projects weight Financial+Risk higher; tech startups weight Market+Timing higher.",
           properties: {
             financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
             risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
@@ -277,7 +309,7 @@ const reportSchema = {
         },
         confidence: {
           type: "object",
-          description: "Per-dimension analyst confidence 0-100 (% certain). Lower this where research evidence is thin.",
+          description: "Per-dimension model-estimated confidence indicator 0-100. This is not statistical certainty; lower it where evidence is thin.",
           properties: {
             financial: { type: "number" }, market: { type: "number" }, achievability: { type: "number" },
             risk: { type: "number" }, timing: { type: "number" }, operational: { type: "number" },
@@ -310,7 +342,7 @@ const reportSchema = {
         somLabel: { type: "string" }, somValue: { type: "string" }, somCagr: { type: "string" },
         growthChart: {
           type: "array",
-          description: "5–6 year TAM/SAM growth points. Use plain numbers (in billions of currency).",
+          description: "5–6 year TAM/SAM growth points. Use full currency-unit numbers: 12B must be 12000000000, not 12. The first point must align with tamValue/samValue.",
           items: {
             type: "object",
             properties: { year: { type: "string" }, tam: { type: "number" }, sam: { type: "number" } },
@@ -360,6 +392,7 @@ const reportSchema = {
       type: "object",
       properties: {
         currency: { type: "string" },
+        projectType: { type: "string", enum: ["commercial", "internal"] },
         capExLow: { type: "number" }, capExHigh: { type: "number" }, capExMid: { type: "number" },
         capEx: {
           type: "array",
@@ -390,8 +423,13 @@ const reportSchema = {
               scenario: { type: "string", enum: ["Optimistic","Base Case","Pessimistic"] },
               probability: { type: "string" }, subscribersYr1: { type: "string" },
               annualRevenue: { type: "string" }, breakEven: { type: "string" },
+              adoptionRate: { type: "number" },
+              annualLabourCostAvoided: { type: "number" },
+              annualProductivityBenefit: { type: "number" },
+              annualFinancialBenefit: { type: "number" },
+              annualValueDisplay: { type: "string" },
             },
-            required: ["scenario","probability","subscribersYr1","annualRevenue","breakEven"],
+            required: ["scenario","probability","breakEven"],
             additionalProperties: false,
           },
         },
@@ -399,7 +437,7 @@ const reportSchema = {
         breakEvenSummary: { type: "string" },
         ltvCacRatio: { type: "string" },
       },
-      required: ["currency","capExLow","capExHigh","capExMid","capEx","opEx","scenarios","investmentRange","breakEvenSummary","ltvCacRatio"],
+      required: ["currency","projectType","capExLow","capExHigh","capExMid","capEx","opEx","scenarios","investmentRange","breakEvenSummary"],
       additionalProperties: false,
     },
     risks: {
@@ -455,7 +493,7 @@ const reportSchema = {
     },
     scoreExplanation: {
       type: "array",
-      description: "One row per FMART + Operational dimension (6 total).",
+      description: "One row per FMART-O dimension (6 total).",
       items: {
         type: "object",
         properties: {
@@ -474,7 +512,7 @@ const reportSchema = {
     },
     claimEvidenceMap: {
       type: "array",
-      description: "Key report claims, each with mix percentages summing to 100 and a confidence band.",
+      description: "Key report claims with explicit provenance and exact source-ID relationships. Never attach a source unless it directly supports that claim.",
       items: {
         type: "object",
         properties: {
@@ -484,21 +522,52 @@ const reportSchema = {
           userInputPercent: { type: "number" },
           webResearchPercent: { type: "number" },
           aiAssumptionPercent: { type: "number" },
+          calculationPercent: { type: "number" },
           confidence: { type: "string", enum: ["High","Medium","Low"] },
-          sources: { type: "array", items: { type: "string" } },
+          provenance: { type: "string", enum: ["User input","Cited source","Calculation","AI inference","Mixed","Unknown"] },
+          supportingSourceIds: { type: "array", items: { type: "string" } },
+          conflictingSourceIds: { type: "array", items: { type: "string" } },
+          dimensions: {
+            type: "array",
+            items: { type: "string", enum: ["financial","market","achievability","risk","timing","operational"] },
+          },
           userCanImproveBy: { type: "string" },
         },
-        required: ["claimId","claimText","reportSection","userInputPercent","webResearchPercent","aiAssumptionPercent","confidence","sources","userCanImproveBy"],
+        required: ["claimId","claimText","reportSection","userInputPercent","webResearchPercent","calculationPercent","aiAssumptionPercent","confidence","provenance","supportingSourceIds","conflictingSourceIds","dimensions","userCanImproveBy"],
         additionalProperties: false,
       },
     },
   },
-  required: ["executiveSummary","scores","market","customer","competitors","research","financials","risks","fundingMix","fundingAdvisory","recommendations","nextSteps"],
+  required: [
+    "executiveSummary","scores","market","customer","competitors","research","financials","risks",
+    "fundingMix","fundingAdvisory","recommendations","nextSteps","inputQualityScore",
+    "inputCompleteness","evidenceMix","scoreExplanation","claimEvidenceMap",
+  ],
   additionalProperties: false,
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const corsHeaders = buildCorsHeaders(req);
+  const origin = req.headers.get("origin");
+  if (origin && !corsHeaders["Access-Control-Allow-Origin"]) {
+    return new Response(JSON.stringify({ error: "Origin is not allowed." }), {
+      status: 403,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed." }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
+  let requestId: string | null = null;
+  let requestClient: ReturnType<typeof createClient> | null = null;
+  let modelIdForLog: string | null = null;
+  let researchStatus = "not_requested";
+  let failureCategory = "internal_error";
 
   try {
     // Require authenticated user (mitigates SSRF abuse and budget abuse)
@@ -514,6 +583,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
+    requestClient = supabaseAuth;
     let userId: string | undefined;
     try {
       const { data: claimsData } = await supabaseAuth.auth.getClaims(token);
@@ -530,53 +600,106 @@ serve(async (req) => {
       userId = userData.user.id;
     }
 
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
-    const rl = rateLimit(ip);
-    if (!rl.ok) {
-      return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.retryAfter ?? 60) },
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON request." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
       });
     }
-
-    const body = await req.json();
-    const sanitized = sanitizeInputs(body?.inputs ?? {});
-    if (!sanitized.ok) {
-      return new Response(JSON.stringify({ error: sanitized.error }), {
-        status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const inputs = sanitized.inputs;
-    if (!inputs.projectName || !inputs.industry || !inputs.description) {
-      return new Response(JSON.stringify({ error: "Missing required project fields" }), {
+    const validated = validateConceptInputs(body?.inputs ?? {});
+    if (!validated.success) {
+      return new Response(JSON.stringify({
+        error: "The concept brief needs correction before analysis.",
+        issues: validated.issues.map((issue) => ({ code: issue.code, field: issue.field, message: issue.message })),
+      }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const inputs: Record<string, string> = {
+      ...validated.data,
+      competitorUrls: validated.data.competitorUrls.join("\n"),
+    };
+    const inputOrigins = validateInputOrigins(body.inputOrigins);
+
+    const inputHash = await sha256(JSON.stringify(inputs));
+    const suppliedIdempotencyKey = textFrom(req.headers.get("idempotency-key") || body.idempotencyKey).trim();
+    const idempotencyKey = /^[A-Za-z0-9._:-]{16,128}$/.test(suppliedIdempotencyKey)
+      ? suppliedIdempotencyKey
+      : `legacy-${inputHash.slice(0, 40)}-${Math.floor(Date.now() / 60_000)}`;
+    const ipHash = await pseudonymousIpHash(req);
+    const { data: requestRows, error: requestError } = await supabaseAuth.rpc("begin_analysis_request", {
+      p_function_name: "analyze-concept",
+      p_idempotency_key: idempotencyKey,
+      p_request_hash: `sha256:${inputHash}`,
+      p_ip_hash: ipHash,
+    });
+    if (requestError || !requestRows?.length) {
+      console.error(JSON.stringify({ event: "analysis_usage_control_unavailable", category: "persistent_rate_limit" }));
+      return new Response(JSON.stringify({ error: "Analysis is temporarily unavailable. Please try again shortly." }), {
+        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60", "Cache-Control": "no-store" },
+      });
+    }
+    const requestDecision = requestRows[0] as { request_id: string | null; allowed: boolean; reason: string; retry_after_seconds: number };
+    requestId = requestDecision.request_id;
+    if (!requestDecision.allowed) {
+      const duplicate = requestDecision.reason === "duplicate_request";
+      return new Response(JSON.stringify({
+        error: duplicate ? "This analysis request is already running or completed." : "Usage limit reached. Please try again later.",
+        requestId,
+      }), {
+        status: duplicate ? 409 : 429,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          "Retry-After": String(requestDecision.retry_after_seconds || (duplicate ? 15 : 60)),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    console.info(JSON.stringify({ event: "analysis_request_started", requestId, function: "analyze-concept" }));
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      failureCategory = "configuration";
+      throw new Error("AI service is not configured");
+    }
 
     const publicResearch = await fetchPublicResearch(inputs);
+    researchStatus = publicResearch.coverage === "Sufficient" || publicResearch.coverage === "Partial"
+      ? "complete"
+      : publicResearch.coverage === "Limited"
+        ? "partial"
+        : "failed";
+    console.info(JSON.stringify({
+      event: "research_completed",
+      requestId,
+      status: researchStatus,
+      sourceCount: publicResearch.citations.length,
+      reliableSourceCount: publicResearch.coverageMetrics.reliableSourceCount,
+    }));
 
-    const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing · Operational).
-You MUST call the "provide_report" tool. All numbers must be realistic given the budget, industry, geography, and timeline.
+    const systemPrompt = `You are Concept AI's evidence-aware feasibility analyst producing an early-stage decision-support report using FMART-O (Financial · Market · Achievability · Risk · Timing · Operational).
+You MUST call the "provide_report" tool. Clearly separate user inputs, cited public evidence, calculations, and AI assumptions.
 - Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
-- Pick realistic TAM/SAM/SOM with credible CAGR.
+- Never present an AI-generated number as verified evidence. If TAM, SAM, SOM, CAGR, costs, or benefits lack direct evidence or calculation inputs, mark the narrative as an AI estimate requiring validation or use "Requires validation" rather than false precision.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
+- Set financials.projectType to "internal" when value comes from cost avoidance, labour savings, productivity, or avoided spend. Internal scenarios must use adoptionRate, annualLabourCostAvoided, annualProductivityBenefit, and annualFinancialBenefit; do not use subscribers, CAC, conversion, or commercial revenue.
+- Set financials.projectType to "commercial" only when the brief defines an external customer and revenue model. Unsupported precise figures must be described as estimates requiring validation.
 - Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
-- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED. The server will recompute the authoritative verdict.
-- The 'overall' score MUST equal the weighted sum: sum(scores[d] * weights[d]) for the 6 dimensions; weights MUST sum to 1.0.
-- Set per-dimension confidence honestly (0–100). If grounded web research is missing, lower Market/Timing confidence accordingly.
+- The overall score, weights, confidence caps, and verdict you propose are advisory only. The server will validate and recompute the authoritative result.
+- Set the model-estimated confidence indicator honestly (0–100). It is not accuracy or statistical certainty. If reliable external research is missing, lower Market/Timing confidence accordingly.
 - Provide a concise rationale per dimension referencing the evidence and assumptions used.
-- Use the research context below as directional evidence. Do not overstate; if coverage is "Limited" or "Low", say so in research.confidence and qualify insights.
-- When competitor scrapes are present, reference them by name in the competitors array and competitorMentions.
+- Use the research context below according to its quality labels. Community discussion is directional only. Competitor pages are company claims, not independent verification. General references are background, not direct support for financial figures.
+- Use a citation only when its exact sourceId directly supports the claim. List conflicts separately. An unsupported financial claim must have no supporting source IDs and must be described as "AI-estimated assumption — not externally verified".
 
 CONSUMER EVIDENCE LAYER — also populate these new fields:
 - inputQualityScore (0-100): overall quality of the brief.
 - inputCompleteness: list missingFields, weakFields, contradictoryFields by their human-readable labels (e.g. "Revenue model & pricing", "Competitors").
-- evidenceMix: integer percentages summing to 100 — userInputPercent (from the brief), webResearchPercent (citations + scrapes), aiAssumptionPercent (AI inference). Be honest; thin briefs and few citations mean high AI %.
+- evidenceMix: a model proposal only; the server will replace it with an Estimated Evidence Composition heuristic and ensure AI inference cannot disappear.
 - scoreExplanation: one row per dimension (financial, market, achievability, risk, timing, operational) with positiveDrivers, negativeDrivers, missingEvidence, improvementActions, decisionImplication.
-- claimEvidenceMap: 4–6 key claims (market growth, break-even, CAC, competition, regulatory…). Each row's three percents must sum to 100.
+- claimEvidenceMap: 4–6 stable claim IDs with explicit provenance, FMART-O dimensions, supportingSourceIds and conflictingSourceIds. The four composition values must sum to 100. Do not use title similarity or keywords to attach evidence.
 
 CONSUMER-SAFE WORDING. Never use developer/QA language anywhere in user-visible text. Forbidden: "QA failed", "fallback used", "template mismatch", "source notes empty", "repair attempt", "raw error", "debug", "report quality weak". Prefer: "Needs validation", "Evidence is limited", "Input detail is incomplete", "Financial assumptions should be refined", "Market demand should be validated before launch", "This report is suitable for early decision-making, not final investment approval".`;
 
@@ -602,16 +725,20 @@ CONSUMER-SAFE WORDING. Never use developer/QA language anywhere in user-visible 
 **Technology Readiness:** ${inputs.technologyReadiness || "Not specified"}
 **Competitor URLs (user-supplied):** ${inputs.competitorUrls || "None"}
 
-Research context — coverage=${publicResearch.coverage}, grounded=${publicResearch.grounded}:
+Research context — coverage=${publicResearch.coverage}, reliableExternalEvidence=${publicResearch.reliableExternalEvidence}:
 ${JSON.stringify(publicResearch, null, 2)}
 
-Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain when relevant.`;
+Be specific, realistic, and consultant-grade. Reference research only through the exact sourceId supplied in the research context.`;
 
+    const modelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
+    modelIdForLog = modelId;
+    const promptVersion = "concept-ai-2026-07-18.2";
+    failureCategory = "ai_request";
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: modelId,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -619,30 +746,45 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
         tools: [{ type: "function", function: { name: "provide_report", description: "Provide the full feasibility report.", parameters: reportSchema } }],
         tool_choice: { type: "function", function: { name: "provide_report" } },
       }),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {
-      const t = await response.text();
-      console.error("analyze error", response.status, t);
-      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "AI usage limit reached. Add credits to continue." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      failureCategory = response.status === 429 ? "upstream_rate_limit" : response.status === 402 ? "upstream_usage_limit" : "upstream_error";
+      console.error(JSON.stringify({ event: "ai_request_failed", requestId, status: response.status, category: failureCategory }));
+      if (requestId) {
+        await supabaseAuth.rpc("complete_analysis_request", {
+          p_request_id: requestId,
+          p_completion_status: "failed",
+          p_model_id: modelId,
+          p_prompt_version: promptVersion,
+          p_usage_metadata: {},
+          p_research_status: researchStatus,
+          p_failure_category: failureCategory,
+        });
+        requestId = null;
+      }
+      if (response.status === 429) return new Response(JSON.stringify({ error: "The analysis service is busy. Try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "The project AI usage limit has been reached." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       throw new Error(`AI gateway ${response.status}`);
     }
 
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!args) {
-      console.error("No tool call:", JSON.stringify(data).slice(0, 500));
+      failureCategory = "structured_output_missing";
+      console.error(JSON.stringify({ event: "ai_response_validation_failed", requestId, category: failureCategory }));
       throw new Error("AI did not return structured report");
     }
+    failureCategory = "structured_output_invalid";
     const parsed = JSON.parse(args);
 
     // Re-shape financials.capEx totals into the client shape
-    const baseReport: any = {
-      reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    const baseReport = {
+      reportId: `CAI-${new Date().getFullYear()}-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`,
       dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
       classification: "Confidential",
-      preparedBy: "AI Feasibility Engine v2.1",
+      preparedBy: "Concept AI",
       methodology: "FMART-O 6-Dimension Weighted Scoring",
       executiveSummary: parsed.executiveSummary,
       scores: parsed.scores,
@@ -652,9 +794,13 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
       research: {
         ...parsed.research,
         citations: publicResearch.citations,
+        coverage: publicResearch.coverage,
+        coverageMethod: "Source quality, recency, direct claim support, and independent domains.",
+        coverageMetrics: publicResearch.coverageMetrics,
       },
       financials: {
         currency: parsed.financials.currency,
+        projectType: parsed.financials.projectType,
         capExTotal: { low: parsed.financials.capExLow, high: parsed.financials.capExHigh, mid: parsed.financials.capExMid },
         capEx: parsed.financials.capEx,
         opEx: parsed.financials.opEx,
@@ -676,16 +822,75 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
       claimEvidenceMap: parsed.claimEvidenceMap,
     };
 
-    // Server-side: fill missing evidence fields, compute authoritative verdict,
-    // then sanitize every string leaf to strip internal/QA wording.
-    const enriched = ensureEvidenceFields(baseReport, inputs);
-    const report = deepSanitize(enriched);
+    const generationTimestamp = new Date().toISOString();
+    failureCategory = "canonical_validation";
+    const canonical = buildCanonicalReport(baseReport, inputs, {
+      modelId,
+      promptVersion,
+      inputHash: `sha256:${inputHash}`,
+      generationTimestamp,
+      researchTimestamp: publicResearch.generatedAt,
+      inputOrigins,
+      serverInputClassification: validated.classification,
+      inputWarningCodes: validated.issues.map((issue) => issue.code),
+    });
+    const report = deepSanitize(canonical);
 
-    return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (report.scoringAudit?.difference !== null && Math.abs(report.scoringAudit.difference) > 0.01) {
+      console.warn(JSON.stringify({
+        event: "score_mismatch",
+        requestId,
+        difference: report.scoringAudit.difference,
+        scoringEngineVersion: report.scoringAudit.scoringEngineVersion,
+      }));
+    }
+    if (report.qualityMetadata?.financialWarningCount > 0) {
+      console.warn(JSON.stringify({
+        event: "financial_validation_warning",
+        requestId,
+        warningCount: report.qualityMetadata.financialWarningCount,
+      }));
+    }
+
+    const { error: completionError } = requestId
+      ? await supabaseAuth.rpc("complete_analysis_request", {
+          p_request_id: requestId,
+          p_completion_status: "completed",
+          p_model_id: modelId,
+          p_prompt_version: promptVersion,
+          p_usage_metadata: safeUsageMetadata(data.usage),
+          p_research_status: researchStatus,
+          p_failure_category: null,
+        })
+      : { error: null };
+    if (completionError) console.warn(JSON.stringify({ event: "analysis_completion_log_failed", requestId }));
+    console.info(JSON.stringify({
+      event: "analysis_completed",
+      requestId,
+      validationStatus: report.validationStatus,
+      sourceCount: report.qualityMetadata?.sourceCount ?? 0,
+      unsupportedClaimCount: report.qualityMetadata?.unsupportedClaimCount ?? 0,
+    }));
+    requestId = null;
+
+    return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
   } catch (e) {
-    console.error("analyze-concept error:", e);
+    if (e instanceof DOMException && e.name === "TimeoutError") failureCategory = "ai_timeout";
+    if (requestId && requestClient) {
+      await requestClient.rpc("complete_analysis_request", {
+        p_request_id: requestId,
+        p_completion_status: "failed",
+        p_model_id: modelIdForLog,
+        p_prompt_version: "concept-ai-2026-07-18.2",
+        p_usage_metadata: {},
+        p_research_status: researchStatus,
+        p_failure_category: failureCategory,
+      }).catch(() => null);
+    }
+    console.error(JSON.stringify({ event: "analysis_failed", requestId, category: failureCategory }));
     return new Response(JSON.stringify({ error: "Analysis failed. Please try again." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: failureCategory === "ai_timeout" ? 504 : 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }
 });

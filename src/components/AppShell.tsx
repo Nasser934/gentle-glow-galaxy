@@ -80,11 +80,12 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
         first.focus();
       }
     };
+    const hamburger = hamburgerRef.current;
     document.addEventListener("keydown", onKey);
     getFocusable()[0]?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      hamburgerRef.current?.focus();
+      hamburger?.focus();
     };
   }, [mobileOpen]);
 

@@ -27,17 +27,17 @@ const features = [
   {
     icon: Shield,
     title: "Risk Heatmap",
-    description: "Quantified risk exposure with mitigations, likelihood and impact ranking.",
+    description: "Structured risk exposure with mitigations, likelihood and impact ranking.",
   },
   {
     icon: Target,
-    title: "Go / No-Go Verdict",
-    description: "A defensible recommendation with the reasoning, assumptions and trade-offs surfaced inline.",
+    title: "AI-supported Recommendation",
+    description: "A server-governed recommendation with reasoning, assumptions and trade-offs surfaced inline.",
   },
   {
     icon: FileSearch,
     title: "Public Research",
-    description: "Reddit, HN and Wikipedia signals fused into the report with citations — no API keys required.",
+    description: "Available external evidence is ranked by source quality; community sources remain directional signals.",
   },
 ];
 
@@ -105,8 +105,8 @@ const Index = () => {
             </h1>
 
             <p className="mx-auto mt-7 max-w-xl text-[17px] leading-[1.55] text-muted-foreground">
-              From a one-line idea to an investor-ready feasibility report — FMART-O scoring, market sizing,
-              risk heatmap and a defensible go/no-go verdict.
+              Turn a structured concept brief into an evidence-aware feasibility report — server-validated FMART-O scoring,
+              transparent assumptions, risks and an AI-supported recommendation.
             </p>
           </motion.div>
 
@@ -133,6 +133,15 @@ const Index = () => {
             >
               How it works
             </Button>
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              onClick={() => navigate("/demo")}
+              className="h-10 rounded-md px-5 text-[14px] font-medium"
+            >
+              View synthetic demo
+            </Button>
           </motion.div>
 
           {/* Faux product preview frame */}
@@ -147,21 +156,21 @@ const Index = () => {
                 <div className="mb-4 flex items-center justify-between border-b border-border/60 pb-4">
                   <div>
                     <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Feasibility report
+                      Illustrative interface · synthetic example
                     </div>
-                    <div className="mt-0.5 text-[15px] font-medium">Smart-meter rollout · Tier-1 telco</div>
+                    <div className="mt-0.5 text-[15px] font-medium">Synthetic smart-meter rollout</div>
                   </div>
                   <div className="rounded-md border border-success/40 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
-                    GO · Confidence 82%
+                    AI-supported recommendation · Model-estimated confidence 72%
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   {[
-                    { k: "Feasibility", v: "84" },
-                    { k: "Market", v: "76" },
-                    { k: "ROI", v: "71" },
-                    { k: "Risk", v: "38" },
-                    { k: "Tech", v: "88" },
+                    { k: "Financial", v: "7.8", w: 78 },
+                    { k: "Market", v: "7.4", w: 74 },
+                    { k: "Achievable", v: "7.1", w: 71 },
+                    { k: "Risk", v: "6.6", w: 66 },
+                    { k: "Operational", v: "7.0", w: 70 },
                   ].map((m) => (
                     <div
                       key={m.k}
@@ -174,7 +183,7 @@ const Index = () => {
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-border/60">
                         <div
                           className="h-full rounded-full bg-primary"
-                          style={{ width: `${m.v}%` }}
+                          style={{ width: `${m.w}%` }}
                         />
                       </div>
                     </div>
@@ -270,7 +279,7 @@ const Index = () => {
           <div className="flex items-center gap-4">
             <span>FMART-O™ scoring</span>
             <span className="h-1 w-1 rounded-full bg-border" />
-            <span>Public research enabled</span>
+            <span>Available external evidence</span>
           </div>
         </div>
       </footer>

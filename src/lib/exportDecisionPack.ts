@@ -5,16 +5,14 @@
 // so the three formats never disagree on verdict, break-even, financial labels,
 // risk counts, or source labels.
 //
-// IMPORTANT: This module does NOT recompute scores, financials, or evidence.
-// It only NORMALIZES presentation of values already produced by the analysis
-// pipeline. No DB, RLS, or report-generation logic is touched here.
+// Reports reach this module after the canonical server/read-time validator has
+// recalculated the score and attached explicit evidence metadata.
 // =============================================================================
 
 import type {
   ConceptInputs,
   FeasibilityReport,
   RiskRow,
-  ResearchCitation,
 } from "@/types/analysis";
 import {
   compactCurrencyString,
@@ -103,12 +101,15 @@ export interface CanonicalEvidenceClaim {
     sourceType?: string;
   }>;
   supportsClaimIds: string[];
+  supportStatus: "supported" | "conflicting" | "unsupported" | "ai_inference";
+  provenance: string;
 }
 
 export interface CanonicalEvidence {
   mix: {
     userInputPercent: number;
     webResearchPercent: number;
+    calculationPercent?: number;
     aiAssumptionPercent: number;
   };
   topClaims: CanonicalEvidenceClaim[];
@@ -184,12 +185,6 @@ function buildBreakEvenDisplay(raw: string | undefined | null, month: number | n
 
 /* ---------------------------- Financial helpers --------------------------- */
 
-const numFromString = (s?: string): number => {
-  if (!s) return 0;
-  const m = s.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  return m ? Number(m[0]) : 0;
-};
-
 function withCurrencyPrefix(value: string, currency: string): string {
   const v = (value || "").trim();
   if (!v || v === "—") return v || "—";
@@ -224,8 +219,8 @@ function canonicalMarketValue(raw: string | undefined | null): string {
   return compactCurrencyString(t) || t;
 }
 
-const riskLevelText = (r: RiskRow): string =>
-  `${(r as any).severity ?? ""} ${r.level ?? ""}`.trim();
+const riskLevelText = (risk: RiskRow & { severity?: string }): string =>
+  `${risk.severity ?? ""} ${risk.level ?? ""}`.trim();
 
 const isHigh = (r: RiskRow): boolean => /\b(high|critical)\b/i.test(riskLevelText(r));
 
@@ -235,33 +230,54 @@ const isMaterial = (r: RiskRow): boolean =>
 /* ------------------------------ Evidence ---------------------------------- */
 
 function buildTopClaims(report: FeasibilityReport): CanonicalEvidenceClaim[] {
-  const claims = (report.claimEvidenceMap || []).slice(0, 5);
-  const citations: ResearchCitation[] = report.research?.citations || [];
-  return claims.map((c, idx) => {
-    const claimId = (c.claimId && /^C-\d{2}$/.test(c.claimId))
-      ? c.claimId
-      : `C-${String(idx + 1).padStart(2, "0")}`;
-    const sourceNames = c.sources || [];
-    const matched = sourceNames
-      .map((name) => citations.find(
-        (cit) => cit.title === name || cit.source === name || cit.url === name,
-      ))
-      .filter((x): x is ResearchCitation => !!x);
-    const sources = (matched.length ? matched : citations.slice(0, 2)).map((cit) => {
-      let domain = "";
-      try { domain = new URL(cit.url).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
-      return {
-        title: cit.title || prettifySource(cit),
-        domain: domain || prettifySource({ source: cit.source, url: cit.url }),
-        url: cit.url,
-      };
-    });
+  const explicitSources = report.sources ?? (report.research?.citations || [])
+    .filter((citation) => citation.sourceId)
+    .map((citation) => ({
+      sourceId: citation.sourceId as string,
+      title: citation.title,
+      url: citation.url,
+      domain: citation.domain || "",
+      publisher: citation.publisher || citation.source,
+      accessDate: citation.accessDate || "",
+      sourceType: citation.sourceType || "general",
+      quality: citation.quality || "Unknown" as const,
+    }));
+  const sourceById = new Map(explicitSources.map((source) => [source.sourceId, source]));
+  const claims = report.claims ?? (report.claimEvidenceMap || []).map((claim) => ({
+    claimId: claim.claimId,
+    claimText: claim.claimText,
+    reportSection: claim.reportSection,
+    provenance: claim.provenance ?? "Unknown" as const,
+    supportingSourceIds: claim.supportingSourceIds ?? [],
+    conflictingSourceIds: claim.conflictingSourceIds ?? [],
+    composition: {
+      userInputPercent: claim.userInputPercent,
+      citedSourcePercent: claim.webResearchPercent,
+      calculationPercent: claim.calculationPercent ?? 0,
+      aiInferencePercent: claim.aiAssumptionPercent,
+    },
+    supportStatus: claim.supportStatus ?? "unsupported" as const,
+    displayStatus: claim.displayStatus,
+  }));
+  return claims.slice(0, 5).map((claim) => {
+    const sourceIds = [...claim.supportingSourceIds, ...claim.conflictingSourceIds];
+    const sources = sourceIds
+      .map((sourceId) => sourceById.get(sourceId))
+      .filter((source): source is NonNullable<typeof source> => source !== undefined)
+      .map((source) => ({
+        title: source.title,
+        domain: source.domain || prettifySource({ source: source.publisher, url: source.url }),
+        url: source.url,
+        sourceType: source.sourceType,
+      }));
     return {
-      claimId,
-      claimText: c.claimText,
-      confidence: c.confidence,
+      claimId: claim.claimId,
+      claimText: claim.claimText,
+      confidence: claim.supportStatus === "supported" ? "Supported" : claim.supportStatus === "conflicting" ? "Conflicting" : "Requires validation",
       sources,
-      supportsClaimIds: [claimId],
+      supportsClaimIds: claim.supportingSourceIds.length > 0 ? [claim.claimId] : [],
+      supportStatus: claim.supportStatus,
+      provenance: claim.provenance,
     };
   });
 }
@@ -341,7 +357,8 @@ export function buildExportDecisionPack(
   const mix = report.evidenceMix || {
     userInputPercent: 0,
     webResearchPercent: 0,
-    aiAssumptionPercent: 0,
+    calculationPercent: 0,
+    aiAssumptionPercent: 100,
   };
 
   // Roadmap — fall back to recommendations / nextSteps splits if not authored.
