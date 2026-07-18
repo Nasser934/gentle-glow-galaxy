@@ -28,43 +28,43 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           edge_path = Path('supabase/functions/analyze-concept/index.ts')
           edge = edge_path.read_text()
-          start_marker = '    const primaryModelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";\n'
-          end_marker = '''    if (!data || !parsed) {
-              throw lastGatewayError ?? new Error("AI did not return a report");
-            }
-          '''
-          start = edge.find(start_marker)
-          end = edge.find(end_marker, start)
-          if start == -1 or end == -1:
-              raise SystemExit('analysis model block anchors not found')
-          end += len(end_marker)
+          pattern = re.compile(
+              r'    const primaryModelId = Deno\.env\.get\("ANALYSIS_MODEL_ID"\).*?'
+              r'    if \(!data \|\| !parsed\) \{\n'
+              r'      throw lastGatewayError \?\? new Error\("AI did not return a report"\);\n'
+              r'    \}\n',
+              re.S,
+          )
           replacement = '''    const configuredModelId = (Deno.env.get("ANALYSIS_MODEL_ID") || "").trim();
-            // Gemini 3 Flash Preview is intentionally excluded here: this exact large
-            // structured report request is rejected by the gateway with HTTP 400.
-            const modelId = configuredModelId && configuredModelId !== "google/gemini-3-flash-preview"
-              ? configuredModelId
-              : "google/gemini-2.5-flash";
-            modelIdForLog = modelId;
-            const promptVersion = "concept-ai-2026-07-18.4";
-            failureCategory = "ai_request";
+    // Gemini 3 Flash Preview is excluded for this large structured report because
+    // the gateway rejects this exact request shape with HTTP 400.
+    const modelId = configuredModelId && configuredModelId !== "google/gemini-3-flash-preview"
+      ? configuredModelId
+      : "google/gemini-2.5-flash";
+    modelIdForLog = modelId;
+    const promptVersion = "concept-ai-2026-07-18.4";
+    failureCategory = "ai_request";
 
-            const result = await requestStructuredReport({
-              apiKey: LOVABLE_API_KEY,
-              modelId,
-              systemPrompt,
-              userPrompt,
-              schema: reportSchema,
-              timeoutMs: 85_000,
-              requestId,
-              attempt: 1,
-            });
-            const data = result.data;
-            const parsed = result.parsed;
-          '''
-          edge = edge[:start] + replacement + edge[end:]
+    const result = await requestStructuredReport({
+      apiKey: LOVABLE_API_KEY,
+      modelId,
+      systemPrompt,
+      userPrompt,
+      schema: reportSchema,
+      timeoutMs: 85_000,
+      requestId,
+      attempt: 1,
+    });
+    const data = result.data;
+    const parsed = result.parsed;
+'''
+          edge, count = pattern.subn(replacement, edge, count=1)
+          if count != 1:
+              raise SystemExit(f'analysis model block replacements={count}')
           edge = edge.replace('p_prompt_version: "concept-ai-2026-07-18.3"', 'p_prompt_version: "concept-ai-2026-07-18.4"')
           edge_path.write_text(edge)
 
@@ -80,21 +80,22 @@ jobs:
 
           ui_path = Path('src/pages/Analyze.tsx')
           ui = ui_path.read_text()
-          old_label = '''  const analysisLabel = analysisPhase === "saving"
-              ? "Saving report"
-              : analysisElapsed < 8
-                ? "Researching evidence"
-                : analysisElapsed < 52
-                  ? "Generating report"
-                  : "Validating response";
-          '''
-          new_label = '''  const analysisLabel = analysisPhase === "saving"
-              ? "Saving report"
-              : "Generating report";
-          '''
-          if old_label not in ui:
-              raise SystemExit('analysis progress label anchor not found')
-          ui = ui.replace(old_label, new_label, 1)
+          label_pattern = re.compile(
+              r'  const analysisLabel = analysisPhase === "saving"\n'
+              r'    \? "Saving report"\n'
+              r'    : analysisElapsed < 8\n'
+              r'      \? "Researching evidence"\n'
+              r'      : analysisElapsed < 52\n'
+              r'        \? "Generating report"\n'
+              r'        : "Validating response";\n'
+          )
+          ui, label_count = label_pattern.subn(
+              '  const analysisLabel = analysisPhase === "saving"\n    ? "Saving report"\n    : "Generating report";\n',
+              ui,
+              count=1,
+          )
+          if label_count != 1:
+              raise SystemExit(f'analysis label replacements={label_count}')
           ui_path.write_text(ui)
           PY
 
