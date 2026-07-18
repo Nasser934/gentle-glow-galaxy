@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch-analysis:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/stable-analysis-model-trigger')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
