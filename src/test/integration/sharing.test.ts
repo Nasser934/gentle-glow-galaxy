@@ -70,7 +70,7 @@ describe("owner-controlled sharing", () => {
   it("treats a non-owner RLS no-op as a failure", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: { id: "different-user" } } });
     mocks.chain.maybeSingle.mockResolvedValue({ data: null, error: null });
-    await expect(setReportVisibility("report-1", true)).rejects.toThrow("Only the report owner");
+    await expect(setReportVisibility("report-1", true)).rejects.toThrow("only the owner can manage sharing");
   });
 
   it("does not report success when the stored visibility differs", async () => {
