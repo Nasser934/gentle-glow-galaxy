@@ -13,6 +13,12 @@ import {
   qualityForWebDomain,
   type CitationCandidate,
 } from "../_shared/analysis/research.ts";
+import {
+  compactResearchContext,
+  GatewayAttemptError,
+  requestStructuredReport,
+  safeGatewayUserError,
+} from "../_shared/analysis/gateway.ts";
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://gentle-glow-galaxy.lovable.app",
@@ -734,58 +740,63 @@ CONSUMER-SAFE WORDING. Never use developer/QA language anywhere in user-visible 
 **Competitor URLs (user-supplied):** ${inputs.competitorUrls || "None"}
 
 Research context — coverage=${publicResearch.coverage}, reliableExternalEvidence=${publicResearch.reliableExternalEvidence}:
-${JSON.stringify(publicResearch, null, 2)}
+${JSON.stringify(compactResearchContext(publicResearch), null, 2)}
 
 Be specific, realistic, and consultant-grade. Reference research only through the exact sourceId supplied in the research context.`;
 
-    const modelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-2.5-flash";
-    modelIdForLog = modelId;
-    const promptVersion = "concept-ai-2026-07-18.2";
+    const primaryModelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
+    const fallbackModelId = Deno.env.get("ANALYSIS_FALLBACK_MODEL_ID") || "google/gemini-2.5-flash";
+    const modelCandidates = fallbackModelId && fallbackModelId !== primaryModelId
+      ? [primaryModelId, fallbackModelId]
+      : [primaryModelId];
+    const promptVersion = "concept-ai-2026-07-18.3";
     failureCategory = "ai_request";
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [{ type: "function", function: { name: "provide_report", description: "Provide the full feasibility report.", parameters: reportSchema } }],
-        tool_choice: { type: "function", function: { name: "provide_report" } },
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
 
-    if (!response.ok) {
-      failureCategory = response.status === 429 ? "upstream_rate_limit" : response.status === 402 ? "upstream_usage_limit" : "upstream_error";
-      console.error(JSON.stringify({ event: "ai_request_failed", requestId, status: response.status, category: failureCategory }));
-      if (requestId) {
-        await supabaseAuth.rpc("complete_analysis_request", {
-          p_request_id: requestId,
-          p_completion_status: "failed",
-          p_model_id: modelId,
-          p_prompt_version: promptVersion,
-          p_usage_metadata: {},
-          p_research_status: researchStatus,
-          p_failure_category: failureCategory,
+    let modelId = primaryModelId;
+    // The provider payload is validated against reportSchema before use.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsed: any = null;
+    let lastGatewayError: GatewayAttemptError | null = null;
+
+    for (let attemptIndex = 0; attemptIndex < modelCandidates.length; attemptIndex++) {
+      modelId = modelCandidates[attemptIndex];
+      modelIdForLog = modelId;
+      try {
+        const result = await requestStructuredReport({
+          apiKey: LOVABLE_API_KEY,
+          modelId,
+          systemPrompt,
+          userPrompt,
+          schema: reportSchema,
+          timeoutMs: attemptIndex === 0 ? 48_000 : 36_000,
+          requestId,
+          attempt: attemptIndex + 1,
         });
-        requestId = null;
+        data = result.data;
+        parsed = result.parsed;
+        lastGatewayError = null;
+        break;
+      } catch (error) {
+        if (!(error instanceof GatewayAttemptError)) throw error;
+        lastGatewayError = error;
+        failureCategory = error.category;
+        const hasFallback = attemptIndex < modelCandidates.length - 1;
+        if (!error.retryable || !hasFallback) throw error;
+        console.info(JSON.stringify({
+          event: "ai_fallback_selected",
+          requestId,
+          failedModel: modelId,
+          fallbackModel: modelCandidates[attemptIndex + 1],
+          category: error.category,
+        }));
       }
-      if (response.status === 429) return new Response(JSON.stringify({ error: "The analysis service is busy. Try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "The project AI usage limit has been reached." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
-      throw new Error(`AI gateway ${response.status}`);
     }
 
-    const data = await response.json();
-    const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) {
-      failureCategory = "structured_output_missing";
-      console.error(JSON.stringify({ event: "ai_response_validation_failed", requestId, category: failureCategory }));
-      throw new Error("AI did not return structured report");
+    if (!data || !parsed) {
+      throw lastGatewayError ?? new Error("AI did not return a report");
     }
-    failureCategory = "structured_output_invalid";
-    const parsed = JSON.parse(args);
 
     // Re-shape financials.capEx totals into the client shape
     const baseReport = {
@@ -887,21 +898,30 @@ Be specific, realistic, and consultant-grade. Reference research only through th
 
     return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
   } catch (e) {
-    if (e instanceof DOMException && e.name === "TimeoutError") failureCategory = "ai_timeout";
+    const gatewayError = e instanceof GatewayAttemptError ? e : null;
+    if (gatewayError) failureCategory = gatewayError.category;
+    else if (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")) failureCategory = "ai_timeout";
+
     if (requestId && requestClient) {
       await requestClient.rpc("complete_analysis_request", {
         p_request_id: requestId,
         p_completion_status: "failed",
         p_model_id: modelIdForLog,
-        p_prompt_version: "concept-ai-2026-07-18.2",
+        p_prompt_version: "concept-ai-2026-07-18.3",
         p_usage_metadata: {},
         p_research_status: researchStatus,
         p_failure_category: failureCategory,
       }).catch(() => null);
     }
+
+    const safeError = gatewayError
+      ? safeGatewayUserError(gatewayError)
+      : failureCategory === "ai_timeout"
+        ? { status: 504, message: "The analysis took too long. Please retry." }
+        : { status: 500, message: "Analysis failed unexpectedly. Please try again." };
     console.error(JSON.stringify({ event: "analysis_failed", requestId, category: failureCategory }));
-    return new Response(JSON.stringify({ error: "Analysis failed. Please try again." }), {
-      status: failureCategory === "ai_timeout" ? 504 : 500,
+    return new Response(JSON.stringify({ error: safeError.message, requestId }), {
+      status: safeError.status,
       headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }

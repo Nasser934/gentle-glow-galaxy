@@ -50,6 +50,8 @@ const Analyze = () => {
   const [step, setStep] = useState(0);
   const [inputs, setInputs] = useState<ConceptInputs>(initialInputs);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisElapsed, setAnalysisElapsed] = useState(0);
+  const [analysisPhase, setAnalysisPhase] = useState<"working" | "saving">("working");
   const [loadingPrevious, setLoadingPrevious] = useState(isReRun);
   const [previousReport, setPreviousReport] = useState<FeasibilityReport | null>(null);
   const [previousInputs, setPreviousInputs] = useState<ConceptInputs | null>(null);
@@ -71,6 +73,26 @@ const Analyze = () => {
     saveOperationKey: string;
   } | null>(null);
   const [retryingSave, setRetryingSave] = useState(false);
+
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setAnalysisElapsed(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setAnalysisElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isAnalyzing]);
+
+  const analysisLabel = analysisPhase === "saving"
+    ? "Saving report"
+    : analysisElapsed < 8
+      ? "Researching evidence"
+      : analysisElapsed < 52
+        ? "Generating report"
+        : "Validating response";
 
   // Per-field validation errors collected by validateStep(). Cleared on field change.
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ConceptInputs, string>>>({});
@@ -311,6 +333,7 @@ const Analyze = () => {
       toast.error("Correct the highlighted brief fields before analysis.");
       return;
     }
+    setAnalysisPhase("working");
     setIsAnalyzing(true);
     try {
       const analyzedInputs = structuredClone(inputs);
@@ -330,6 +353,7 @@ const Analyze = () => {
       if (data?.error) throw new Error(data.error);
 
       // Enrich with evidence layer
+      setAnalysisPhase("saving");
       let enriched = ensureEvidenceFields(data, analyzedInputs);
       const saveOperationKey = crypto.randomUUID();
 
@@ -369,6 +393,7 @@ const Analyze = () => {
       toast.error(error instanceof Error ? error.message : "Analysis failed.");
     } finally {
       setIsAnalyzing(false);
+      setAnalysisPhase("working");
     }
   };
 
@@ -750,7 +775,7 @@ const Analyze = () => {
           ) : (
             <Button onClick={handleSubmit} disabled={isAnalyzing} className="gap-2 px-8">
               {isAnalyzing
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing…</>
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> {analysisLabel}{analysisElapsed > 0 ? ` · ${analysisElapsed}s` : ""}</>
                 : isReRun
                   ? <><RefreshCw className="h-4 w-4" /> Re-run analysis</>
                   : <>Run Analysis <ArrowRight className="h-4 w-4" /></>}
