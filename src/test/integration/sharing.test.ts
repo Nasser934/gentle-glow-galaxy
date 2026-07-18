@@ -4,11 +4,13 @@ const mocks = vi.hoisted(() => {
   const chain = {
     update: vi.fn(),
     eq: vi.fn(),
+    is: vi.fn(),
     select: vi.fn(),
     maybeSingle: vi.fn(),
   };
   chain.update.mockReturnValue(chain);
   chain.eq.mockReturnValue(chain);
+  chain.is.mockReturnValue(chain);
   chain.select.mockReturnValue(chain);
   return {
     chain,
@@ -31,6 +33,7 @@ describe("owner-controlled sharing", () => {
     vi.clearAllMocks();
     mocks.chain.update.mockReturnValue(mocks.chain);
     mocks.chain.eq.mockReturnValue(mocks.chain);
+    mocks.chain.is.mockReturnValue(mocks.chain);
     mocks.chain.select.mockReturnValue(mocks.chain);
   });
 
@@ -44,6 +47,7 @@ describe("owner-controlled sharing", () => {
     await expect(setReportVisibility("report-1", true)).resolves.toMatchObject({ is_public: true });
     expect(mocks.chain.eq).toHaveBeenNthCalledWith(1, "id", "report-1");
     expect(mocks.chain.eq).toHaveBeenNthCalledWith(2, "user_id", "owner-1");
+    expect(mocks.chain.is).toHaveBeenCalledWith("archived_at", null);
   });
 
   it("revokes an existing public report", async () => {
