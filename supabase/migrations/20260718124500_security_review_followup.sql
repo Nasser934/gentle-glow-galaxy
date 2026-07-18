@@ -27,6 +27,7 @@ revoke insert, update, delete on public.report_status_history from anon, authent
 -- API surface explicit so a clean Supabase project behaves exactly like the
 -- existing hosted project without relying on dashboard-created grants.
 revoke all on table public.reports from anon, authenticated;
+grant select on table public.reports to anon;
 grant select, insert, update, delete on table public.reports to authenticated;
 
 revoke all on table public.report_comments from anon, authenticated;
