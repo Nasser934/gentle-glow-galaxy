@@ -738,7 +738,7 @@ ${JSON.stringify(publicResearch, null, 2)}
 
 Be specific, realistic, and consultant-grade. Reference research only through the exact sourceId supplied in the research context.`;
 
-    const modelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
+    const modelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-2.5-flash";
     modelIdForLog = modelId;
     const promptVersion = "concept-ai-2026-07-18.2";
     failureCategory = "ai_request";
