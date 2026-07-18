@@ -2,8 +2,6 @@ name: Apply analysis timeout resilience fix
 
 on:
   push:
-    paths:
-      - .github/workflows/apply-analysis-timeout-fix.yml
 
 permissions:
   contents: write
