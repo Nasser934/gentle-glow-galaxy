@@ -316,8 +316,47 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_report: { Args: { _report_id: string }; Returns: boolean }
       generate_report_display_id: { Args: never; Returns: string }
       generate_report_slug: { Args: never; Returns: string }
+      get_report_by_slug: {
+        Args: { p_slug: string }
+        Returns: {
+          archived_at: string | null
+          canonical_validated: boolean
+          created_at: string
+          display_id: string
+          generation_seed: number | null
+          generation_timestamp: string | null
+          id: string
+          industry: string | null
+          input_hash: string | null
+          inputs: Json
+          is_public: boolean
+          legacy_report_id: string | null
+          model_id: string | null
+          output: Json
+          parent_report_id: string | null
+          prompt_version: string | null
+          report_schema_version: string | null
+          research_timestamp: string | null
+          root_report_id: string | null
+          save_operation_key: string | null
+          scoring_engine_version: string | null
+          slug: string
+          source_snapshot_metadata: Json
+          status: Database["public"]["Enums"]["report_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "reports"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
