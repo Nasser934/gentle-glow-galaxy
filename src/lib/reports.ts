@@ -32,29 +32,6 @@ export interface ReportRow {
   updated_at: string;
 }
 
-function reportAuditFields(output: FeasibilityReport) {
-  const quality = output.qualityMetadata;
-  return {
-    model_id: quality?.modelId ?? null,
-    prompt_version: quality?.promptVersion ?? null,
-    scoring_engine_version: quality?.scoringEngineVersion ?? output.scoringAudit?.scoringEngineVersion ?? null,
-    research_timestamp: quality?.researchTimestamp ?? null,
-    source_snapshot_metadata: {
-      sourceCount: output.sources?.length ?? 0,
-      sources: (output.sources ?? []).map((source) => ({
-        sourceId: source.sourceId,
-        url: source.url,
-        publicationDate: source.publicationDate ?? null,
-        accessDate: source.accessDate,
-        quality: source.quality,
-      })),
-    },
-    input_hash: quality?.inputHash ?? null,
-    report_schema_version: output.reportSchemaVersion ?? quality?.reportSchemaVersion ?? null,
-    generation_timestamp: quality?.generationTimestamp ?? null,
-  };
-}
-
 type SavedReport = { id: string; slug: string; displayId: string; report: FeasibilityReport };
 
 async function recoverIdempotentSave(userId: string, saveOperationKey: string): Promise<SavedReport | null> {
@@ -89,7 +66,6 @@ export async function saveReport(
       inputs: inputs as unknown as Json,
       output: output as unknown as Json,
       save_operation_key: saveOperationKey,
-      ...reportAuditFields(output),
     })
     .select("id, slug, display_id, output")
     .single();
@@ -122,7 +98,6 @@ export async function saveRerunReport(params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
 
-  // Ownership: walk to the root and verify the signed-in user owns it.
   const rootId = await getReportRootId(params.parentReportId);
   const root = await getReportWithOwnership(rootId);
   if (!root) throw new Error("Original report not found.");
@@ -141,7 +116,6 @@ export async function saveRerunReport(params: {
       output: params.report as unknown as Json,
       parent_report_id: rootId,
       save_operation_key: saveOperationKey,
-      ...reportAuditFields(params.report),
     })
     .select("id, slug, display_id, output")
     .single();
@@ -202,32 +176,33 @@ export async function setReportVisibility(id: string, isPublic: boolean) {
     .update({ is_public: isPublic })
     .eq("id", id)
     .eq("user_id", user.id)
+    .is("archived_at", null)
     .select("id, slug, is_public")
     .maybeSingle();
 
   if (error) throw error;
   if (!data || data.is_public !== isPublic) {
-    throw new Error("Visibility was not updated. Only the report owner can manage sharing.");
+    throw new Error("Visibility was not updated. Archived reports cannot be shared, and only the owner can manage sharing.");
   }
   return data as { id: string; slug: string; is_public: boolean };
 }
 
 /**
  * Walk to the root of the version chain. Loops up parent_report_id with
- * a max-depth guard (10) and a visited-set to defend against cycles.
+ * a max-depth guard (10) and a visited-set to defend against legacy cycles.
  */
 export async function getReportRootId(reportId: string): Promise<string> {
   const visited = new Set<string>();
   let currentId = reportId;
   for (let i = 0; i < 10; i++) {
-    if (visited.has(currentId)) return currentId; // cycle guard
+    if (visited.has(currentId)) return currentId;
     visited.add(currentId);
     const row = await getReportWithOwnership(currentId);
     if (!row) return currentId;
     if (!row.parent_report_id || row.parent_report_id === row.id) return row.id;
     currentId = row.parent_report_id;
   }
-  return currentId; // depth cap reached — treat as root
+  return currentId;
 }
 
 /** List the root and every child version, ordered oldest -> newest. */
@@ -258,39 +233,36 @@ export async function listMyReports(scope: ReportScope = "active") {
 }
 
 export async function deleteReport(id: string) {
-  const { error } = await supabase.from("reports").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("reports")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("Report was not deleted. Only the owner can delete it.");
 }
 
-/** Archive a whole project group (root + all child versions). Owner only via RLS. */
+async function setReportGroupArchived(reportId: string, archived: boolean) {
+  const { data, error } = await supabase.rpc("set_report_group_archived", {
+    p_report_id: reportId,
+    p_archived: archived,
+  });
+  if (error) throw error;
+  if (typeof data !== "number" || data < 1) {
+    throw new Error("No report versions were updated.");
+  }
+  return data;
+}
+
+/** Archive a whole project group atomically and revoke any public links. */
 export async function archiveReportGroup(reportId: string) {
-  const rootId = await getReportRootId(reportId);
-  const now = new Date().toISOString();
-  const { error: e1 } = await supabase
-    .from("reports")
-    .update({ archived_at: now })
-    .eq("id", rootId);
-  if (e1) throw e1;
-  const { error: e2 } = await supabase
-    .from("reports")
-    .update({ archived_at: now })
-    .eq("parent_report_id", rootId);
-  if (e2) throw e2;
+  return setReportGroupArchived(reportId, true);
 }
 
-/** Restore a whole project group. Owner only via RLS. */
+/** Restore a whole project group. Restored reports remain private. */
 export async function restoreReportGroup(reportId: string) {
-  const rootId = await getReportRootId(reportId);
-  const { error: e1 } = await supabase
-    .from("reports")
-    .update({ archived_at: null })
-    .eq("id", rootId);
-  if (e1) throw e1;
-  const { error: e2 } = await supabase
-    .from("reports")
-    .update({ archived_at: null })
-    .eq("parent_report_id", rootId);
-  if (e2) throw e2;
+  return setReportGroupArchived(reportId, false);
 }
 
 export async function updateReportStatus(id: string, status: ReportRow["status"]) {
