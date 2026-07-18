@@ -21,6 +21,16 @@ describe("unit-aware numeric parsing", () => {
       value: 1_200_000,
       unit: "money",
     });
+    expect(parseUnitAwareNumber("950k-1.45M SAR")).toMatchObject({
+      valid: true,
+      low: 950_000,
+      high: 1_450_000,
+      value: 1_200_000,
+    });
+  });
+
+  it("does not confuse a range delimiter with a negative value", () => {
+    expect(parseUnitAwareNumber("-1.5M SAR")).toMatchObject({ valid: true, value: -1_500_000 });
   });
 
   it("parses a month range without treating it as money", () => {

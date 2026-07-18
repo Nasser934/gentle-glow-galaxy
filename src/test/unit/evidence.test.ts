@@ -53,6 +53,17 @@ describe("estimated evidence composition", () => {
     expect(normalizeComposition({ userInputPercent: 80, citedSourcePercent: 40, calculationPercent: -10, aiInferencePercent: Number.NaN }))
       .toEqual({ userInputPercent: 67, citedSourcePercent: 33, calculationPercent: 0, aiInferencePercent: 0 });
   });
+
+  it("always allocates an exact integer total of 100", () => {
+    const result = normalizeComposition({
+      userInputPercent: 1,
+      citedSourcePercent: 1,
+      calculationPercent: 1,
+      aiInferencePercent: 3,
+    });
+    expect(Object.values(result).reduce((sum, value) => sum + value, 0)).toBe(100);
+    expect(Object.values(result).every(Number.isInteger)).toBe(true);
+  });
 });
 
 describe("claim provenance and explicit sources", () => {
@@ -148,6 +159,18 @@ describe("claim-aware research coverage", () => {
       directClaimSupportCount: 3,
       independentReliableDomains: 3,
     });
+  });
+
+  it("does not count a claim with conflicting evidence as directly supported", () => {
+    const claim = normalizeClaim({
+      claimId: "CLM-CONFLICT",
+      claimText: "Evidence conflicts with the claim.",
+      reportSection: "Market",
+      provenance: "Mixed",
+      supportingSourceIds: [source.sourceId],
+      conflictingSourceIds: [source.sourceId],
+    });
+    expect(assessClaimCoverage([source], [claim]).directClaimSupportCount).toBe(0);
   });
 });
 

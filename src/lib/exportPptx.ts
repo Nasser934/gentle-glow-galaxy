@@ -460,9 +460,10 @@ export function buildReportPresentation(
   chrome(s9, "Estimated Evidence Composition", "Heuristic estimate based on input completeness and available sources");
 
   const mix = pack.evidence.mix;
-  kpiCard(s9, 0.5, 1.45, 4.0, 1.2, "User Input", `${mix.userInputPercent}%`);
-  kpiCard(s9, 4.7, 1.45, 4.0, 1.2, "Available External Evidence", `${mix.webResearchPercent}%`);
-  kpiCard(s9, 8.9, 1.45, 3.9, 1.2, "AI Inference", `${mix.aiAssumptionPercent}%`,
+  kpiCard(s9, 0.5, 1.45, 2.9, 1.2, "User Input", `${mix.userInputPercent}%`);
+  kpiCard(s9, 3.6, 1.45, 2.9, 1.2, "External Evidence", `${mix.webResearchPercent}%`);
+  kpiCard(s9, 6.7, 1.45, 2.9, 1.2, "Calculations", `${mix.calculationPercent ?? 0}%`);
+  kpiCard(s9, 9.8, 1.45, 3.0, 1.2, "AI Inference", `${mix.aiAssumptionPercent}%`,
     mix.aiAssumptionPercent > 40 ? "High dependency — validate" : "Acceptable");
 
   const claims = pack.evidence.topClaims.slice(0, 3);
@@ -482,7 +483,7 @@ export function buildReportPresentation(
       { text: truncate(c.claimText, 200) },
       { text: c.confidence || "—", options: { align: "center" as const } },
       {
-        text: (c.sources || []).map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ") || "—",
+        text: (c.sources || []).map((src) => `${src.relationship === "conflicting" ? "Conflict: " : ""}${src.domain || src.title}`).filter(Boolean).slice(0, 2).join(", ") || "—",
         options: { color: COLORS.muted },
       },
     ] as pptxgen.TableRow),

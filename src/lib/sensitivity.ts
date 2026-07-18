@@ -1,6 +1,7 @@
 import type { FeasibilityReport } from "@/types/analysis";
 import { numericValue } from "@/lib/numbers";
-import { detectProjectType, SIMULATION_DISCLAIMER } from "../../supabase/functions/_shared/analysis/simulation";
+import { isInternalProject } from "@/lib/format";
+import { SIMULATION_DISCLAIMER } from "../../supabase/functions/_shared/analysis/simulation";
 
 export interface SensitivityInputs {
   revenueMultiplier: number;
@@ -18,22 +19,20 @@ export const DEFAULT_SENSITIVITY: SensitivityInputs = {
 };
 
 export function baseCase(report: FeasibilityReport) {
-  const projectType = report.financials.projectType ?? detectProjectType({
-    businessModel: report.financials.ltvCacRatio?.includes("internal") ? "internal" : "commercial",
-    revenueModel: report.financials.ltvCacRatio,
-  });
+  const projectType = isInternalProject(report) ? "internal" : "commercial";
   const baseScenario = report.financials.scenarios.find((scenario) => scenario.scenario === "Base Case")
     ?? report.financials.scenarios[0];
-  const internalBenefit = baseScenario?.annualFinancialBenefit
-    ?? (baseScenario?.annualLabourCostAvoided ?? 0) + (baseScenario?.annualProductivityBenefit ?? 0);
+  const internalBenefit = numericValue(baseScenario?.annualFinancialBenefit, 0)
+    || numericValue(baseScenario?.annualValueDisplay, 0)
+    || numericValue(baseScenario?.annualLabourCostAvoided, 0) + numericValue(baseScenario?.annualProductivityBenefit, 0);
   const commercialRevenue = numericValue(baseScenario?.annualRevenue, 0);
   const baseValue = projectType === "internal"
-    ? internalBenefit || 1_000_000
-    : commercialRevenue || 1_000_000;
-  const baseOpex = report.financials.opEx.reduce((sum, item) => sum + (item.annual || 0), 0) || baseValue * 0.6;
+    ? internalBenefit
+    : commercialRevenue;
+  const baseOpex = report.financials.opEx.reduce((sum, item) => sum + (item.annual || 0), 0);
   const baseCapex = report.financials.capExTotal.mid
     || (report.financials.capExTotal.low + report.financials.capExTotal.high) / 2
-    || baseValue * 0.3;
+    || 0;
   return { projectType, baseValue, baseRev: baseValue, baseOpex, baseCapex };
 }
 
@@ -60,8 +59,8 @@ export function projectOutcome(report: FeasibilityReport, sensitivity: Sensitivi
   const capex = baseCapex * (0.9 + 0.1 * sensitivity.costMultiplier);
   const grossProfit = financialValue - opex;
   const netProfit = grossProfit - capex * 0.2;
-  const monthlyContribution = Math.max(grossProfit / 12, 1);
-  const paybackMonths = capex > 0 ? capex / monthlyContribution : 0;
+  const monthlyContribution = grossProfit / 12;
+  const paybackMonths = capex <= 0 ? 0 : monthlyContribution > 0 ? capex / monthlyContribution : Number.POSITIVE_INFINITY;
   const roi = capex > 0 ? netProfit / capex : 0;
   return { projectType, financialValue, revenue: financialValue, opex, capex, grossProfit, netProfit, paybackMonths, roi };
 }

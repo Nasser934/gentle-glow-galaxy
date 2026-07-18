@@ -50,8 +50,9 @@ export const isInternalConcept = (inputs?: ConceptInputs): boolean => {
  * The LTV:CAC check exists only as a compatibility fallback for legacy rows.
  */
 export const isInternalProject = (report: FeasibilityReport, inputs?: ConceptInputs): boolean => {
-  if (report.financials.projectType === "internal" || isInternalConcept(inputs)) return true;
+  if (report.financials.projectType === "internal") return true;
   if (report.financials.projectType === "commercial") return false;
+  if (isInternalConcept(inputs)) return true;
   const ltv = (report.financials.ltvCacRatio || "").trim().toLowerCase();
   return ltv === "" || ltv === "—" || ltv === "-" || /n\/?a|not applicable|internal platform/.test(ltv);
 };

@@ -36,7 +36,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <AlertTriangle className="mx-auto h-8 w-8 text-warning" />
           <h1 className="mt-3 font-display text-xl font-semibold">This page could not be displayed</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your data has not been changed. Reload the page, or return home and try the action again.
+            The page stopped unexpectedly. Reload it, then confirm the last action before trying again.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Button onClick={() => window.location.reload()} className="gap-2">

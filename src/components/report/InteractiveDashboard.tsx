@@ -40,7 +40,7 @@ import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
-import { compactCurrencyString } from "@/lib/format";
+import { compactCurrencyString, isInternalProject } from "@/lib/format";
 import { numericRange, numericValue } from "@/lib/numbers";
 
 
@@ -189,8 +189,7 @@ const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
 
 export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityReport; inputs: ConceptInputs }) => {
   const cur = report.financials.currency;
-  const internal = report.financials.projectType === "internal"
-    || /internal|cost avoidance|productivity benefit/i.test(`${inputs.businessModel} ${inputs.revenueModel}`);
+  const internal = isInternalProject(report, inputs);
   const scoreData = [
     { name: "Financial", score: report.scores.financial, finding: report.scores.financialFinding },
     { name: "Market", score: report.scores.market, finding: report.scores.marketFinding },
@@ -206,19 +205,24 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
     impact: levelScore(risk.impact),
     level: risk.level,
   }));
-  const fundingData = report.fundingMix.map((item) => ({ name: item.source, value: numericValue(item.share, 0) || 1 }));
+  const fundingData = report.fundingMix
+    .map((item) => ({ name: item.source, value: numericValue(item.share, 0) }))
+    .filter((item) => item.value > 0);
   const scenarioData = report.financials.scenarios.map((item) => ({
     scenario: item.scenario,
     probability: numericValue(item.probability, 0),
-    value: item.annualFinancialBenefit ?? numericValue(item.annualRevenue, 0),
+    value: numericValue(item.annualFinancialBenefit ?? item.annualValueDisplay ?? item.annualRevenue, 0),
     breakEven: numericValue(item.breakEven, 0),
   }));
   const opExData = report.financials.opEx.map((item) => ({ name: item.category, monthly: item.monthly, annual: item.annual }));
   const marketShareData = [
-    { name: "TAM", value: numericValue(report.market.tamValue, 0) || 100 },
-    { name: "SAM", value: numericValue(report.market.samValue, 0) || 35 },
-    { name: "SOM", value: numericValue(report.market.somValue, 0) || 8 },
+    { name: "TAM", value: numericValue(report.market.tamValue, 0) },
+    { name: "SAM", value: numericValue(report.market.samValue, 0) },
+    { name: "SOM", value: numericValue(report.market.somValue, 0) },
   ];
+  const hasMarketHierarchy = marketShareData.every((item) => item.value > 0)
+    && marketShareData[0].value >= marketShareData[1].value
+    && marketShareData[1].value >= marketShareData[2].value;
   const research = report.research;
   const researchCount = research?.citations?.length ?? 0;
 
@@ -355,7 +359,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
             <Card>
               <CardHeader><CardTitle className="text-base">{internal ? "Synthetic Opportunity Hierarchy" : "TAM / SAM / SOM Funnel"}</CardTitle></CardHeader>
               <CardContent>
-                <div className="h-64 w-full">
+                {hasMarketHierarchy ? <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={marketShareData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -365,7 +369,11 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                       <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.22} />
                     </AreaChart>
                   </ResponsiveContainer>
-                </div>
+                </div> : (
+                  <div className="flex h-64 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                    Market hierarchy requires validated TAM, SAM, and SOM values.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -452,8 +460,9 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <CardHeader><CardTitle className="text-base">Funding Mix</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-80 w-full">
-                  {(() => {
-                    const fundingTotal = fundingData.reduce((s, d) => s + (d.value || 0), 0) || 1;
+                  {fundingData.length > 0 ? (
+                  (() => {
+                    const fundingTotal = fundingData.reduce((s, d) => s + d.value, 0);
                     const withPct = fundingData.map((d) => ({ ...d, pct: (d.value / fundingTotal) * 100 }));
                     return (
                       <ResponsiveContainer width="100%" height="100%">
@@ -478,7 +487,12 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                         </PieChart>
                       </ResponsiveContainer>
                     );
-                  })()}
+                  })()
+                  ) : (
+                    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                      Funding shares require validation before a chart can be shown.
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

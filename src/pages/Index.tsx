@@ -164,12 +164,13 @@ const Index = () => {
                     AI-supported recommendation · Model-estimated confidence 72%
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   {[
                     { k: "Financial", v: "7.8", w: 78 },
                     { k: "Market", v: "7.4", w: 74 },
                     { k: "Achievable", v: "7.1", w: 71 },
                     { k: "Risk", v: "6.6", w: 66 },
+                    { k: "Timing", v: "7.3", w: 73 },
                     { k: "Operational", v: "7.0", w: 70 },
                   ].map((m) => (
                     <div

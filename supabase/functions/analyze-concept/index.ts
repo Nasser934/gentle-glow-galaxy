@@ -430,6 +430,11 @@ const reportSchema = {
               annualValueDisplay: { type: "string" },
             },
             required: ["scenario","probability","breakEven"],
+            anyOf: [
+              { required: ["annualRevenue"] },
+              { required: ["annualFinancialBenefit"] },
+              { required: ["annualValueDisplay"] },
+            ],
             additionalProperties: false,
           },
         },
@@ -623,7 +628,10 @@ serve(async (req) => {
     };
     const inputOrigins = validateInputOrigins(body.inputOrigins);
 
-    const inputHash = await sha256(JSON.stringify(inputs));
+    const orderedInputOrigins = Object.fromEntries(
+      Object.entries(inputOrigins).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const inputHash = await sha256(JSON.stringify({ inputs, inputOrigins: orderedInputOrigins }));
     const suppliedIdempotencyKey = textFrom(req.headers.get("idempotency-key") || body.idempotencyKey).trim();
     const idempotencyKey = /^[A-Za-z0-9._:-]{16,128}$/.test(suppliedIdempotencyKey)
       ? suppliedIdempotencyKey
@@ -852,7 +860,7 @@ Be specific, realistic, and consultant-grade. Reference research only through th
       }));
     }
 
-    const { error: completionError } = requestId
+    const { data: completionAccepted, error: completionError } = requestId
       ? await supabaseAuth.rpc("complete_analysis_request", {
           p_request_id: requestId,
           p_completion_status: "completed",
@@ -862,8 +870,12 @@ Be specific, realistic, and consultant-grade. Reference research only through th
           p_research_status: researchStatus,
           p_failure_category: null,
         })
-      : { error: null };
-    if (completionError) console.warn(JSON.stringify({ event: "analysis_completion_log_failed", requestId }));
+      : { data: true, error: null };
+    if (completionError || completionAccepted !== true) {
+      failureCategory = "usage_logging";
+      console.error(JSON.stringify({ event: "analysis_completion_log_failed", requestId }));
+      throw new Error("Analysis completion could not be recorded");
+    }
     console.info(JSON.stringify({
       event: "analysis_completed",
       requestId,

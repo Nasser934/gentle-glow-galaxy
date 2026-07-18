@@ -80,6 +80,10 @@ export function validateConceptInputs(raw: unknown):
   for (const key of INPUT_KEYS) {
     if (key === "competitorUrls") continue;
     const value = input[key];
+    if (value === undefined) {
+      values[key] = "";
+      continue;
+    }
     if (typeof value !== "string") {
       issues.push({ code: "invalid_field_type", field: key, message: `${key} must be text.` });
       values[key] = "";

@@ -99,6 +99,7 @@ export interface CanonicalEvidenceClaim {
     domain: string;
     url: string;
     sourceType?: string;
+    relationship: "supporting" | "conflicting";
   }>;
   supportsClaimIds: string[];
   supportStatus: "supported" | "conflicting" | "unsupported" | "ai_inference";
@@ -260,15 +261,18 @@ function buildTopClaims(report: FeasibilityReport): CanonicalEvidenceClaim[] {
     displayStatus: claim.displayStatus,
   }));
   return claims.slice(0, 5).map((claim) => {
-    const sourceIds = [...claim.supportingSourceIds, ...claim.conflictingSourceIds];
-    const sources = sourceIds
-      .map((sourceId) => sourceById.get(sourceId))
-      .filter((source): source is NonNullable<typeof source> => source !== undefined)
-      .map((source) => ({
+    const sources = [
+      ...claim.supportingSourceIds.map((sourceId) => ({ sourceId, relationship: "supporting" as const })),
+      ...claim.conflictingSourceIds.map((sourceId) => ({ sourceId, relationship: "conflicting" as const })),
+    ]
+      .map(({ sourceId, relationship }) => ({ source: sourceById.get(sourceId), relationship }))
+      .filter((item): item is { source: NonNullable<typeof item.source>; relationship: "supporting" | "conflicting" } => item.source !== undefined)
+      .map(({ source, relationship }) => ({
         title: source.title,
         domain: source.domain || prettifySource({ source: source.publisher, url: source.url }),
         url: source.url,
         sourceType: source.sourceType,
+        relationship,
       }));
     return {
       claimId: claim.claimId,

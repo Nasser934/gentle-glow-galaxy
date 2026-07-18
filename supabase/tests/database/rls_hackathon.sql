@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(40);
 
 -- Fixed identities make policy behavior deterministic without depending on
 -- external Auth APIs.
@@ -288,6 +288,28 @@ select throws_ok(
     values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', '')$$,
   '23514', null,
   'empty comments are rejected'
+);
+
+select lives_ok(
+  $$insert into public.reports(user_id, title, inputs, output, slug, save_operation_key)
+    values (
+      '11111111-1111-4111-8111-111111111111', 'Idempotent save', '{}'::jsonb,
+      '{"scores":{"overall":5},"scoringAudit":{},"reportSchemaVersion":"2.0.0"}'::jsonb,
+      'cccccccccccccccccccccccccccccccc',
+      'save_operation_0001'
+    )$$,
+  'first report save operation key is accepted'
+);
+select throws_ok(
+  $$insert into public.reports(user_id, title, inputs, output, slug, save_operation_key)
+    values (
+      '11111111-1111-4111-8111-111111111111', 'Duplicate idempotent save', '{}'::jsonb,
+      '{"scores":{"overall":5},"scoringAudit":{},"reportSchemaVersion":"2.0.0"}'::jsonb,
+      'dddddddddddddddddddddddddddddddd',
+      'save_operation_0001'
+    )$$,
+  '23505', null,
+  'duplicate report save operation key is rejected'
 );
 
 select * from finish();

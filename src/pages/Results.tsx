@@ -56,6 +56,9 @@ const Results = () => {
   const [savingShare, setSavingShare] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
+  const savePromiseRef = useRef<ReturnType<typeof saveReport> | null>(null);
+  const saveOperationKeyRef = useRef(crypto.randomUUID());
+  const shareAfterSaveRef = useRef(false);
   const isDemo = location.pathname === "/demo";
 
   const stateReport = isDemo ? demoReport : location.state?.report as FeasibilityReport | undefined;
@@ -84,6 +87,18 @@ const Results = () => {
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [status, setStatus] = useState<ReportRow["status"]>("draft");
+
+  const persistUnsavedReport = () => {
+    if (!report || !inputs) return Promise.reject(new Error("Report data is not available."));
+    if (!savePromiseRef.current) {
+      savePromiseRef.current = saveReport(inputs, report, saveOperationKeyRef.current)
+        .catch((error) => {
+          savePromiseRef.current = null;
+          throw error;
+        });
+    }
+    return savePromiseRef.current;
+  };
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
@@ -193,14 +208,14 @@ const Results = () => {
     if (reportId || existingId || routeReportId) return;
     if (existingSlug || shareSlug) return;
     let cancelled = false;
-    saveReport(inputs, report)
+    persistUnsavedReport()
       .then((d) => {
         if (cancelled) return;
         setShareSlug(d.slug);
         setReportId(d.id);
         setOwnerId(user?.id ?? null);
         // Upgrade the URL to the canonical owner workspace.
-        navigate(`/reports/${d.id}`, {
+        navigate(`/reports/${d.id}${shareAfterSaveRef.current ? "?share=1" : ""}`, {
           replace: true,
           state: { ...location.state, report: d.report, inputs, slug: d.slug, reportId: d.id },
         });
@@ -362,16 +377,17 @@ const Results = () => {
     let id = reportId;
     let slug = shareSlug;
     if (!id || !slug) {
+      shareAfterSaveRef.current = true;
       setSavingShare(true);
       try {
-        const saved = await saveReport(inputs, report);
+        const saved = await persistUnsavedReport();
         id = saved.id;
         slug = saved.slug;
         setReportId(saved.id);
         setShareSlug(saved.slug);
         setOwnerId(user?.id ?? null);
         setIsPublic(false);
-        navigate(`/reports/${saved.id}`, {
+        navigate(`/reports/${saved.id}?share=1`, {
           replace: true,
           state: { ...location.state, report: saved.report, inputs, slug: saved.slug, reportId: saved.id },
         });

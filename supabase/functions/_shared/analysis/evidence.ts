@@ -64,11 +64,21 @@ export function normalizeComposition(input: Partial<EvidenceComposition> | null 
   if (total <= 0) {
     return { userInputPercent: 0, citedSourcePercent: 0, calculationPercent: 0, aiInferencePercent: 100 };
   }
-  const first = Math.round(values[0] * 100 / total);
-  const second = Math.round(values[1] * 100 / total);
-  const third = Math.round(values[2] * 100 / total);
-  const fourth = Math.max(0, 100 - first - second - third);
-  return { userInputPercent: first, citedSourcePercent: second, calculationPercent: third, aiInferencePercent: fourth };
+  const exact = values.map((value) => value * 100 / total);
+  const allocated = exact.map(Math.floor);
+  let remainder = 100 - allocated.reduce((sum, value) => sum + value, 0);
+  const order = exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+  for (let index = 0; index < remainder; index += 1) allocated[order[index].index] += 1;
+  remainder = 100 - allocated.reduce((sum, value) => sum + value, 0);
+  if (remainder !== 0) allocated[allocated.length - 1] += remainder;
+  return {
+    userInputPercent: allocated[0],
+    citedSourcePercent: allocated[1],
+    calculationPercent: allocated[2],
+    aiInferencePercent: allocated[3],
+  };
 }
 
 export function estimateEvidenceComposition(args: { inputQuality: number; sources: EvidenceSource[] }): EvidenceComposition {
@@ -141,7 +151,8 @@ export function mapClaimsToSources(claims: EvidenceClaim[], sources: EvidenceSou
 export function assessClaimCoverage(sources: EvidenceSource[], claims: EvidenceClaim[]) {
   const sourceById = new Map(sources.map((source) => [source.sourceId, source]));
   const directClaims = claims.filter((claim) =>
-    claim.supportingSourceIds.some((sourceId) => sourceById.has(sourceId)),
+    claim.conflictingSourceIds.every((sourceId) => !sourceById.has(sourceId))
+    && claim.supportingSourceIds.some((sourceId) => sourceById.has(sourceId)),
   );
   const linkedIds = new Set(directClaims.flatMap((claim) => claim.supportingSourceIds));
   const reliableQualities = new Set<SourceQuality>([

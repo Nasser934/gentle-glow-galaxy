@@ -52,6 +52,7 @@ describe("research quality and SSRF guards", () => {
     expect(qualityForWebDomain("research.example.edu")).toBe("Academic or institutional");
     expect(qualityForWebDomain("data.worldbank.org")).toBe("Academic or institutional");
     expect(qualityForWebDomain("example.com")).toBe("General reference");
+    expect(qualityForWebDomain("evilmckinsey.com")).toBe("General reference");
   });
 
   it("does not call community-only evidence reliable", () => {
@@ -99,6 +100,8 @@ describe("research quality and SSRF guards", () => {
     expect(isBlockedHostname("service.internal")).toBe(true);
     expect(isBlockedHostname("metadata.google.internal")).toBe(true);
     expect(isBlockedHostname("example.com")).toBe(false);
+    expect(isBlockedHostname("localhost.")).toBe(true);
+    expect(isBlockedHostname("metadata.google.internal.")).toBe(true);
   });
 
   it.each([
@@ -114,5 +117,9 @@ describe("research quality and SSRF guards", () => {
 
   it("allows a public HTTPS competitor research URL", () => {
     expect(isPublicResearchUrl("https://www.example.com/product?ref=brief")).toBe(true);
+  });
+
+  it("rejects a trailing-dot spelling of a blocked hostname", () => {
+    expect(isPublicResearchUrl("https://metadata.google.internal./computeMetadata/v1")).toBe(false);
   });
 });

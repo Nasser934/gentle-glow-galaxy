@@ -400,7 +400,15 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
   });
   const explicitTotal = explicitWidths.reduce<number>((sum, width) => sum + (width ?? 0), 0);
   const missingCount = explicitWidths.filter((width) => width == null).length;
-  const scale = missingCount === 0 && explicitTotal > 0 ? CONTENT_W / explicitTotal : 1;
+  const explicitCount = colCount - missingCount;
+  const explicitBudget = missingCount > 0
+    ? CONTENT_W * (explicitCount / colCount)
+    : CONTENT_W;
+  const scale = explicitTotal > 0
+    ? missingCount === 0
+      ? CONTENT_W / explicitTotal
+      : Math.min(1, explicitBudget / explicitTotal)
+    : 1;
   const remaining = Math.max(0, CONTENT_W - explicitTotal * scale);
   const fallbackWidth = missingCount > 0 ? remaining / missingCount : 0;
   const boundedColumnStyles = Object.fromEntries(

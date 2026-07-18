@@ -209,7 +209,26 @@ export function assessInputQuality(inputs: ConceptInputs): {
 /* ---------------- Evidence Mix ---------------- */
 export function deriveEvidenceMix(report: FeasibilityReport, inputs: ConceptInputs) {
   const iq = assessInputQuality(inputs);
-  const composition = estimateEvidenceComposition({ inputQuality: iq.overall, sources: report.sources ?? [] });
+  const sources = report.sources ?? getCitations(report).flatMap((citation, index) => {
+    if (!citation || typeof citation !== "object") return [];
+    const row = citation as Record<string, unknown>;
+    const url = String(row.url ?? "");
+    let domain = String(row.domain ?? "");
+    if (!domain && url) {
+      try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch { domain = ""; }
+    }
+    return [{
+      sourceId: String(row.sourceId ?? `LEGACY-SRC-${index + 1}`),
+      title: String(row.title ?? row.source ?? "Legacy source"),
+      url,
+      domain,
+      publisher: String(row.publisher ?? row.source ?? domain ?? "Unknown"),
+      accessDate: String(row.accessDate ?? ""),
+      sourceType: String(row.sourceType ?? "general"),
+      quality: (row.quality ?? "Unknown") as NonNullable<FeasibilityReport["sources"]>[number]["quality"],
+    }];
+  });
+  const composition = estimateEvidenceComposition({ inputQuality: iq.overall, sources });
   return {
     userInputPercent: composition.userInputPercent,
     webResearchPercent: composition.citedSourcePercent,

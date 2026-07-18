@@ -288,6 +288,7 @@ export type Database = {
           research_timestamp: string | null
           root_report_id: string | null
           scoring_engine_version: string | null
+          save_operation_key: string | null
           slug: string
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
@@ -316,6 +317,7 @@ export type Database = {
           research_timestamp?: string | null
           root_report_id?: string | null
           scoring_engine_version?: string | null
+          save_operation_key?: string | null
           slug?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
@@ -344,6 +346,7 @@ export type Database = {
           research_timestamp?: string | null
           root_report_id?: string | null
           scoring_engine_version?: string | null
+          save_operation_key?: string | null
           slug?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]

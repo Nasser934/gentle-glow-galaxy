@@ -156,7 +156,7 @@ Return ONLY the completed text for this field.`;
     const text = (data.choices?.[0]?.message?.content || "").trim();
     if (!text) throw new Error("AI did not return text");
     if (requestId) {
-      await supabaseAuth.rpc("complete_analysis_request", {
+      const { data: completionAccepted, error: completionError } = await supabaseAuth.rpc("complete_analysis_request", {
         p_request_id: requestId,
         p_completion_status: "completed",
         p_model_id: modelId,
@@ -165,6 +165,9 @@ Return ONLY the completed text for this field.`;
         p_research_status: "not_requested",
         p_failure_category: null,
       });
+      if (completionError || completionAccepted !== true) {
+        throw new Error("Field completion could not be recorded");
+      }
       requestId = null;
     }
     return new Response(JSON.stringify({ text }), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });

@@ -6,6 +6,7 @@ export const POSITIVE_OUTCOME_LABEL = "Probability of positive Year-1 financial 
 interface CommonAssumptions {
   annualOperatingCost: number;
   capEx: number;
+  yearOneCapExRate: number;
   adoptionRate: number;
   costStdDev: number;
   adoptionStdDev: number;
@@ -56,6 +57,7 @@ function validate(input: SimulationInput) {
   const values = Object.values(input.assumptions);
   if (values.some((value) => typeof value !== "number" || !Number.isFinite(value) || value < 0)) throw new Error("Simulation assumptions must be finite and non-negative");
   if (input.assumptions.adoptionRate > 1) throw new Error("Adoption rate must be between 0 and 1");
+  if (input.assumptions.yearOneCapExRate > 1) throw new Error("Year-1 CapEx recognition must be between 0 and 1");
   if (input.assumptions.costStdDev > 1 || input.assumptions.adoptionStdDev > 1) throw new Error("Volatility must be between 0 and 1");
   if (input.projectType === "commercial" && input.assumptions.revenueStdDev > 1) throw new Error("Volatility must be between 0 and 1");
   if (input.projectType === "internal" && input.assumptions.benefitStdDev > 1) throw new Error("Volatility must be between 0 and 1");
@@ -74,7 +76,7 @@ export function runScenarioSimulation(input: SimulationInput) {
   for (let index = 0; index < input.iterations; index += 1) {
     const adoption = Math.max(0, Math.min(1, input.assumptions.adoptionRate * (1 + input.assumptions.adoptionStdDev * normal(random))));
     const operatingCost = Math.max(0, input.assumptions.annualOperatingCost * (1 + input.assumptions.costStdDev * normal(random)));
-    const yearOneCapExCharge = input.assumptions.capEx * 0.2;
+    const yearOneCapExCharge = input.assumptions.capEx * input.assumptions.yearOneCapExRate;
     let outcome: number;
     if (input.projectType === "commercial") {
       const revenue = Math.max(0, input.assumptions.annualRevenue * (1 + input.assumptions.revenueStdDev * normal(random)));
@@ -89,7 +91,7 @@ export function runScenarioSimulation(input: SimulationInput) {
   }
 
   const mean = outcomes.reduce((total, value) => total + value, 0) / outcomes.length;
-  const distributions = input.projectType === "commercial"
+  const distributions = (input.projectType === "commercial"
     ? [
         { name: "Annual revenue", distribution: "Normal", standardDeviation: input.assumptions.revenueStdDev },
         { name: "Annual operating cost", distribution: "Normal", standardDeviation: input.assumptions.costStdDev },
@@ -99,7 +101,11 @@ export function runScenarioSimulation(input: SimulationInput) {
         { name: "Cost savings and productivity benefit", distribution: "Normal", standardDeviation: input.assumptions.benefitStdDev },
         { name: "Annual operating cost", distribution: "Normal", standardDeviation: input.assumptions.costStdDev },
         { name: "Internal adoption", distribution: "Bounded normal", standardDeviation: input.assumptions.adoptionStdDev },
-      ];
+      ]).concat([{
+        name: "Year-1 CapEx recognition",
+        distribution: "Fixed",
+        value: input.assumptions.yearOneCapExRate,
+      }]);
 
   return {
     projectType: input.projectType,

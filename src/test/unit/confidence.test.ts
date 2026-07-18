@@ -23,7 +23,7 @@ describe("deterministic model-estimated confidence caps", () => {
       unsupportedCalculationCount: 0,
       contradictoryInputCount: 0,
     });
-    expect(result.values.market).toBeLessThanOrEqual(45);
+    expect(result.values.market).toBe(45);
     expect(result.reasons.market).toContain("no_direct_market_sources");
   });
 
@@ -39,7 +39,7 @@ describe("deterministic model-estimated confidence caps", () => {
       unsupportedCalculationCount: 0,
       contradictoryInputCount: 0,
     });
-    expect(result.values.financial).toBeLessThanOrEqual(50);
+    expect(result.values.financial).toBe(50);
   });
 
   it("caps Achievability when team experience is absent", () => {
@@ -54,7 +54,7 @@ describe("deterministic model-estimated confidence caps", () => {
       unsupportedCalculationCount: 0,
       contradictoryInputCount: 0,
     });
-    expect(result.values.achievability).toBeLessThanOrEqual(55);
+    expect(result.values.achievability).toBe(55);
   });
 
   it("caps Risk for a regulated sector without regulatory input", () => {
@@ -69,7 +69,7 @@ describe("deterministic model-estimated confidence caps", () => {
       unsupportedCalculationCount: 0,
       contradictoryInputCount: 0,
     });
-    expect(result.values.risk).toBeLessThanOrEqual(45);
+    expect(result.values.risk).toBe(45);
   });
 
   it("reduces every dimension for poor or contradictory inputs", () => {
