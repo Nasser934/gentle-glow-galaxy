@@ -9,7 +9,7 @@ export const AuthReturnRedirect = () => {
   const location = useLocation();
 
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !user || location.pathname === "/auth") return;
 
     const target = consumeAuthReturnPath(window.sessionStorage);
     if (!target) return;
