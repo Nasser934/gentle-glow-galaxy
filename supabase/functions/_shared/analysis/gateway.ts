@@ -45,6 +45,10 @@ type GatewayPayload = {
   usage?: unknown;
 };
 
+const INCOMPATIBLE_FULL_REPORT_MODEL = "google/gemini-3-flash-preview";
+const STABLE_FULL_REPORT_MODEL = "google/gemini-2.5-flash";
+const STABLE_REPORT_TIMEOUT_MS = 85_000;
+
 const isTimeoutLike = (error: unknown) =>
   error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
 
@@ -60,6 +64,9 @@ export function safeGatewayUserError(error: GatewayAttemptError) {
   }
   if (error.category === "structured_output_missing" || error.category === "structured_output_invalid") {
     return { status: 502, message: "The AI response was incomplete and could not be validated. Please retry." };
+  }
+  if (error.status === 400) {
+    return { status: 502, message: "The AI service could not accept the structured report request. Please retry." };
   }
   return { status: 502, message: "The AI provider is temporarily unavailable. Please try again shortly." };
 }
@@ -77,22 +84,40 @@ export async function requestStructuredReport(args: {
 }) {
   const startedAt = Date.now();
   const fetchImpl = args.fetchImpl ?? fetch;
+  const effectiveTimeoutMs = args.modelId === STABLE_FULL_REPORT_MODEL
+    ? Math.max(args.timeoutMs, STABLE_REPORT_TIMEOUT_MS)
+    : args.timeoutMs;
+
   console.info(JSON.stringify({
     event: "ai_attempt_started",
     requestId: args.requestId,
     attempt: args.attempt,
     model: args.modelId,
-    timeoutMs: args.timeoutMs,
+    timeoutMs: effectiveTimeoutMs,
   }));
 
   try {
+    // The preview model is known to reject this exact large function schema with
+    // HTTP 400. Fail locally and immediately so the caller can select the stable
+    // fallback without wasting most of the Edge Function execution window.
+    if (args.modelId === INCOMPATIBLE_FULL_REPORT_MODEL) {
+      throw new GatewayAttemptError({
+        message: "Model is incompatible with the full structured report schema",
+        category: "upstream_error",
+        status: 400,
+        retryable: true,
+        modelId: args.modelId,
+        elapsedMs: Date.now() - startedAt,
+      });
+    }
+
     const response = await fetchImpl("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${args.apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: args.modelId,
         temperature: 0.2,
-        max_tokens: 8_000,
+        max_tokens: 7_000,
         messages: [
           { role: "system", content: args.systemPrompt },
           { role: "user", content: args.userPrompt },
@@ -107,7 +132,7 @@ export async function requestStructuredReport(args: {
         }],
         tool_choice: { type: "function", function: { name: "provide_report" } },
       }),
-      signal: AbortSignal.timeout(args.timeoutMs),
+      signal: AbortSignal.timeout(effectiveTimeoutMs),
     });
 
     const elapsedMs = Date.now() - startedAt;
