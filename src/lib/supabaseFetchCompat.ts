@@ -7,28 +7,62 @@ type PostgrestErrorBody = {
   hint?: string;
 };
 
+const OPTIONAL_REPORT_COLUMNS = new Set([
+  "save_operation_key",
+  "model_id",
+  "prompt_version",
+  "scoring_engine_version",
+  "research_timestamp",
+  "source_snapshot_metadata",
+  "input_hash",
+  "report_schema_version",
+  "generation_timestamp",
+]);
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.toString();
   return input.url;
 }
 
+function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) return init.method.toUpperCase();
+  if (input instanceof Request) return input.method.toUpperCase();
+  return "GET";
+}
+
+async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Promise<string | null> {
+  if (typeof init?.body === "string") return init.body;
+  if (input instanceof Request) {
+    try {
+      return await input.clone().text();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function isReportsInsert(input: RequestInfo | URL, init?: RequestInit): boolean {
-  const method = init?.method?.toUpperCase();
-  return method === "POST" && requestUrl(input).includes("/rest/v1/reports");
+  return requestMethod(input, init) === "POST" && requestUrl(input).includes("/rest/v1/reports");
 }
 
-function isMissingSaveOperationKey(error: PostgrestErrorBody): boolean {
+function missingReportColumn(error: PostgrestErrorBody): string | null {
+  if (error.code !== "PGRST204") return null;
   const text = [error.message, error.details, error.hint].filter(Boolean).join(" ");
-  return error.code === "PGRST204" && /save_operation_key/i.test(text);
+  const quoted = text.match(/["']([A-Za-z][A-Za-z0-9_]*)["']\s+column/i)?.[1];
+  const unquoted = text.match(/column\s+["']?([A-Za-z][A-Za-z0-9_]*)["']?/i)?.[1];
+  const column = quoted ?? unquoted ?? null;
+  return column && OPTIONAL_REPORT_COLUMNS.has(column) ? column : null;
 }
 
-function stripSaveOperationKey(body: string): string | null {
+function stripColumn(body: string, column: string): string | null {
   try {
     const parsed = JSON.parse(body) as Record<string, unknown> | Record<string, unknown>[];
     const strip = (row: Record<string, unknown>) => {
-      const { save_operation_key: _ignored, ...rest } = row;
-      return rest;
+      const next = { ...row };
+      delete next[column];
+      return next;
     };
     return JSON.stringify(Array.isArray(parsed) ? parsed.map(strip) : strip(parsed));
   } catch {
@@ -36,35 +70,69 @@ function stripSaveOperationKey(body: string): string | null {
   }
 }
 
+function retryInit(input: RequestInfo | URL, init: RequestInit | undefined, body: string): RequestInit {
+  const headers = new Headers(input instanceof Request ? input.headers : undefined);
+  if (init?.headers) {
+    new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  }
+  return {
+    ...init,
+    method: requestMethod(input, init),
+    headers,
+    body,
+  };
+}
+
+async function parsePostgrestError(response: Response): Promise<PostgrestErrorBody | null> {
+  try {
+    return await response.clone().json() as PostgrestErrorBody;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Temporary compatibility layer for Lovable Cloud databases that have not yet
- * applied the save_operation_key migration. The first request remains the
- * canonical path; only the specific missing-column response is retried.
+ * Temporary compatibility layer for Lovable Cloud databases whose PostgREST
+ * schema cache is behind the repository migrations. It retries report inserts
+ * only for known optional columns and leaves RLS, validation, and other errors
+ * untouched.
  */
 export function createSchemaCompatibleFetch(baseFetch: FetchLike = fetch): FetchLike {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await baseFetch(input, init);
-    if (response.ok || !isReportsInsert(input, init) || typeof init?.body !== "string") {
+    const body = await requestBodyText(input, init);
+    let response = await baseFetch(input, init);
+
+    if (response.ok || !isReportsInsert(input, init) || body === null) {
       return response;
     }
 
-    let errorBody: PostgrestErrorBody;
-    try {
-      errorBody = await response.clone().json() as PostgrestErrorBody;
-    } catch {
-      return response;
+    let compatibleBody = body;
+    const removedColumns = new Set<string>();
+
+    for (let attempt = 0; attempt < OPTIONAL_REPORT_COLUMNS.size; attempt += 1) {
+      const errorBody = await parsePostgrestError(response);
+      if (!errorBody) return response;
+
+      const column = missingReportColumn(errorBody);
+      if (!column || removedColumns.has(column)) return response;
+
+      const stripped = stripColumn(compatibleBody, column);
+      if (!stripped || stripped === compatibleBody) return response;
+
+      removedColumns.add(column);
+      compatibleBody = stripped;
+      console.warn(JSON.stringify({
+        event: "report_save_schema_compat_retry",
+        missingColumn: column,
+      }));
+
+      response = await baseFetch(
+        requestUrl(input),
+        retryInit(input, init, compatibleBody),
+      );
+      if (response.ok) return response;
     }
 
-    if (!isMissingSaveOperationKey(errorBody)) return response;
-
-    const compatibleBody = stripSaveOperationKey(init.body);
-    if (!compatibleBody) return response;
-
-    console.warn(JSON.stringify({
-      event: "report_save_schema_compat_retry",
-      missingColumn: "save_operation_key",
-    }));
-
-    return baseFetch(input, { ...init, body: compatibleBody });
+    return response;
   }) as FetchLike;
 }
