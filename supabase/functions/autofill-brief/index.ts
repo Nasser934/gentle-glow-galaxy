@@ -90,7 +90,7 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-    modelId = Deno.env.get("AUTOFILL_MODEL_ID") || Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
+    modelId = Deno.env.get("AUTOFILL_MODEL_ID") || Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-2.5-flash";
 
     const systemPrompt = `You are a senior feasibility consultant. From a short business brief, draft a complete business case for downstream feasibility analysis.
 Return STRUCTURED data via the provided tool. Be realistic, specific, and concise. Use the same language as the user's brief (English or Arabic). Default to English if mixed.`;
