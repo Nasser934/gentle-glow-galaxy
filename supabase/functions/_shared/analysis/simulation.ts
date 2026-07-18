@@ -91,7 +91,8 @@ export function runScenarioSimulation(input: SimulationInput) {
   }
 
   const mean = outcomes.reduce((total, value) => total + value, 0) / outcomes.length;
-  const distributions: Array<{ name: string; distribution: string; standardDeviation?: number; value?: number }> = (input.projectType === "commercial"
+  type Distribution = { name: string; distribution: string; standardDeviation?: number; value?: number };
+  const baseDistributions: Distribution[] = input.projectType === "commercial"
     ? [
         { name: "Annual revenue", distribution: "Normal", standardDeviation: input.assumptions.revenueStdDev },
         { name: "Annual operating cost", distribution: "Normal", standardDeviation: input.assumptions.costStdDev },
@@ -101,11 +102,11 @@ export function runScenarioSimulation(input: SimulationInput) {
         { name: "Cost savings and productivity benefit", distribution: "Normal", standardDeviation: input.assumptions.benefitStdDev },
         { name: "Annual operating cost", distribution: "Normal", standardDeviation: input.assumptions.costStdDev },
         { name: "Internal adoption", distribution: "Bounded normal", standardDeviation: input.assumptions.adoptionStdDev },
-      ]).concat([{
-        name: "Year-1 CapEx recognition",
-        distribution: "Fixed",
-        value: input.assumptions.yearOneCapExRate,
-      }]);
+      ];
+  const distributions: Distribution[] = [
+    ...baseDistributions,
+    { name: "Year-1 CapEx recognition", distribution: "Fixed", value: input.assumptions.yearOneCapExRate },
+  ];
 
   return {
     projectType: input.projectType,
