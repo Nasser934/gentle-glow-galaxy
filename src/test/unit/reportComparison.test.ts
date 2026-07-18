@@ -19,6 +19,7 @@ describe("report version comparison", () => {
       inputHash: "a",
       reportSchemaVersion: "1",
       generationTimestamp: "2026-01-01T00:00:00Z",
+      researchTimestamp: "2026-01-01T00:00:00Z",
     };
     const next = structuredClone(previous);
     next.scores.overall = 7.2;
