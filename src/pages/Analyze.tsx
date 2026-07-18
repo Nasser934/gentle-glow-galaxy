@@ -64,7 +64,12 @@ const Analyze = () => {
   const [draftSuggestions, setDraftSuggestions] = useState<Partial<ConceptInputs> | null>(null);
   const [selectedSuggestionKeys, setSelectedSuggestionKeys] = useState<Set<keyof ConceptInputs>>(new Set());
   const [fieldSuggestion, setFieldSuggestion] = useState<{ field: EssayField; text: string } | null>(null);
-  const [pendingSave, setPendingSave] = useState<{ report: FeasibilityReport; mode: "new" | "rerun" } | null>(null);
+  const [pendingSave, setPendingSave] = useState<{
+    report: FeasibilityReport;
+    inputs: ConceptInputs;
+    mode: "new" | "rerun";
+    saveOperationKey: string;
+  } | null>(null);
   const [retryingSave, setRetryingSave] = useState(false);
 
   // Per-field validation errors collected by validateStep(). Cleared on field change.
@@ -74,7 +79,9 @@ const Analyze = () => {
     setInputs((prev) => ({ ...prev, [field]: value }));
     setFieldOrigins((prev) => ({
       ...prev,
-      [field]: prev[field] === "accepted_ai_suggestion" || prev[field] === "ai_suggestion"
+      [field]: prev[field] === "accepted_ai_suggestion"
+        || prev[field] === "ai_suggestion"
+        || prev[field] === "edited_after_ai_suggestion"
         ? "edited_after_ai_suggestion"
         : "user_input",
     }));
@@ -306,9 +313,10 @@ const Analyze = () => {
     }
     setIsAnalyzing(true);
     try {
+      const analyzedInputs = structuredClone(inputs);
       const idempotencyKey = `analysis-${crypto.randomUUID()}`;
       const { data, error } = await supabase.functions.invoke("analyze-concept", {
-        body: { inputs, inputOrigins: fieldOrigins, idempotencyKey },
+        body: { inputs: analyzedInputs, inputOrigins: fieldOrigins, idempotencyKey },
       });
       if (error) {
         let detail = error.message;
@@ -322,20 +330,21 @@ const Analyze = () => {
       if (data?.error) throw new Error(data.error);
 
       // Enrich with evidence layer
-      let enriched = ensureEvidenceFields(data, inputs);
+      let enriched = ensureEvidenceFields(data, analyzedInputs);
+      const saveOperationKey = crypto.randomUUID();
 
       // If this is a re-run, carry version history forward, append diff, save linked row.
       if (isReRun && previousReport && previousInputs) {
         const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
-        const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
+        const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, analyzedInputs);
         const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
         try {
-          const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
-          navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
+          const saved = await saveRerunReport({ parentReportId: reportId, inputs: analyzedInputs, report: enriched, saveOperationKey });
+          navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs: analyzedInputs, slug: saved.slug, reportId: saved.id } });
           return;
         } catch {
-          setPendingSave({ report: enriched, mode: "rerun" });
+          setPendingSave({ report: enriched, inputs: analyzedInputs, mode: "rerun", saveOperationKey });
           toast.error("Analysis completed, but the new version was not saved. Retry saving without running AI again.");
           return;
         }
@@ -344,11 +353,11 @@ const Analyze = () => {
       // First-time analysis: save first, then navigate to the canonical owner
       // workspace. This prevents Results.tsx from auto-saving a duplicate row.
       try {
-        const saved = await saveReport(inputs, enriched);
-        navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
+        const saved = await saveReport(analyzedInputs, enriched, saveOperationKey);
+        navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs: analyzedInputs, slug: saved.slug, reportId: saved.id } });
         return;
       } catch {
-        setPendingSave({ report: enriched, mode: "new" });
+        setPendingSave({ report: enriched, inputs: analyzedInputs, mode: "new", saveOperationKey });
         toast.error("Analysis completed, but the report was not saved. Retry saving without running AI again.");
         return;
       }
@@ -364,10 +373,10 @@ const Analyze = () => {
     setRetryingSave(true);
     try {
       const saved = pendingSave.mode === "rerun"
-        ? await saveRerunReport({ parentReportId: reportId, inputs, report: pendingSave.report })
-        : await saveReport(inputs, pendingSave.report);
+        ? await saveRerunReport({ parentReportId: reportId, inputs: pendingSave.inputs, report: pendingSave.report, saveOperationKey: pendingSave.saveOperationKey })
+        : await saveReport(pendingSave.inputs, pendingSave.report, pendingSave.saveOperationKey);
       setPendingSave(null);
-      navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs, slug: saved.slug, reportId: saved.id } });
+      navigate(`/reports/${saved.id}`, { state: { report: saved.report, inputs: pendingSave.inputs, slug: saved.slug, reportId: saved.id } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Save retry failed");
     } finally {

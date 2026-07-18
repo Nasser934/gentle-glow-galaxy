@@ -38,6 +38,8 @@ serve(async (req) => {
   let requestId: string | null = null;
   let requestClient: ReturnType<typeof createClient> | null = null;
   let modelId: string | null = null;
+  let failureCategory = "autofill_failed";
+  let failureStatus = 500;
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -168,16 +170,29 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
 
     if (!response.ok) {
       console.error(JSON.stringify({ event: "autofill_ai_failed", requestId, status: response.status }));
+      failureCategory = response.status === 429 ? "ai_rate_limited" : "ai_upstream";
+      failureStatus = response.status === 429 ? 429 : 502;
       throw new Error(`AI gateway ${response.status}`);
     }
 
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) throw new Error("AI did not return a draft");
-    const draft = JSON.parse(args);
+    if (!args) {
+      failureCategory = "ai_response_invalid";
+      failureStatus = 502;
+      throw new Error("AI did not return a draft");
+    }
+    let draft: unknown;
+    try {
+      draft = JSON.parse(args);
+    } catch {
+      failureCategory = "ai_response_invalid";
+      failureStatus = 502;
+      throw new Error("AI returned an invalid draft");
+    }
 
     if (requestId) {
-      await supabaseAuth.rpc("complete_analysis_request", {
+      const { data: completionAccepted, error: completionError } = await supabaseAuth.rpc("complete_analysis_request", {
         p_request_id: requestId,
         p_completion_status: "completed",
         p_model_id: modelId,
@@ -186,11 +201,20 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
         p_research_status: "not_requested",
         p_failure_category: null,
       });
+      if (completionError || completionAccepted !== true) {
+        failureCategory = "usage_logging";
+        failureStatus = 503;
+        throw new Error("Autofill completion could not be recorded");
+      }
       requestId = null;
     }
 
     return new Response(JSON.stringify({ draft }), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
-  } catch (_) {
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      failureCategory = "ai_timeout";
+      failureStatus = 504;
+    }
     if (requestId && requestClient) {
       await requestClient.rpc("complete_analysis_request", {
         p_request_id: requestId,
@@ -199,12 +223,12 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
         p_prompt_version: "autofill-2026-07-18.1",
         p_usage_metadata: {},
         p_research_status: "not_requested",
-        p_failure_category: "autofill_failed",
+        p_failure_category: failureCategory,
       }).catch(() => null);
     }
-    console.error(JSON.stringify({ event: "autofill_failed", requestId }));
+    console.error(JSON.stringify({ event: "autofill_failed", requestId, category: failureCategory }));
     return new Response(JSON.stringify({ error: "Could not generate draft suggestions. Please try again." }), {
-      status: 500,
+      status: failureStatus,
       headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }

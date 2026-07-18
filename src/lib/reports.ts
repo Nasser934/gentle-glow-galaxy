@@ -27,6 +27,7 @@ export interface ReportRow {
   report_schema_version: string | null;
   generation_timestamp: string | null;
   generation_seed: number | null;
+  save_operation_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,7 +55,29 @@ function reportAuditFields(output: FeasibilityReport) {
   };
 }
 
-export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
+type SavedReport = { id: string; slug: string; displayId: string; report: FeasibilityReport };
+
+async function recoverIdempotentSave(userId: string, saveOperationKey: string): Promise<SavedReport | null> {
+  const { data, error } = await supabase
+    .from("reports")
+    .select("id, slug, display_id, output")
+    .eq("user_id", userId)
+    .eq("save_operation_key", saveOperationKey)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: data.id,
+    slug: data.slug,
+    displayId: data.display_id,
+    report: data.output as unknown as FeasibilityReport,
+  };
+}
+
+export async function saveReport(
+  inputs: ConceptInputs,
+  output: FeasibilityReport,
+  saveOperationKey = crypto.randomUUID(),
+): Promise<SavedReport> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
   const { data, error } = await supabase
@@ -65,11 +88,14 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
       industry: inputs.industry || null,
       inputs: inputs as unknown as Json,
       output: output as unknown as Json,
+      save_operation_key: saveOperationKey,
       ...reportAuditFields(output),
     })
     .select("id, slug, display_id, output")
     .single();
   if (error) {
+    const existing = await recoverIdempotentSave(user.id, saveOperationKey);
+    if (existing) return existing;
     console.error(JSON.stringify({ event: "report_save_failed", category: error.code || "database" }));
     throw error;
   }
@@ -91,6 +117,7 @@ export async function saveRerunReport(params: {
   parentReportId: string;
   inputs: ConceptInputs;
   report: FeasibilityReport;
+  saveOperationKey?: string;
 }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
@@ -102,6 +129,7 @@ export async function saveRerunReport(params: {
   if (root.user_id !== user.id) {
     throw new Error("Only the report owner can create a new version.");
   }
+  const saveOperationKey = params.saveOperationKey ?? crypto.randomUUID();
 
   const { data, error } = await supabase
     .from("reports")
@@ -112,11 +140,14 @@ export async function saveRerunReport(params: {
       inputs: params.inputs as unknown as Json,
       output: params.report as unknown as Json,
       parent_report_id: rootId,
+      save_operation_key: saveOperationKey,
       ...reportAuditFields(params.report),
     })
     .select("id, slug, display_id, output")
     .single();
   if (error) {
+    const existing = await recoverIdempotentSave(user.id, saveOperationKey);
+    if (existing) return existing;
     console.error(JSON.stringify({ event: "report_version_save_failed", category: error.code || "database" }));
     throw error;
   }

@@ -78,4 +78,23 @@ describe("financial consistency", () => {
       "negative_financial_value",
     ]));
   });
+
+  it("checks currencies on internal-project outcome fields", () => {
+    const report = makeReport();
+    report.market.currency = "SAR";
+    report.market.tamValue = "SAR 2.1B";
+    report.market.samValue = "SAR 180M";
+    report.market.somValue = "SAR 12M";
+    report.financials.investmentRange = "SAR 480K–680K";
+    report.financials.scenarios.forEach((scenario) => {
+      if (scenario.annualRevenue) scenario.annualRevenue = scenario.annualRevenue.replace("USD", "SAR");
+    });
+    report.fundingMix.forEach((source) => { source.amount = source.amount.replace("USD", "SAR"); });
+    delete report.financials.scenarios[0].annualRevenue;
+    report.financials.scenarios[0].annualFinancialBenefit = 1_000_000;
+    report.financials.scenarios[0].annualValueDisplay = "USD 1M";
+    report.financials.currency = "SAR";
+    expect(validateFinancialModel(report).warnings.map((warning) => warning.code))
+      .toContain("currency_mismatch");
+  });
 });

@@ -82,7 +82,11 @@ function collectCurrencies(report: FinancialReportLike): CurrencyCode[] {
     report.market?.samValue,
     report.market?.somValue,
     report.financials?.investmentRange,
-    ...(report.financials?.scenarios?.map((scenario) => scenario.annualRevenue) ?? []),
+    ...(report.financials?.scenarios?.flatMap((scenario) => [
+      scenario.annualRevenue,
+      scenario.annualFinancialBenefit,
+      scenario.annualValueDisplay,
+    ]) ?? []),
     ...(report.fundingMix?.map((source) => source.amount) ?? []),
   ];
   return values

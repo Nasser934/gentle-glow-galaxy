@@ -509,7 +509,7 @@ export async function exportReportToPdf(
   if (mix) {
     paragraph(
       doc,
-      `Estimated Evidence Composition — User input ${mix.userInputPercent}% · Available external evidence ${mix.webResearchPercent}% · AI inference ${mix.aiAssumptionPercent}%. Heuristic estimate based on input completeness and available sources.`,
+      `Estimated Evidence Composition — User input ${mix.userInputPercent}% · Available external evidence ${mix.webResearchPercent}% · Calculations ${mix.calculationPercent ?? 0}% · AI inference ${mix.aiAssumptionPercent}%. Heuristic estimate based on input completeness and available sources.`,
       { size: 9.5 },
     );
     if (mix.aiAssumptionPercent > 40) {
@@ -527,7 +527,7 @@ export async function exportReportToPdf(
       body: topClaims.map((c, idx) => {
         const raw = claimsRaw[idx];
         const sourcesText = c.sources.length
-          ? c.sources.map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ")
+          ? c.sources.map((src) => `${src.relationship === "conflicting" ? "Conflict: " : ""}${src.domain || src.title}`).filter(Boolean).slice(0, 2).join(", ")
           : "—";
         return [
           { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },

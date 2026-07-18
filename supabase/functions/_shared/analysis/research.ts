@@ -55,7 +55,7 @@ export function qualityForWebDomain(domain: string): SourceQuality {
   }
   if (/\.edu$|\.ac\.[a-z]{2}$/.test(domain)) return "Academic or institutional";
   if (/(^|\.)(worldbank\.org|imf\.org|oecd\.org|who\.int|un\.org)$/.test(domain)) return "Academic or institutional";
-  if (/(mckinsey\.com|gartner\.com|forrester\.com|weforum\.org)$/.test(domain)) return "Reputable industry research";
+  if (/(^|\.)(mckinsey\.com|gartner\.com|forrester\.com|weforum\.org)$/.test(domain)) return "Reputable industry research";
   return "General reference";
 }
 
@@ -172,7 +172,7 @@ export function isPrivateNetworkAddress(ip: string): boolean {
 }
 
 export function isBlockedHostname(hostname: string) {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   return host === "localhost"
     || host.endsWith(".local")
     || host.endsWith(".internal")
@@ -189,7 +189,7 @@ export function isPublicResearchUrl(raw: string) {
   try {
     const url = new URL(raw);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     if (isBlockedHostname(host)) return false;
     if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) {
       return !isPrivateNetworkAddress(host);

@@ -72,6 +72,16 @@ describe("server concept input validation", () => {
     if (result.success) expect(result.classification).toBe("thin");
   });
 
+  it("normalizes omitted optional fields to empty strings", () => {
+    const { assumptions: _assumptions, knownRisks: _knownRisks, ...input } = completeInputs;
+    const result = validateConceptInputs(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.assumptions).toBe("");
+      expect(result.data.knownRisks).toBe("");
+    }
+  });
+
   it("accepts SAR, AED, EUR, GBP, and USD unit-aware budgets", () => {
     for (const budgetRange of ["SAR 1.5M – 2M", "AED 900k", "EUR 2 million", "GBP 750,000", "USD 1.2M"]) {
       expect(validateConceptInputs({ ...completeInputs, budgetRange }).success).toBe(true);

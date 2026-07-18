@@ -3,6 +3,7 @@ import { buildReportWorkbook } from "@/lib/exportXlsx";
 import { buildReportPresentation } from "@/lib/exportPptx";
 import { exportReportToPdf } from "@/lib/exportPdf";
 import { demoInputs, demoReport } from "@/data/demoReport";
+import { deriveExecutiveSummary } from "@/lib/pdf/derive";
 
 describe("canonical exports", () => {
   it("builds an XLSX with canonical numeric cells, formulas, and internal-project labels", async () => {
@@ -11,6 +12,9 @@ describe("canonical exports", () => {
     const overallRow = dashboard.getRows(1, dashboard.rowCount)!
       .find((row) => row.getCell(1).value === "Overall Score");
     expect(overallRow?.getCell(2).value).toBe("7.5 / 10");
+    const calculationRow = dashboard.getRows(1, dashboard.rowCount)!
+      .find((row) => row.getCell(1).value === "Estimated composition — Calculated figures %");
+    expect(typeof calculationRow?.getCell(2).value).toBe("number");
 
     const scenarios = workbook.getWorksheet("Scenarios")!;
     const headers = scenarios.getRow(1).values;
@@ -36,6 +40,13 @@ describe("canonical exports", () => {
     expect((bytes as Uint8Array).byteLength).toBeGreaterThan(20_000);
   });
 
+  it("uses internal benefit and adoption in the executive PDF narrative", () => {
+    const narrative = deriveExecutiveSummary(demoReport, demoInputs).join(" ");
+    expect(narrative).toContain("SAR 1.4474M");
+    expect(narrative).toContain("70% adoption");
+    expect(narrative).not.toContain("annual revenue");
+  });
+
   it("renders a multi-page PDF with native selectable text commands", async () => {
     const overflowStacks: string[] = [];
     const logSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
@@ -43,13 +54,17 @@ describe("canonical exports", () => {
         overflowStacks.push(new Error(String(args[0])).stack ?? String(args[0]));
       }
     });
-    const result = await exportReportToPdf(
-      null,
-      "concept-ai-demo.pdf",
-      { report: demoReport, inputs: demoInputs },
-      { download: false },
-    );
-    logSpy.mockRestore();
+    let result: Awaited<ReturnType<typeof exportReportToPdf>>;
+    try {
+      result = await exportReportToPdf(
+        null,
+        "concept-ai-demo.pdf",
+        { report: demoReport, inputs: demoInputs },
+        { download: false },
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
     expect(result.bytes).toBeGreaterThan(20_000);
     expect(result.pageCount).toBeGreaterThan(5);
     expect(result.textRendering).toBe("native-selectable");

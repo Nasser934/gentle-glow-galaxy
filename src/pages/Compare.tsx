@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, GitCompare, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,19 @@ const Compare = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const pickedRef = useRef<string[]>([]);
+  const loadedRef = useRef<Record<string, LoadedReport>>({});
+  const pendingLoads = useRef(new Set<string>());
+
+  const commitPicked = (next: string[]) => {
+    pickedRef.current = next;
+    setPicked(next);
+  };
+
+  const commitLoaded = (next: Record<string, LoadedReport>) => {
+    loadedRef.current = next;
+    setLoaded(next);
+  };
 
   // Load all reports (active + archived) so deep links from the dashboard
   // can preselect even older versions.
@@ -70,29 +83,40 @@ const Compare = () => {
         if (r) { next[r.id] = r.value; okIds.push(r.id); }
       }
       if (okIds.length) {
-        setLoaded((prev) => ({ ...prev, ...next }));
-        setPicked(okIds);
+        commitLoaded({ ...loadedRef.current, ...next });
+        commitPicked(okIds);
       }
     })();
     return () => { cancelled = true; };
   }, [searchParams]);
 
   const toggle = async (id: string) => {
-    if (picked.includes(id)) { setPicked(picked.filter((x) => x !== id)); return; }
-    if (picked.length >= 3) { toast.info("Up to 3 reports at once"); return; }
-    if (!loaded[id]) {
-      const { data, error } = await supabase.from("reports").select("output, inputs").eq("id", id).single();
-      if (error) return toast.error(error.message);
-      const reportInputs = data.inputs as unknown as ConceptInputs;
-      setLoaded({
-        ...loaded,
-        [id]: {
-          inputs: reportInputs,
-          report: ensureEvidenceFields(data.output as unknown as FeasibilityReport, reportInputs),
-        },
-      });
+    if (pickedRef.current.includes(id)) {
+      commitPicked(pickedRef.current.filter((value) => value !== id));
+      return;
     }
-    setPicked([...picked, id]);
+    if (pickedRef.current.length >= 3) { toast.info("Up to 3 reports at once"); return; }
+    if (pendingLoads.current.has(id)) return;
+    pendingLoads.current.add(id);
+    try {
+      if (!loadedRef.current[id]) {
+        const { data, error } = await supabase.from("reports").select("output, inputs").eq("id", id).single();
+        if (error) { toast.error(error.message); return; }
+        const reportInputs = data.inputs as unknown as ConceptInputs;
+        commitLoaded({
+          ...loadedRef.current,
+          [id]: {
+            inputs: reportInputs,
+            report: ensureEvidenceFields(data.output as unknown as FeasibilityReport, reportInputs),
+          },
+        });
+      }
+      if (!pickedRef.current.includes(id) && pickedRef.current.length < 3) {
+        commitPicked([...pickedRef.current, id]);
+      }
+    } finally {
+      pendingLoads.current.delete(id);
+    }
   };
 
   const cells = picked.map((id) => ({
@@ -144,7 +168,7 @@ const Compare = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setPicked([])}
+                  onClick={() => commitPicked([])}
                   aria-label="Clear all selected reports"
                   className="h-7 px-2 text-[12px]"
                 >

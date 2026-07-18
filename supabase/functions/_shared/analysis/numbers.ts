@@ -60,7 +60,10 @@ export function parseUnitAwareNumber(raw: unknown): ParsedUnitAwareNumber {
   };
   if (!displayText || /^(?:n\/?a|none|null|undefined|—|requires validation)$/i.test(displayText)) return missing;
 
-  const tokens = displayText.match(TOKEN_RE) ?? [];
+  // A plain hyphen between two positive tokens is a range delimiter, not the
+  // sign of the second value. Preserve a leading minus for genuine negatives.
+  const tokenText = displayText.replace(/(\d|[kmbt])\s*-\s*(?=\d)/gi, "$1–");
+  const tokens = tokenText.match(TOKEN_RE) ?? [];
   const parts = tokens.map(tokenParts).filter((item): item is { number: number; scale: number | null } => item !== null);
   if (parts.length === 0) return missing;
 
@@ -79,7 +82,7 @@ export function parseUnitAwareNumber(raw: unknown): ParsedUnitAwareNumber {
           ? "money"
           : "number";
 
-  const rangeSyntax = parts.length >= 2 && /(?:\d|[kmbt])\s*(?:–|—|-|\bto\b)\s*(?:\d|[kmbt])/i.test(displayText);
+  const rangeSyntax = parts.length >= 2 && /(?:\d|[kmbt])\s*(?:–|—|\bto\b)\s*(?:\d|[kmbt])/i.test(tokenText);
   if (rangeSyntax) {
     const first = parts[0];
     const second = parts[1];

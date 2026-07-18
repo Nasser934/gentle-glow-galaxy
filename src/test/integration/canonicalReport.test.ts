@@ -158,4 +158,35 @@ describe("canonical report integration", () => {
     expect(canonical.scores.verdict).toBe("REVISE");
     expect(canonical.decision?.blockers).toContain("unmitigated critical risk");
   });
+
+  it("assigns every source a non-empty unique ID", () => {
+    const report = makeReport();
+    report.research.citations.push(
+      { ...report.research.citations[0], title: "Duplicate ID source", url: "https://example.edu/second" },
+      { ...report.research.citations[0], sourceId: "", title: "Missing ID source", url: "https://example.org/third" },
+    );
+    const canonical = buildCanonicalReport(report, completeInputs, {
+      modelId: "test-model",
+      promptVersion: "test-prompt",
+      inputHash: "sha256:test",
+      generationTimestamp: "2026-07-18T00:00:00.000Z",
+    });
+    const ids = canonical.sources.map((source) => source.sourceId);
+    expect(ids.every(Boolean)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("preserves source polarity in the canonical export pack", () => {
+    const canonical = buildCanonicalReport(makeReport(), completeInputs, {
+      modelId: "test-model",
+      promptVersion: "test-prompt",
+      inputHash: "sha256:test",
+      generationTimestamp: "2026-07-18T00:00:00.000Z",
+    });
+    canonical.claims[0].supportingSourceIds = [canonical.sources[0].sourceId];
+    canonical.claims[0].conflictingSourceIds = [canonical.sources[0].sourceId];
+    const pack = buildExportDecisionPack(canonical, completeInputs);
+    expect(pack.evidence.topClaims[0].sources.map((source) => source.relationship))
+      .toEqual(["supporting", "conflicting"]);
+  });
 });

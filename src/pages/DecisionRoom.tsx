@@ -147,6 +147,8 @@ const DecisionRoom = () => {
     : report.executiveSummary || "AI-supported feasibility recommendation.";
 
   const internal = isInternalProject(report, inputs);
+  const governedVerdict = report.decision?.verdict || report.scores.verdict;
+  const scoreBandVerdict = report.scores.verdict;
 
   const sourceById = new Map((report.sources ?? []).map((source) => [source.sourceId, source]));
   const evidenceItems = (report.claims ?? []).slice(0, 5).map((claim) => ({
@@ -216,8 +218,8 @@ const DecisionRoom = () => {
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">AI-supported recommendation</div>
                 <div className="mt-1 flex flex-wrap items-center gap-3">
-                  <Badge className={`px-3 py-1.5 text-sm font-bold ${verdictTone(report.scores.verdict)}`}>
-                    {report.scores.verdict}
+                  <Badge className="bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground">
+                    {governedVerdict}
                   </Badge>
                   <span className="text-sm text-muted-foreground">for {inputs.projectName}</span>
                 </div>
@@ -231,6 +233,7 @@ const DecisionRoom = () => {
                 <div className="rounded-md border border-border bg-muted/30 p-3">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Overall score</div>
                   <div className="mt-1 font-display text-3xl font-bold text-primary">{report.scores.overall.toFixed(1)}<span className="text-base text-muted-foreground">/10</span></div>
+                  <Badge className={`mt-2 text-[10px] ${verdictTone(scoreBandVerdict)}`}>Score-only band: {scoreBandVerdict}</Badge>
                 </div>
                 <div className="rounded-md border border-border bg-muted/30 p-3">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" title="A model-estimated indicator constrained by input completeness and evidence support; it is not statistical certainty.">Model-estimated confidence</div>

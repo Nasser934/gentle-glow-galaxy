@@ -42,8 +42,8 @@ describe("owner-controlled sharing", () => {
     });
 
     await expect(setReportVisibility("report-1", true)).resolves.toMatchObject({ is_public: true });
-    expect(mocks.chain.eq).toHaveBeenCalledWith("id", "report-1");
-    expect(mocks.chain.eq).toHaveBeenCalledWith("user_id", "owner-1");
+    expect(mocks.chain.eq).toHaveBeenNthCalledWith(1, "id", "report-1");
+    expect(mocks.chain.eq).toHaveBeenNthCalledWith(2, "user_id", "owner-1");
   });
 
   it("revokes an existing public report", async () => {
@@ -88,6 +88,7 @@ describe("owner-controlled sharing", () => {
     expect(mocks.from).toHaveBeenCalledTimes(1);
     expect(mocks.from).toHaveBeenCalledWith("reports");
     expect(mocks.chain.update).toHaveBeenCalledWith({ status: "in_review" });
+    expect(mocks.chain.eq).toHaveBeenCalledWith("id", "report-1");
   });
 
   it("treats an unauthorized status RLS no-op as a failure", async () => {

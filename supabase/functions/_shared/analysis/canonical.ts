@@ -11,6 +11,7 @@ import {
 import { validateFinancialModel } from "./financial.ts";
 import { parseUnitAwareNumber, type CurrencyCode } from "./numbers.ts";
 import { calculateAuthoritativeScore, FMART_DIMENSIONS, SCORING_ENGINE_VERSION, type LegacyVerdict } from "./scoring.ts";
+import { stableSourceId } from "./research.ts";
 
 export const REPORT_SCHEMA_VERSION = "2.0.0";
 
@@ -110,13 +111,21 @@ function stableClaimId(section: string, text: string) {
 }
 
 function normalizeSources(report: MutableReport, accessDate: string): EvidenceSource[] {
+  const usedIds = new Set<string>();
   return (report.research?.citations ?? []).map((citation, index) => {
     const url = String(citation.url ?? "").trim();
     const domain = String(citation.domain ?? "").trim() || domainFor(url);
     const source = String(citation.publisher ?? citation.source ?? "").trim();
+    const title = String(citation.title ?? source ?? "Source");
+    const baseId = String(citation.sourceId ?? "").trim()
+      || stableSourceId(url || `${title}\u0000${index}`);
+    let sourceId = baseId;
+    let suffix = 2;
+    while (usedIds.has(sourceId)) sourceId = `${baseId}-${suffix++}`;
+    usedIds.add(sourceId);
     return {
-      sourceId: String(citation.sourceId ?? `SRC-${String(index + 1).padStart(3, "0")}`),
-      title: String(citation.title ?? source ?? "Source"),
+      sourceId,
+      title,
       url,
       domain,
       publisher: source || domain || "Unknown",
@@ -426,9 +435,13 @@ export function buildCanonicalReport<T extends object>(
     isRegulatedSector: /health|financial|government|energy|telecom/i.test(String(input.industry ?? "")),
     hasRegulatoryInput: Boolean(String(input.regulatoryConsiderations ?? "").trim()),
     unsupportedCalculationCount: financialValidation.warnings.length,
-    contradictoryInputCount: Array.isArray(report.inputCompleteness)
-      ? 0
-      : Number((report.inputCompleteness as Record<string, unknown> | undefined)?.contradictoryFields && 1 || 0),
+    contradictoryInputCount: (() => {
+      if (Array.isArray(report.inputCompleteness)) return 0;
+      const contradictoryFields = (report.inputCompleteness as Record<string, unknown> | undefined)?.contradictoryFields;
+      if (Array.isArray(contradictoryFields)) return contradictoryFields.length;
+      if (contradictoryFields && typeof contradictoryFields === "object") return Object.keys(contradictoryFields).length;
+      return contradictoryFields ? 1 : 0;
+    })(),
   });
   const unmitigatedCriticalRisk = (report.risks ?? []).some((risk) => {
     const criticalSignal = [risk.level, risk.name, risk.severity, risk.impact]

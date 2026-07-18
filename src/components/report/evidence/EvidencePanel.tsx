@@ -237,6 +237,7 @@ export const EvidenceMixPanel = ({ report }: { report: FeasibilityReport }) => {
       <CardContent className="space-y-3">
         <Bar label="From your inputs" pct={mix.userInputPercent} tone="primary" />
         <Bar label="Available external evidence" pct={mix.webResearchPercent} tone="success" />
+        <Bar label="Calculated figures" pct={mix.calculationPercent ?? 0} tone="muted" />
         <Bar label="AI inference" pct={mix.aiAssumptionPercent} tone={aiHeavy ? "warning" : "muted"} />
         {aiHeavy && (
           <div className="rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">

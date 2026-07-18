@@ -22,6 +22,18 @@ describe("URL-safe report slugs", () => {
     expect(createUrlSafeSlug(new Uint8Array(18).fill(1)))
       .not.toBe(createUrlSafeSlug(new Uint8Array(18).fill(2)));
   });
+
+  it("enforces the 96-bit entropy boundary", () => {
+    expect(() => createUrlSafeSlug(new Uint8Array(11))).toThrow("between 96 and 512 bits");
+    expect(createUrlSafeSlug(new Uint8Array(12))).toHaveLength(24);
+    expect(() => createUrlSafeSlug(new Uint8Array(65))).toThrow("between 96 and 512 bits");
+  });
+
+  it("enforces the database-compatible maximum slug length", () => {
+    expect(isUrlSafeSlug("a".repeat(128))).toBe(true);
+    expect(isUrlSafeSlug("a".repeat(129))).toBe(false);
+    expect(isUrlSafeSlug("é".repeat(64))).toBe(false);
+  });
 });
 
 describe("consumer-safe wording", () => {
@@ -42,6 +54,11 @@ describe("consumer-safe wording", () => {
   it("is idempotent for already consumer-safe confidence wording", () => {
     const safe = "Model-estimated confidence is an analysis indicator.";
     expect(sanitizeConsumerText(sanitizeConsumerText(safe))).toBe(safe);
+  });
+
+  it("does not rewrite ordinary domain language", () => {
+    expect(sanitizeConsumerText("Consumer confidence improved while confidence was model-estimated."))
+      .toBe("Consumer confidence improved while confidence was model-estimated.");
   });
 
   it("sanitizes report narrative without corrupting source URLs or IDs", () => {

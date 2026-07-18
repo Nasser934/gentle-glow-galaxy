@@ -107,6 +107,7 @@ export function buildReportWorkbook(
     ["Material Risks (High + Med)", pack.risk.materialRiskCount],
     ["Estimated composition — User input %", pack.evidence.mix.userInputPercent],
     ["Estimated composition — Available external evidence %", pack.evidence.mix.webResearchPercent],
+    ["Estimated composition — Calculated figures %", pack.evidence.mix.calculationPercent ?? 0],
     ["Estimated composition — AI inference %", pack.evidence.mix.aiAssumptionPercent],
     ["Composition method", "Heuristic estimate based on input completeness and available sources."],
   ];
@@ -397,7 +398,7 @@ export function buildReportWorkbook(
         c.claimId,
         c.claimText,
         c.confidence,
-        c.sources.map((s) => s.domain || s.title).filter(Boolean).join(", "),
+        c.sources.map((s) => `${s.relationship === "conflicting" ? "Conflict: " : ""}${s.domain || s.title}`).filter(Boolean).join(", "),
       ]);
       borderRow(row);
       row.getCell(2).alignment = { wrapText: true, vertical: "top" };

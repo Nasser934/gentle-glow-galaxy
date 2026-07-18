@@ -130,6 +130,21 @@ export interface MemoSections {
   next30Days: string[];
 }
 
+function baseCaseDisplay(report: FeasibilityReport, internal: boolean) {
+  const base = report.financials.scenarios?.find((scenario) => /base/i.test(scenario.scenario));
+  if (!base) return { outcome: "", participation: "" };
+  if (internal) {
+    const outcome = s(base.annualValueDisplay || (base.annualFinancialBenefit != null
+      ? `${report.financials.currency} ${base.annualFinancialBenefit.toLocaleString()}`
+      : "Requires validation"));
+    const participation = base.adoptionRate != null
+      ? `${Math.round(base.adoptionRate * 100)}%`
+      : "Requires validation";
+    return { outcome, participation };
+  }
+  return { outcome: s(base.annualRevenue), participation: s(base.subscribersYr1) };
+}
+
 export function deriveMemoSections(
   report: FeasibilityReport,
   inputs: ConceptInputs,
@@ -153,17 +168,9 @@ export function deriveMemoSections(
   const be = shortBreakEven(fin.breakEvenSummary);
   if (be) moneyLogic.push(labels.isInternal ? `Payback: ${be} (operational savings).` : `Break-even: ${be}.`);
   if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
-  const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
-  if (base) {
-    const outcome = labels.isInternal
-      ? s(base.annualValueDisplay || (base.annualFinancialBenefit != null
-        ? `${fin.currency} ${base.annualFinancialBenefit.toLocaleString()}`
-        : "Requires validation"))
-      : s(base.annualRevenue);
-    const participation = labels.isInternal
-      ? (base.adoptionRate != null ? `${Math.round(base.adoptionRate * 100)}%` : "Requires validation")
-      : s(base.subscribersYr1);
-    moneyLogic.push(labels.baseCaseTemplate(outcome, participation));
+  const baseCase = baseCaseDisplay(report, labels.isInternal);
+  if (baseCase.outcome || baseCase.participation) {
+    moneyLogic.push(labels.baseCaseTemplate(baseCase.outcome, baseCase.participation));
   }
   if (!moneyLogic.length) {
     moneyLogic.push("Detailed financial model required before funding approval.");
@@ -215,8 +222,8 @@ export function deriveExecutiveSummary(
     .slice(0, 2)
     .map((r) => s(r.name));
   const be = shortBreakEven(fin.breakEvenSummary);
-  const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
-  const baseRev = base ? withCurrency(s(base.annualRevenue), cur) : "";
+  const baseCase = baseCaseDisplay(report, labels.isInternal);
+  const baseRev = baseCase.outcome ? withCurrency(baseCase.outcome, cur) : "";
 
   const out: string[] = [];
 
@@ -243,7 +250,7 @@ export function deriveExecutiveSummary(
   const bits: string[] = [];
   if (fin.investmentRange) bits.push(`The expected investment is ${withCurrency(s(fin.investmentRange), cur)}`);
   if (be) bits.push(labels.isInternal ? `with payback around ${be} driven by operational savings` : `with break-even around ${be}`);
-  if (baseRev) bits.push(`and a base case of ${baseRev} ${labels.isInternal ? "in annual savings" : "in annual revenue"}`);
+  if (baseRev) bits.push(`and a base case of ${baseRev} ${labels.isInternal ? "in annual savings" : "in annual revenue"}${baseCase.participation ? ` at ${baseCase.participation} ${labels.isInternal ? "adoption" : "Year-1 customers"}` : ""}`);
   out.push(
     bits.length
       ? `${bits.join(", ")}. ${labels.isInternal ? "The value case depends on converting manual effort, duplicated tooling, and governance risk into measurable cost avoidance." : "The value case depends on customer acquisition holding to plan and unit economics improving as the product scales."}`

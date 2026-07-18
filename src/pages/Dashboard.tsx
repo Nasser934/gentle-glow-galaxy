@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -128,14 +128,16 @@ const Dashboard = () => {
   const [scope, setScope] = useState<ReportScope>(initialScope);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pendingArchive, setPendingArchive] = useState<Group | null>(null);
+  const loadSequence = useRef(0);
 
   const load = (s: ReportScope = scope) => {
+    const request = ++loadSequence.current;
     setLoading(true);
     setLoadError(false);
     listMyReports(s)
-      .then((d) => setRows(d as Row[]))
-      .catch(() => setLoadError(true))
-      .finally(() => setLoading(false));
+      .then((d) => { if (request === loadSequence.current) setRows(d as Row[]); })
+      .catch(() => { if (request === loadSequence.current) setLoadError(true); })
+      .finally(() => { if (request === loadSequence.current) setLoading(false); });
   };
   useEffect(() => {
     load(scope);
