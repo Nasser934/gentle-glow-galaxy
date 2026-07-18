@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Logo, LogoMark } from "@/components/Logo";
@@ -13,6 +13,7 @@ import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   clearAuthReturnPath,
+  consumeAuthReturnPath,
   rememberAuthReturnPath,
   sanitizeAuthReturnPath,
 } from "@/lib/authRedirect";
@@ -38,7 +39,9 @@ const AuthPage = () => {
   const redirectTo = sanitizeAuthReturnPath(routeState?.from);
 
   useEffect(() => {
-    if (!authLoading && user) navigate(redirectTo, { replace: true });
+    if (authLoading || !user) return;
+    const pendingTarget = consumeAuthReturnPath(window.sessionStorage);
+    navigate(pendingTarget ?? redirectTo, { replace: true });
   }, [user, authLoading, navigate, redirectTo]);
 
   const handleEmail = async (e: React.FormEvent) => {
