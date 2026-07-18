@@ -76,7 +76,7 @@ async function recoverIdempotentSave(userId: string, saveOperationKey: string): 
 export async function saveReport(
   inputs: ConceptInputs,
   output: FeasibilityReport,
-  saveOperationKey = crypto.randomUUID(),
+  saveOperationKey: string = crypto.randomUUID(),
 ): Promise<SavedReport> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
