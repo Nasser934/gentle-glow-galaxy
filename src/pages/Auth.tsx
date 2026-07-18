@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Logo, LogoMark } from "@/components/Logo";
@@ -11,6 +11,12 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  clearAuthReturnPath,
+  consumeAuthReturnPath,
+  rememberAuthReturnPath,
+  sanitizeAuthReturnPath,
+} from "@/lib/authRedirect";
 import { toast } from "sonner";
 
 const GoogleIcon = () => (
@@ -30,10 +36,12 @@ const AuthPage = () => {
   const [busy, setBusy] = useState(false);
 
   const routeState = loc.state as { from?: string } | null;
-  const redirectTo = routeState?.from || "/analyze";
+  const redirectTo = sanitizeAuthReturnPath(routeState?.from);
 
   useEffect(() => {
-    if (!authLoading && user) navigate(redirectTo, { replace: true });
+    if (authLoading || !user) return;
+    const pendingTarget = consumeAuthReturnPath(window.sessionStorage);
+    navigate(pendingTarget ?? redirectTo, { replace: true });
   }, [user, authLoading, navigate, redirectTo]);
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -63,10 +71,16 @@ const AuthPage = () => {
 
   const handleGoogle = async () => {
     setBusy(true);
+    rememberAuthReturnPath(window.sessionStorage, redirectTo);
+
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
+      // Let Lovable Cloud choose its supported callback for the current preview or domain.
+      // Passing a protected route as redirect_uri can fail when that exact URL is not allow-listed.
+      const result = await lovable.auth.signInWithOAuth("google");
+      if (result.redirected) return;
       if (result.error) throw result.error;
     } catch (error: unknown) {
+      clearAuthReturnPath(window.sessionStorage);
       toast.error(error instanceof Error ? error.message : "Google sign-in failed");
     } finally {
       setBusy(false);

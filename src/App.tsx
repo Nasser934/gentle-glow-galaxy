@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthReturnRedirect } from "@/components/AuthReturnRedirect";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
@@ -90,6 +91,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <AuthReturnRedirect />
             <RoutedApp />
           </AuthProvider>
         </BrowserRouter>
