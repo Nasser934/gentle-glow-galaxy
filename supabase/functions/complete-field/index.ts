@@ -110,7 +110,7 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-    modelId = Deno.env.get("COMPLETE_FIELD_MODEL_ID") || Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
+    modelId = Deno.env.get("COMPLETE_FIELD_MODEL_ID") || Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-2.5-flash";
 
     const ctx = `Project: ${inputs?.projectName || "(unnamed)"}
 Industry: ${inputs?.industry || "(not set)"}
