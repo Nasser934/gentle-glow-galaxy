@@ -1,5 +1,5 @@
 // ============================================================
-// Concept AI — full data model (FMART feasibility report)
+// Concept AI — full data model (FMART-O feasibility report)
 // ============================================================
 
 export interface ConceptInputs {
@@ -53,7 +53,7 @@ export const initialInputs: ConceptInputs = {
 };
 
 // ============================================================
-// FMART scoring
+// FMART-O scoring
 // ============================================================
 export interface FMARTScores {
   financial: number;       // 0-10
@@ -122,6 +122,14 @@ export interface ResearchCitation {
   url: string;
   source: string;
   takeaway: string;
+  sourceId?: string;
+  domain?: string;
+  publisher?: string;
+  publicationDate?: string | null;
+  accessDate?: string;
+  sourceType?: string;
+  quality?: SourceQuality;
+  stale?: boolean;
 }
 
 export interface MarketResearch {
@@ -134,6 +142,14 @@ export interface MarketResearch {
   redditSignals: string[];
   webSignals: string[];
   citations: ResearchCitation[];
+  coverage?: "Sufficient" | "Partial" | "Limited" | "No reliable external evidence";
+  coverageMethod?: string;
+  coverageMetrics?: {
+    reliableSourceCount: number;
+    independentReliableDomains: number;
+    currentSourceCount: number;
+    directClaimSupportCount: number;
+  };
 }
 
 // ============================================================
@@ -155,13 +171,19 @@ export interface OpExItem {
 export interface RevenueScenario {
   scenario: "Optimistic" | "Base Case" | "Pessimistic";
   probability: string;       // "30%"
-  subscribersYr1: string;    // "1,500" — generic units allowed
-  annualRevenue: string;     // "SAR 18.9M"
+  subscribersYr1?: string;   // commercial projects only
+  annualRevenue?: string;    // commercial projects only
+  adoptionRate?: number;     // internal projects: 0-1
+  annualLabourCostAvoided?: number;
+  annualProductivityBenefit?: number;
+  annualFinancialBenefit?: number;
+  annualValueDisplay?: string;
   breakEven: string;         // "Month 3"
 }
 
 export interface Financials {
   currency: string;
+  projectType?: "commercial" | "internal";
   capExTotal: { low: number; high: number; mid: number };
   capEx: CapExItem[];
   opEx: OpExItem[];
@@ -169,6 +191,7 @@ export interface Financials {
   investmentRange: string;        // "380–620k SAR"
   breakEvenSummary: string;       // "Month 4–6"
   ltvCacRatio?: string;           // "28x–32x"
+  assumptionStatus?: FigureValidationStatus;
 }
 
 // ============================================================
@@ -211,6 +234,7 @@ export interface FeasibilityReport {
   research?: MarketResearch;
 
   financials: Financials;
+  normalizedFigures?: Record<string, NormalizedFigure>;
 
   risks: RiskRow[];
 
@@ -231,16 +255,33 @@ export interface FeasibilityReport {
     weakFields: string[];
     contradictoryFields: string[];
   };
+  inputFieldAssessments?: InputFieldAssessment[];
+  inputOrigins?: Partial<Record<keyof ConceptInputs, "user_input" | "ai_suggestion" | "accepted_ai_suggestion" | "edited_after_ai_suggestion">>;
   evidenceMix?: {
     userInputPercent: number;
     webResearchPercent: number;
+    calculationPercent?: number;
     aiAssumptionPercent: number;
+    label?: string;
+    method?: string;
   };
   scoreExplanation?: ScoreExplanationRow[];
   claimEvidenceMap?: ClaimEvidenceRow[];
   reportVersions?: ReportVersion[];
   decision?: DecisionVerdict;
   legacyEvidence?: boolean; // true when fields were derived (not authored by AI)
+  demo?: {
+    synthetic: boolean;
+    label: string;
+    disclaimer: string;
+  };
+  validationStatus?: "valid" | "valid_with_warnings";
+  validationWarnings?: Array<{ code: string; message: string; path?: string }>;
+  scoringAudit?: ScoringAudit;
+  sources?: EvidenceSource[];
+  claims?: EvidenceClaim[];
+  reportSchemaVersion?: string;
+  qualityMetadata?: QualityMetadata;
 }
 
 export type InputStatus = "complete" | "needs_improvement" | "weak" | "missing";
@@ -274,6 +315,100 @@ export interface ClaimEvidenceRow {
   confidence: "High" | "Medium" | "Low";
   sources: string[];
   userCanImproveBy: string;
+  provenance?: ClaimProvenance;
+  supportingSourceIds?: string[];
+  conflictingSourceIds?: string[];
+  dimensions?: Array<"financial" | "market" | "achievability" | "risk" | "timing" | "operational">;
+  supportStatus?: "supported" | "conflicting" | "unsupported" | "ai_inference";
+  calculationPercent?: number;
+  displayStatus?: string;
+}
+
+export type FigureValidationStatus =
+  | "Verified from user input"
+  | "Supported by cited source"
+  | "Calculated"
+  | "AI estimate"
+  | "Requires validation";
+
+export interface NormalizedFigure {
+  value: number | null;
+  low: number | null;
+  high: number | null;
+  currency: "SAR" | "USD" | "AED" | "EUR" | "GBP" | null;
+  unit: "money" | "percent" | "month" | "year" | "number" | null;
+  displayText: string;
+  status: FigureValidationStatus;
+  label: string;
+}
+
+export type ClaimProvenance = "User input" | "Cited source" | "Calculation" | "AI inference" | "Mixed" | "Unknown";
+
+export type SourceQuality =
+  | "Primary official source"
+  | "Government or regulator"
+  | "Academic or institutional"
+  | "Company source"
+  | "Reputable industry research"
+  | "Community signal"
+  | "General reference"
+  | "Unknown";
+
+export interface EvidenceSource {
+  sourceId: string;
+  title: string;
+  url: string;
+  domain: string;
+  publisher: string;
+  publicationDate?: string | null;
+  accessDate: string;
+  sourceType: string;
+  quality: SourceQuality;
+  stale?: boolean;
+}
+
+export interface EvidenceClaim {
+  claimId: string;
+  claimText: string;
+  reportSection: string;
+  provenance: ClaimProvenance;
+  supportingSourceIds: string[];
+  conflictingSourceIds: string[];
+  dimensions?: Array<"financial" | "market" | "achievability" | "risk" | "timing" | "operational">;
+  composition: {
+    userInputPercent: number;
+    citedSourcePercent: number;
+    calculationPercent: number;
+    aiInferencePercent: number;
+  };
+  supportStatus: "supported" | "conflicting" | "unsupported" | "ai_inference";
+  displayStatus?: string;
+}
+
+export interface ScoringAudit {
+  modelProposedOverall: number | null;
+  modelProposedVerdict: string | null;
+  serverCalculatedOverall: number;
+  difference: number | null;
+  finalAuthoritativeScore: number;
+  weightsSource: "model_validated" | "industry_default";
+  scoringEngineVersion: string;
+}
+
+export interface QualityMetadata {
+  validationStatus: "valid" | "valid_with_warnings";
+  validationWarnings: string[];
+  scoringEngineVersion: string;
+  promptVersion: string;
+  modelId: string;
+  reportSchemaVersion: string;
+  inputHash: string;
+  generationTimestamp: string;
+  researchTimestamp: string;
+  sourceCount: number;
+  primarySourceCount: number;
+  unsupportedClaimCount: number;
+  financialWarningCount: number;
 }
 
 export interface ReportVersion {
@@ -361,6 +496,7 @@ export const TECHNOLOGY_READINESS = [
 ] as const;
 
 export const BUSINESS_MODELS = [
+  "Internal Platform / Cost Avoidance",
   "SaaS / Subscription Software",
   "Marketplace / Platform",
   "Hardware / Devices",
@@ -373,6 +509,7 @@ export const BUSINESS_MODELS = [
 ] as const;
 
 export const REVENUE_MODELS = [
+  "Cost avoidance / productivity benefit",
   "Recurring subscription",
   "Transaction / commission fee",
   "License / one-time sale",

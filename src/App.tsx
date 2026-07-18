@@ -3,25 +3,28 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 // Retry dynamic imports once, then force a hard reload on the second failure.
 // Prevents blank screens when a lazy chunk 404s after a redeploy.
-const lazyWithRetry = <T extends ComponentType<any>>(
+const lazyWithRetry = <T extends ComponentType<Record<string, never>>>(
   factory: () => Promise<{ default: T }>,
 ) =>
   lazy(async () => {
     const reloadKey = "lovable:chunk-reloaded";
     try {
-      return await factory();
+      const loaded = await factory();
+      if (typeof window !== "undefined") sessionStorage.removeItem(reloadKey);
+      return loaded;
     } catch (err) {
       if (typeof window !== "undefined" && !sessionStorage.getItem(reloadKey)) {
         sessionStorage.setItem(reloadKey, "1");
         window.location.reload();
-        return await new Promise<{ default: T }>(() => {});
       }
       throw err;
     }
@@ -55,32 +58,44 @@ const DemoOrProtected = ({ children }: { children: React.ReactNode }) => {
   return <ProtectedRoute>{children}</ProtectedRoute>;
 };
 
+const RoutedApp = () => {
+  const location = useLocation();
+  return (
+    <AppErrorBoundary resetKey={`${location.pathname}${location.search}`}>
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/demo" element={<Shelled><Results /></Shelled>} />
+          <Route path="/r/:slug" element={<SharedReport />} />
+          <Route path="/analyze" element={<ProtectedRoute><Shelled><Analyze /></Shelled></ProtectedRoute>} />
+          <Route path="/results" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
+          <Route path="/reports/:reportId" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
+          <Route path="/compare" element={<ProtectedRoute><Shelled><Compare /></Shelled></ProtectedRoute>} />
+          <Route path="/decision-room" element={<ProtectedRoute><Shelled><DecisionRoomEntry /></Shelled></ProtectedRoute>} />
+          <Route path="/decision-room/:reportId" element={<DemoOrProtected><Shelled><DecisionRoom /></Shelled></DemoOrProtected>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </AppErrorBoundary>
+  );
+};
+
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Suspense fallback={null}>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/r/:slug" element={<SharedReport />} />
-              <Route path="/analyze" element={<ProtectedRoute><Shelled><Analyze /></Shelled></ProtectedRoute>} />
-              <Route path="/results" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
-              <Route path="/reports/:reportId" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
-              <Route path="/compare" element={<ProtectedRoute><Shelled><Compare /></Shelled></ProtectedRoute>} />
-              <Route path="/decision-room" element={<ProtectedRoute><Shelled><DecisionRoomEntry /></Shelled></ProtectedRoute>} />
-              <Route path="/decision-room/:reportId" element={<DemoOrProtected><Shelled><DecisionRoom /></Shelled></DemoOrProtected>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <AppErrorBoundary resetKey="global">
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <RoutedApp />
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;

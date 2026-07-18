@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -31,14 +32,16 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
+import type { Formatter, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { FMARTRadar } from "./FMARTRadar";
 import { MethodologyPanel } from "./MethodologyPanel";
 import { MarketGrowthChart } from "./MarketGrowthChart";
 import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
-import { EvidenceChips } from "./EvidenceChips";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString } from "@/lib/format";
+import { numericRange, numericValue } from "@/lib/numbers";
 
 
 const CHART_COLORS = [
@@ -61,6 +64,39 @@ const riskTone = (level: string) =>
   : level === "Med" ? "bg-warning/10 text-warning border-warning/20"
   : "bg-destructive/10 text-destructive border-destructive/20";
 
+const renderFundingLabel = (props: PieLabelRenderProps) => {
+  const pct = Number(props["pct"] ?? props.percent ?? 0);
+  if (pct < 5) return null;
+  const cx = Number(props.cx ?? 0);
+  const cy = Number(props.cy ?? 0);
+  const midAngle = Number(props["midAngle"] ?? 0);
+  const innerRadius = Number(props.innerRadius ?? 0);
+  const outerRadius = Number(props.outerRadius ?? 0);
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+  const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={13}
+      fontWeight={700}
+      style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
+    >
+      {`${pct.toFixed(0)}%`}
+    </text>
+  );
+};
+
+const fundingTooltipFormatter: Formatter<ValueType, NameType> = (_value, name, item) => {
+  const payload = item.payload as { pct?: unknown } | undefined;
+  const pct = Number(payload?.pct ?? 0);
+  return [`${pct.toFixed(1)}%`, name];
+};
+
 const KpiCard = ({
   label,
   value,
@@ -74,7 +110,7 @@ const KpiCard = ({
   insight?: string;
   caption?: string;
   fullValue?: string | null;
-  icon?: any;
+  icon?: LucideIcon;
 }) => (
   <div className="flex h-full min-h-[148px] flex-col rounded-xl border border-border bg-card p-5">
     <div className="flex items-start justify-between gap-3">
@@ -115,6 +151,13 @@ const KpiCard = ({
 
 const extractShortBreakEven = (text?: string | null) => {
   if (!text) return "—";
+  const range = numericRange(text);
+  if (/month/i.test(text) && range) {
+    return range.low === range.high ? `Month ${range.low}` : `Month ${range.low}–${range.high}`;
+  }
+  if (/year/i.test(text) && range) {
+    return range.low === range.high ? `Year ${range.low}` : `Year ${range.low}–${range.high}`;
+  }
   const monthMatch = text.match(/month\s*(\d+)/i) || text.match(/(\d+)\s*[-–]?\s*month/i);
   if (monthMatch) return `Month ${monthMatch[1]}`;
   const yearMatch = text.match(/year\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*year/i);
@@ -124,16 +167,9 @@ const extractShortBreakEven = (text?: string | null) => {
 
 const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
 
-
-
-const toNumber = (value?: string) => {
-  const match = value?.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
-  return match ? Number(match[0]) : 0;
-};
-
 const levelScore = (level: string) => level === "High" ? 3 : level === "Med" ? 2 : 1;
 
-const MiniInsight = ({ title, items, citations }: { title: string; items: string[]; citations?: FeasibilityReport["research"]["citations"] }) => (
+const MiniInsight = ({ title, items }: { title: string; items: string[] }) => (
   <Card>
     <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
     <CardContent>
@@ -143,7 +179,6 @@ const MiniInsight = ({ title, items, citations }: { title: string; items: string
             <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
             <div className="min-w-0 flex-1">
               <span>{item}</span>
-              <EvidenceChips text={item} citations={citations} />
             </div>
           </li>
         ))}
@@ -154,6 +189,8 @@ const MiniInsight = ({ title, items, citations }: { title: string; items: string
 
 export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityReport; inputs: ConceptInputs }) => {
   const cur = report.financials.currency;
+  const internal = report.financials.projectType === "internal"
+    || /internal|cost avoidance|productivity benefit/i.test(`${inputs.businessModel} ${inputs.revenueModel}`);
   const scoreData = [
     { name: "Financial", score: report.scores.financial, finding: report.scores.financialFinding },
     { name: "Market", score: report.scores.market, finding: report.scores.marketFinding },
@@ -169,18 +206,18 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
     impact: levelScore(risk.impact),
     level: risk.level,
   }));
-  const fundingData = report.fundingMix.map((item) => ({ name: item.source, value: toNumber(item.share) || 1 }));
+  const fundingData = report.fundingMix.map((item) => ({ name: item.source, value: numericValue(item.share, 0) || 1 }));
   const scenarioData = report.financials.scenarios.map((item) => ({
     scenario: item.scenario,
-    probability: toNumber(item.probability),
-    revenue: toNumber(item.annualRevenue),
-    breakEven: toNumber(item.breakEven),
+    probability: numericValue(item.probability, 0),
+    value: item.annualFinancialBenefit ?? numericValue(item.annualRevenue, 0),
+    breakEven: numericValue(item.breakEven, 0),
   }));
   const opExData = report.financials.opEx.map((item) => ({ name: item.category, monthly: item.monthly, annual: item.annual }));
   const marketShareData = [
-    { name: "TAM", value: toNumber(report.market.tamValue) || 100 },
-    { name: "SAM", value: toNumber(report.market.samValue) || 35 },
-    { name: "SOM", value: toNumber(report.market.somValue) || 8 },
+    { name: "TAM", value: numericValue(report.market.tamValue, 0) || 100 },
+    { name: "SAM", value: numericValue(report.market.samValue, 0) || 35 },
+    { name: "SOM", value: numericValue(report.market.somValue, 0) || 8 },
   ];
   const research = report.research;
   const researchCount = research?.citations?.length ?? 0;
@@ -189,8 +226,14 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-bold text-foreground">{inputs.projectName} — Live Dashboard</h2>
-          <p className="text-sm text-muted-foreground">Interactive feasibility command center with market research, charts, risk signals, and financial figures.</p>
+          <h2 className="font-display text-2xl font-bold text-foreground">{inputs.projectName} — Analysis Dashboard</h2>
+          <p className="text-sm text-muted-foreground">Validated score, assumptions, available external evidence, risk signals, and financial figures.</p>
+          {report.demo?.synthetic && (
+            <div className="mt-2 space-y-0.5 text-xs font-medium text-warning">
+              <div>{report.demo.label}</div>
+              <div>{report.demo.disclaimer}</div>
+            </div>
+          )}
         </div>
         <Badge className={`px-3 py-1.5 text-sm font-bold ${verdictTone(report.scores.verdict)}`}>
           {report.scores.verdict}
@@ -202,7 +245,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           icon={Target}
           label="Overall Score"
           value={`${report.scores.overall.toFixed(1)} / 10`}
-          caption="FMART-O weighted"
+          caption="Server-validated FMART-O weighted score"
           insight={report.scores.verdict}
           fullValue={`${report.scores.overall.toFixed(1)} / 10`}
         />
@@ -211,7 +254,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           label="Investment"
           value={normalizeCurrencyDisplay(report.financials.investmentRange)}
           caption={cur || "USD"}
-          insight="Estimated initial investment range"
+          insight={report.normalizedFigures?.investmentRange?.label || "AI-estimated range — requires validation"}
           fullValue={report.financials.investmentRange}
         />
         <KpiCard
@@ -219,7 +262,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           label="Break-even"
           value={extractShortBreakEven(report.financials.breakEvenSummary)}
           caption="Base case"
-          insight={report.financials.breakEvenSummary}
+          insight={report.normalizedFigures?.breakEven?.label || "AI-estimated assumption — not externally verified"}
           fullValue={report.financials.breakEvenSummary}
         />
         <KpiCard
@@ -227,15 +270,15 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           label="Market TAM"
           value={normalizeCurrencyDisplay(report.market.tamValue)}
           caption={report.market.tamCagr ? `CAGR ${report.market.tamCagr}` : undefined}
-          insight={report.market.tamLabel}
+          insight={`${report.market.tamLabel} · ${report.normalizedFigures?.tam?.label || "AI-estimated range — requires validation"}`}
           fullValue={report.market.tamValue}
         />
         <KpiCard
           icon={Globe2}
           label="Research Signals"
           value={`${researchCount || "—"}`}
-          caption={research?.confidence ? `${research.confidence} confidence` : "Free public sources"}
-          insight="Grounded research sources used in this analysis"
+          caption={research?.coverage || (research?.confidence ? `${research.confidence} analysis indicator` : "Available external evidence")}
+          insight="Available external evidence; source count alone does not prove claim support"
           fullValue={String(researchCount)}
         />
       </div>
@@ -297,7 +340,6 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                   </div>
                   <Progress value={item.score * 10} className="h-2" />
                   <p className="mt-2 text-xs text-muted-foreground">{item.finding}</p>
-                  <EvidenceChips text={item.finding} citations={research?.citations} />
                 </div>
               ))}
             </CardContent>
@@ -307,11 +349,11 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         <TabsContent value="market" className="space-y-4">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle className="text-base">Market Growth — TAM vs SAM</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{internal ? "Internal Opportunity — Total vs Addressable" : "Market Growth — TAM vs SAM"}</CardTitle></CardHeader>
               <CardContent><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-base">TAM / SAM / SOM Funnel</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{internal ? "Synthetic Opportunity Hierarchy" : "TAM / SAM / SOM Funnel"}</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -388,7 +430,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           </div>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle className="text-base">Revenue Scenarios</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{internal ? "Internal Financial Benefit Scenarios" : "Revenue Scenarios"}</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -399,7 +441,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                       <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
                       <Legend />
-                      <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="value" name={internal ? "Annual financial benefit" : "Revenue"} fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
                       <Line yAxisId="right" type="monotone" dataKey="probability" name="Probability %" stroke="hsl(var(--warning))" strokeWidth={2.5} />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -424,32 +466,13 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                             outerRadius="68%"
                             paddingAngle={2}
                             labelLine={false}
-                            label={({ cx, cy, midAngle, innerRadius, outerRadius, pct }: any) => {
-                              if (pct < 5) return null;
-                              const r = innerRadius + (outerRadius - innerRadius) * 0.5;
-                              const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
-                              const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
-                              return (
-                                <text
-                                  x={x}
-                                  y={y}
-                                  fill="#ffffff"
-                                  textAnchor="middle"
-                                  dominantBaseline="central"
-                                  fontSize={13}
-                                  fontWeight={700}
-                                  style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
-                                >
-                                  {`${pct.toFixed(0)}%`}
-                                </text>
-                              );
-                            }}
+                            label={renderFundingLabel}
                           >
                             {withPct.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                           </Pie>
                           <Tooltip
                             contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
-                            formatter={(value: any, name: any, entry: any) => [`${entry?.payload?.pct?.toFixed(1)}%`, name]}
+                            formatter={fundingTooltipFormatter}
                           />
                           <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
                         </PieChart>
@@ -507,8 +530,8 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <Card>
                 <CardHeader>
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                    <Globe2 className="h-4 w-4 text-primary" /> Free-source market research
-                    <Badge variant="outline">{research.confidence} confidence</Badge>
+                    <Globe2 className="h-4 w-4 text-primary" /> External research context
+                    <Badge variant="outline">{research.coverage || `${research.confidence} analysis indicator`}</Badge>
                     <Badge variant="outline">{research.sentiment}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -517,17 +540,21 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <MiniInsight title="Key market signals" items={research.keySignals} citations={research.citations} />
-                <MiniInsight title="Customer pain points" items={research.painPoints} citations={research.citations} />
-                <MiniInsight title="Reddit/community signals" items={research.redditSignals} citations={research.citations} />
-                <MiniInsight title="Open web signals" items={research.webSignals} citations={research.citations} />
+                <MiniInsight title="Available market signals" items={research.keySignals} />
+                <MiniInsight title="Reported or inferred pain points" items={research.painPoints} />
+                <MiniInsight title="Community signals — directional only" items={research.redditSignals} />
+                <MiniInsight title="General web context" items={research.webSignals} />
               </div>
               <Card>
                 <CardHeader><CardTitle className="text-base">Research Citations</CardTitle></CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-2">
                   {research.citations.slice(0, 8).map((citation) => (
                     <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{citation.source}</div>
+                      <div className="flex flex-wrap items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span>{citation.source}</span>
+                        {citation.quality && <Badge variant="outline" className="text-[9px] normal-case">{citation.quality}</Badge>}
+                        {citation.stale && <Badge variant="outline" className="border-warning/40 text-[9px] normal-case text-warning">Stale</Badge>}
+                      </div>
                       <div className="mt-1 line-clamp-2 font-medium text-foreground">{citation.title}</div>
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{citation.takeaway}</p>
                     </a>
@@ -536,7 +563,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               </Card>
             </>
           ) : (
-            <Card><CardContent className="p-6 text-sm text-muted-foreground">Run a new analysis to include free public Reddit/web research signals.</CardContent></Card>
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">Run a new analysis to include available external research and directional community signals.</CardContent></Card>
           )}
         </TabsContent>
 

@@ -1,17 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, ChevronRight, ExternalLink,
-  Gauge, Loader2, MessageSquare, ShieldAlert, Sparkles, Target,
+  Gauge, Loader2, MessageSquare, ShieldAlert, Sparkles, Target, type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getReportById, type ReportRow } from "@/lib/reports";
-import { formatConfidence, confidencePercent, isInternalProject, prettifySource } from "@/lib/format";
+import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/format";
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
-import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types/analysis";
-import { toast } from "sonner";
+import type { FeasibilityReport, ConceptInputs } from "@/types/analysis";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
@@ -28,15 +27,25 @@ const DIM_LABELS: Record<string, string> = {
   operational: "Operational", risk: "Risk (inv.)", timing: "Timing",
 };
 
-const dimensionEvidenceCount = (citations: ResearchCitation[] | undefined, dim: string) => {
-  if (!citations?.length) return 0;
-  const needle = dim.toLowerCase();
-  return citations.filter((c) =>
-    `${c.title} ${c.takeaway} ${c.source}`.toLowerCase().includes(needle),
-  ).length;
+const FINDING_KEYS = {
+  financial: "financialFinding",
+  market: "marketFinding",
+  achievability: "achievabilityFinding",
+  operational: "operationalFinding",
+  risk: "riskFinding",
+  timing: "timingFinding",
+} as const;
+
+const dimensionEvidenceCount = (report: FeasibilityReport, dimension: typeof DIM_KEYS[number]) => {
+  const sourceIds = new Set(
+    (report.claims ?? [])
+      .filter((claim) => claim.dimensions?.includes(dimension))
+      .flatMap((claim) => claim.supportingSourceIds),
+  );
+  return sourceIds.size;
 };
 
-const Section = ({ title, icon: Icon, children, hint }: any) => (
+const Section = ({ title, icon: Icon, children, hint }: { title: string; icon: LucideIcon; children: ReactNode; hint?: string }) => (
   <Card>
     <CardHeader className="pb-2">
       <CardTitle className="flex items-center gap-2 text-base">
@@ -55,11 +64,14 @@ const DecisionRoom = () => {
   const [row, setRow] = useState<{ inputs: ConceptInputs; output: FeasibilityReport; title: string; slug: string | null; demo: boolean; ownerId: string | null; status: ReportRow["status"] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setNotFound(false);
+    setLoadError(false);
     (async () => {
       try {
         if (reportId === DEMO_REPORT_ID) {
@@ -69,18 +81,29 @@ const DecisionRoom = () => {
         const r: ReportRow | null = await getReportById(reportId);
         if (!r) { if (!cancelled) setNotFound(true); return; }
         if (!cancelled) setRow({ inputs: r.inputs, output: r.output, title: r.title, slug: r.slug, demo: false, ownerId: r.user_id, status: r.status });
-      } catch (e: any) {
-        toast.error(e?.message || "Could not load report");
-        if (!cancelled) setNotFound(true);
+      } catch {
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [reportId]);
+  }, [reportId, retryKey]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center">
+        <div>
+          <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-warning" />
+          <h2 className="font-display text-xl font-medium">Could not load the Executive Decision Room</h2>
+          <p className="mt-1 text-sm text-muted-foreground">The database request failed. Retry safely; no report data was changed.</p>
+          <Button onClick={() => setRetryKey((value) => value + 1)} className="mt-4">Retry</Button>
+        </div>
+      </div>
+    );
   }
   if (notFound || !row) {
     return (
@@ -105,9 +128,11 @@ const DecisionRoom = () => {
   );
   const overallConf = overallConfPct != null ? `${overallConfPct}%` : "—";
 
-  const strongestReason = report.recommendations?.[0]
-    || report.scores.financialFinding
-    || "Strong overall feasibility based on weighted scoring.";
+  const strongestSupportedClaim = report.claims?.find(
+    (claim) => claim.supportStatus === "supported" && claim.supportingSourceIds.length > 0,
+  );
+  const strongestReason = strongestSupportedClaim?.claimText
+    || "No directly supported reason is available yet; validate the strongest finding before commitment.";
 
   const biggestRisk = report.risks?.find((r) => r.level === "High")
     || report.risks?.[0]
@@ -117,18 +142,31 @@ const DecisionRoom = () => {
     || report.recommendations?.[0]
     || "Run a small pilot to validate the dominant assumption.";
 
-  const decisionSummaryLine =
-    (report.executiveSummary || "").split(/[.!?]\s/)[0]?.slice(0, 240) || "AI-generated feasibility decision.";
+  const decisionSummaryLine = report.decision
+    ? `${report.decision.recommendationLabel}. ${report.decision.nextStepHint}`
+    : report.executiveSummary || "AI-supported feasibility recommendation.";
 
   const internal = isInternalProject(report, inputs);
 
-  const evidenceItems = (report.research?.citations || []).slice(0, 5);
+  const sourceById = new Map((report.sources ?? []).map((source) => [source.sourceId, source]));
+  const evidenceItems = (report.claims ?? []).slice(0, 5).map((claim) => ({
+    ...claim,
+    supportingSources: claim.supportingSourceIds.flatMap((sourceId) => {
+      const source = sourceById.get(sourceId);
+      return source ? [source] : [];
+    }),
+    conflictingSources: claim.conflictingSourceIds.flatMap((sourceId) => {
+      const source = sourceById.get(sourceId);
+      return source ? [source] : [];
+    }),
+  }));
+  const supportedClaimCount = report.claims?.filter((claim) => claim.supportStatus === "supported").length ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-[12px] text-muted-foreground">
-        <Link to="/dashboard" className="transition-colors hover:text-foreground">
-          My Analyses
+        <Link to={demo ? "/" : "/dashboard"} className="transition-colors hover:text-foreground">
+          {demo ? "Concept AI" : "My Analyses"}
         </Link>
         <ChevronRight className="h-3.5 w-3.5 opacity-50" />
         {demo ? (
@@ -139,11 +177,11 @@ const DecisionRoom = () => {
           </Link>
         )}
         <ChevronRight className="h-3.5 w-3.5 opacity-50" />
-        <span className="text-foreground/80">Decision Room</span>
+        <span className="text-foreground/80">Executive Decision Room</span>
       </nav>
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="h-8 gap-1.5 text-muted-foreground">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        <Button variant="ghost" size="sm" onClick={() => navigate(demo ? "/demo" : "/dashboard")} className="h-8 gap-1.5 text-muted-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> {demo ? "Back to demo" : "Back to dashboard"}
         </Button>
       </div>
 
@@ -153,17 +191,21 @@ const DecisionRoom = () => {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Decision Room · Judge Mode</span>
-              {demo && <Badge variant="outline" className="border-warning/40 text-warning">Demo data</Badge>}
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Executive Decision Room · 90-Second Judge Mode</span>
+              {demo && <Badge variant="outline" className="border-warning/40 text-warning">{report.demo?.label || "Illustrative Demo — Synthetic Data"}</Badge>}
             </div>
             <h1 className="mt-1 font-display text-2xl font-medium tracking-tight">{title}</h1>
-            <p className="text-sm text-muted-foreground">A 90-second read of the AI's decision, evidence, and risk.</p>
+            <p className="text-sm text-muted-foreground">A 90-second read of the AI-supported recommendation, evidence, and risk. Human approval remains separate.</p>
+            {demo && <p className="mt-1 text-xs font-medium text-warning">{report.demo?.disclaimer || "Synthetic demonstration — not measured organizational results"}</p>}
           </div>
           {canEditStatus && (
-            <StatusControl
-              report={{ id: reportId, status } as ReportRow}
-              onChanged={(s) => setRow((prev) => (prev ? { ...prev, status: s } : prev))}
-            />
+            <div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Human workflow status</div>
+              <StatusControl
+                report={{ id: reportId, status } as ReportRow}
+                onChanged={(s) => setRow((prev) => (prev ? { ...prev, status: s } : prev))}
+              />
+            </div>
           )}
         </div>
 
@@ -172,14 +214,14 @@ const DecisionRoom = () => {
           <CardContent className="p-6">
             <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Final decision</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">AI-supported recommendation</div>
                 <div className="mt-1 flex flex-wrap items-center gap-3">
                   <Badge className={`px-3 py-1.5 text-sm font-bold ${verdictTone(report.scores.verdict)}`}>
                     {report.scores.verdict}
                   </Badge>
                   <span className="text-sm text-muted-foreground">for {inputs.projectName}</span>
                 </div>
-                <p className="mt-3 text-[15px] leading-relaxed text-foreground">{decisionSummaryLine}.</p>
+                <p className="mt-3 text-[15px] leading-relaxed text-foreground">{decisionSummaryLine}</p>
                 <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Recommended next step</div>
                   <p className="mt-1 text-sm text-foreground">{bestNextAction}</p>
@@ -191,7 +233,7 @@ const DecisionRoom = () => {
                   <div className="mt-1 font-display text-3xl font-bold text-primary">{report.scores.overall.toFixed(1)}<span className="text-base text-muted-foreground">/10</span></div>
                 </div>
                 <div className="rounded-md border border-border bg-muted/30 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Confidence</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" title="A model-estimated indicator constrained by input completeness and evidence support; it is not statistical certainty.">Model-estimated confidence</div>
                   <div className="mt-1 font-display text-3xl font-bold text-foreground">{overallConf}</div>
                 </div>
                 <div className="col-span-2 rounded-md border border-border bg-muted/30 p-3">
@@ -206,7 +248,7 @@ const DecisionRoom = () => {
         {/* Why This Decision */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card className="border-success/30">
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-success" /> Strongest reason to proceed</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-success" /> Strongest supported reason</CardTitle></CardHeader>
             <CardContent><p className="text-sm leading-relaxed text-foreground">{strongestReason}</p></CardContent>
           </Card>
           <Card className="border-destructive/30">
@@ -230,17 +272,17 @@ const DecisionRoom = () => {
                 <tr>
                   <th className="px-3 py-2 text-left">Dimension</th>
                   <th className="px-3 py-2 text-right">Score</th>
-                  <th className="px-3 py-2 text-right">Confidence</th>
-                  <th className="px-3 py-2 text-right">Evidence</th>
+                  <th className="px-3 py-2 text-right">Model-estimated confidence</th>
+                  <th className="px-3 py-2 text-right">Direct sources</th>
                   <th className="px-3 py-2 text-left">Why this score</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {DIM_KEYS.map((k) => {
-                  const score = (report.scores as any)[k] as number;
+                  const score = report.scores[k];
                   const conf = formatConfidence(report.scores.confidence?.[k]);
-                  const ev = dimensionEvidenceCount(report.research?.citations, k);
-                  const rationale = report.scores.rationale?.[k] || (report.scores as any)[`${k}Finding`] || "—";
+                  const ev = dimensionEvidenceCount(report, k);
+                  const rationale = report.scores.rationale?.[k] || report.scores[FINDING_KEYS[k]] || "—";
                   return (
                     <tr key={k}>
                       <td className="px-3 py-2 font-medium">{DIM_LABELS[k]}</td>
@@ -257,30 +299,34 @@ const DecisionRoom = () => {
         </Section>
 
         {/* Evidence Map */}
-        <Section title="Evidence Map" icon={Sparkles} hint="Top sources the AI grounded its decision in.">
+        <Section title="Evidence Map" icon={Sparkles} hint="Explicit claim-to-source links only; unsupported and inferred claims remain visible.">
           {evidenceItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No public research citations were captured for this report.</p>
+            <p className="text-sm text-muted-foreground">No claim-level evidence mapping was captured for this report.</p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {evidenceItems.map((c, i) => {
-                const body = (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{prettifySource(c)}</span>
-                      {c.url && <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+              {evidenceItems.map((claim) => (
+                <div key={claim.claimId} className="rounded-md border border-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Badge variant="outline" className="text-[10px]">{claim.provenance}</Badge>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{claim.supportStatus.replace("_", " ")}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-foreground">{claim.claimText}</p>
+                  {claim.supportingSources.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      {claim.supportingSources.map((source) => (
+                        <a key={source.sourceId} href={source.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
+                          {source.title} <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ))}
                     </div>
-                    <div className="mt-1 line-clamp-2 text-sm font-medium text-foreground">{c.title || "Untitled source"}</div>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{c.takeaway || "—"}</p>
-                  </>
-                );
-                return c.url ? (
-                  <a key={i} href={c.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
-                    {body}
-                  </a>
-                ) : (
-                  <div key={i} className="rounded-md border border-border p-3">{body}</div>
-                );
-              })}
+                  ) : (
+                    <p className="mt-2 text-xs text-warning">{claim.provenance === "AI inference" ? "AI-estimated assumption — not externally verified" : "Unsupported — requires validation"}</p>
+                  )}
+                  {claim.conflictingSources.length > 0 && (
+                    <p className="mt-2 text-xs text-destructive">Conflicting sources: {claim.conflictingSources.map((source) => source.title).join(", ")}</p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </Section>
@@ -327,7 +373,7 @@ const DecisionRoom = () => {
             {[
               ["Problem", inputs.description || inputs.strategicObjectives || "—"],
               ["Solution", inputs.strategicObjectives || inputs.description || "—"],
-              ["Evidence", report.research?.overview || `${report.research?.citations?.length ?? 0} grounded sources used.`],
+              ["Evidence", report.research?.overview || `${supportedClaimCount} directly supported claim${supportedClaimCount === 1 ? "" : "s"}.`],
               ["Business impact", internal ? `Internal value: ${report.financials.investmentRange} · break-even ${report.financials.breakEvenSummary}` : `Investment ${report.financials.investmentRange} · break-even ${report.financials.breakEvenSummary} · ${report.market.tamValue} TAM`],
               ["Current limitation", biggestRisk.name],
               ["Next step", bestNextAction],
@@ -344,8 +390,8 @@ const DecisionRoom = () => {
                 Open full dashboard <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-1.5">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+            <Button variant="ghost" size="sm" onClick={() => navigate(demo ? "/demo" : "/dashboard")} className="gap-1.5">
+              <ArrowLeft className="h-3.5 w-3.5" /> {demo ? "Back to demo" : "Back to dashboard"}
             </Button>
           </div>
         </Section>

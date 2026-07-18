@@ -391,6 +391,27 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
   // the band never overlays the section heading or paragraph above.
   const firstPageTop = BODY_TOP;
   const continuationTop = HEADER_Y + 4 + CONT_BAND_H + 14;
+  // Give every column a bounded numeric width. jsPDF-AutoTable's automatic
+  // width can expand on long headers/URLs and silently push content beyond A4.
+  const suppliedStyles = opts.columnStyles ?? {};
+  const explicitWidths = Array.from({ length: colCount }, (_, index) => {
+    const value = suppliedStyles[index]?.cellWidth;
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+  });
+  const explicitTotal = explicitWidths.reduce<number>((sum, width) => sum + (width ?? 0), 0);
+  const missingCount = explicitWidths.filter((width) => width == null).length;
+  const scale = missingCount === 0 && explicitTotal > 0 ? CONTENT_W / explicitTotal : 1;
+  const remaining = Math.max(0, CONTENT_W - explicitTotal * scale);
+  const fallbackWidth = missingCount > 0 ? remaining / missingCount : 0;
+  const boundedColumnStyles = Object.fromEntries(
+    Array.from({ length: colCount }, (_, index) => [
+      index,
+      {
+        ...suppliedStyles[index],
+        cellWidth: explicitWidths[index] == null ? fallbackWidth : explicitWidths[index]! * scale,
+      },
+    ]),
+  );
 
   autoTable(doc.pdf, {
     startY: doc.y,
@@ -402,7 +423,8 @@ export function placeTable(doc: Doc, opts: PlaceTableOpts) {
     body: opts.body,
     showHead: "everyPage",
     rowPageBreak: "avoid",
-    columnStyles: opts.columnStyles,
+    tableWidth: CONTENT_W,
+    columnStyles: boundedColumnStyles,
     styles: {
       font: "helvetica", fontSize: 8.5, cellPadding: 5,
       textColor: C.text, lineColor: C.border, lineWidth: 0.4,

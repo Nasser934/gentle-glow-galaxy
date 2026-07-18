@@ -1,4 +1,5 @@
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+export { numericRange, numericValue, parseUnitAwareNumber } from "@/lib/numbers";
 
 /**
  * Normalize any "confidence" value to a percentage string.
@@ -38,13 +39,21 @@ export const confidencePercent = (raw: unknown): number | null => {
 export const normalizeConfidenceToPercent = (raw: unknown): number =>
   confidencePercent(raw) ?? 0;
 
+/** Detect the financial model from explicit brief fields before using a legacy fallback. */
+export const isInternalConcept = (inputs?: ConceptInputs): boolean => {
+  const model = `${inputs?.businessModel ?? ""} ${inputs?.revenueModel ?? ""}`.toLowerCase();
+  return /internal platform|cost avoidance|productivity benefit|internal payback/.test(model);
+};
+
 /**
- * Treat a report as "internal" when LTV:CAC is missing or N/A. Used only for
- * label disambiguation in revenue tables — never affects scoring.
+ * Treat a report as internal when the canonical project type or brief says so.
+ * The LTV:CAC check exists only as a compatibility fallback for legacy rows.
  */
-export const isInternalProject = (report: FeasibilityReport, _inputs?: ConceptInputs): boolean => {
+export const isInternalProject = (report: FeasibilityReport, inputs?: ConceptInputs): boolean => {
+  if (report.financials.projectType === "internal" || isInternalConcept(inputs)) return true;
+  if (report.financials.projectType === "commercial") return false;
   const ltv = (report.financials.ltvCacRatio || "").trim().toLowerCase();
-  return ltv === "" || ltv === "—" || ltv === "-" || /n\/?a/.test(ltv);
+  return ltv === "" || ltv === "—" || ltv === "-" || /n\/?a|not applicable|internal platform/.test(ltv);
 };
 
 export const internalLabels = {
@@ -133,4 +142,3 @@ export const prettifySource = (c?: { source?: string | null; title?: string | nu
   }
   return raw || c.title || "Source";
 };
-

@@ -140,7 +140,7 @@ export function deriveMemoSections(
 
   const recommendation: string[] = [];
   if (verdict) recommendation.push(`Verdict: ${verdict}.`);
-  if (conf != null) recommendation.push(`Decision confidence: ${conf}%.`);
+  if (conf != null) recommendation.push(`Model-estimated confidence: ${conf}%.`);
   if (decision?.nextStepHint) recommendation.push(firstSentence(s(decision.nextStepHint)));
 
   const whyCanWork = deriveDecisionDrivers(report, inputs);
@@ -154,7 +154,17 @@ export function deriveMemoSections(
   if (be) moneyLogic.push(labels.isInternal ? `Payback: ${be} (operational savings).` : `Break-even: ${be}.`);
   if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
   const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
-  if (base) moneyLogic.push(labels.baseCaseTemplate(s(base.annualRevenue), s(base.subscribersYr1)));
+  if (base) {
+    const outcome = labels.isInternal
+      ? s(base.annualValueDisplay || (base.annualFinancialBenefit != null
+        ? `${fin.currency} ${base.annualFinancialBenefit.toLocaleString()}`
+        : "Requires validation"))
+      : s(base.annualRevenue);
+    const participation = labels.isInternal
+      ? (base.adoptionRate != null ? `${Math.round(base.adoptionRate * 100)}%` : "Requires validation")
+      : s(base.subscribersYr1);
+    moneyLogic.push(labels.baseCaseTemplate(outcome, participation));
+  }
   if (!moneyLogic.length) {
     moneyLogic.push("Detailed financial model required before funding approval.");
   }
@@ -226,7 +236,7 @@ export function deriveExecutiveSummary(
       ? "The signal is positive across the FMART-O dimensions, but execution discipline will determine the outcome."
       : "The current evidence base does not yet support a confident go decision and inputs should be strengthened first.";
   out.push(
-    `Overall FMART-O score is ${overall} / 10${conf != null ? ` with ${conf}% decision confidence` : ""}, leading to a "${verdict || "—"}" recommendation. ${verdictReason}`,
+    `Overall FMART-O score is ${overall} / 10${conf != null ? ` with a ${conf}% model-estimated confidence indicator` : ""}, leading to a "${verdict || "—"}" recommendation. ${verdictReason}`,
   );
 
   // Para 3 — money / value logic

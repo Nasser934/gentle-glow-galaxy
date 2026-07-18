@@ -117,6 +117,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusKey>("all");
   const [searchParams] = useSearchParams();
@@ -130,9 +131,10 @@ const Dashboard = () => {
 
   const load = (s: ReportScope = scope) => {
     setLoading(true);
+    setLoadError(false);
     listMyReports(s)
       .then((d) => setRows(d as Row[]))
-      .catch((e) => toast.error(e.message))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   };
   useEffect(() => {
@@ -192,8 +194,8 @@ const Dashboard = () => {
       await archiveReportGroup(g.rootId);
       toast.success(`Archived ${g.versions.length} version${g.versions.length > 1 ? "s" : ""}`);
       load();
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Archive failed");
     } finally {
       setPendingArchive(null);
     }
@@ -204,8 +206,8 @@ const Dashboard = () => {
       await restoreReportGroup(g.rootId);
       toast.success("Restored");
       load();
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Restore failed");
     }
   };
 
@@ -215,18 +217,12 @@ const Dashboard = () => {
       // Optimistic local update so the chip refreshes immediately.
       setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
       toast.success(`Status updated: ${statusLabel(s)}`);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Status update failed");
     }
   };
 
-  const copyShare = (slug: string) => {
-    const url = `${window.location.origin}/r/${slug}`;
-    navigator.clipboard.writeText(url).then(
-      () => toast.success("Share link copied"),
-      () => toast.error("Could not copy link"),
-    );
-  };
+  const openSharing = (reportId: string) => navigate(`/reports/${reportId}?share=1`);
 
   return (
     <div className="space-y-6">
@@ -242,7 +238,7 @@ const Dashboard = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate("/decision-room/demo")}
+            onClick={() => navigate("/demo")}
             className="h-9 gap-2"
           >
             <Sparkles className="h-4 w-4" strokeWidth={1.75} /> Load Demo Case
@@ -319,6 +315,12 @@ const Dashboard = () => {
             <Skeleton key={i} className="h-14 w-full" />
           ))}
         </div>
+      ) : loadError ? (
+        <div className="rounded-xl border border-border bg-card p-8 text-center">
+          <h2 className="font-display text-lg font-medium">Could not load your analyses</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Check your connection or session, then retry.</p>
+          <Button className="mt-4" onClick={() => load(scope)}>Retry</Button>
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState
           scope={scope}
@@ -358,7 +360,7 @@ const Dashboard = () => {
                       scope={scope}
                       onArchive={() => setPendingArchive(g)}
                       onRestore={() => onRestore(g)}
-                      onCopyShare={() => copyShare(g.latest.slug)}
+                      onCopyShare={() => openSharing(g.latest.id)}
                       onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
                     />
                   );
@@ -378,7 +380,7 @@ const Dashboard = () => {
                 scope={scope}
                 onArchive={() => setPendingArchive(g)}
                 onRestore={() => onRestore(g)}
-                onCopyShare={() => copyShare(g.latest.slug)}
+                onCopyShare={() => openSharing(g.latest.id)}
                 onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
               />
             ))}
@@ -465,7 +467,7 @@ function RowActions({
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={onCopyShare}>
-          <Link2 className="mr-2 h-4 w-4" /> Copy share link
+          <Link2 className="mr-2 h-4 w-4" /> Manage sharing
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -737,5 +739,3 @@ const StatCard = ({
 };
 
 export default Dashboard;
-
-

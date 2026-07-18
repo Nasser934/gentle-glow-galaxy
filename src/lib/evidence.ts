@@ -10,7 +10,14 @@ import type {
   ScoreExplanationRow, ClaimEvidenceRow, ReportVersion,
   DecisionVerdict, ConsumerVerdict,
 } from "@/types/analysis";
-import { confidencePercent } from "@/lib/format";
+import { confidencePercent, isInternalConcept, isInternalProject } from "@/lib/format";
+import { buildCanonicalReport, REPORT_SCHEMA_VERSION } from "../../supabase/functions/_shared/analysis/canonical";
+import { SCORING_ENGINE_VERSION } from "../../supabase/functions/_shared/analysis/scoring";
+import {
+  EVIDENCE_METHOD_LABEL,
+  estimateEvidenceComposition,
+  normalizeComposition,
+} from "../../supabase/functions/_shared/analysis/evidence";
 
 /* ---------------- helpers ---------------- */
 const wordCount = (s: string | undefined) => (s || "").trim().split(/\s+/).filter(Boolean).length;
@@ -48,7 +55,12 @@ export const sanitizeForConsumer = (text: string | undefined | null): string => 
 };
 
 /** Read citations from any of the supported report shapes. */
-const getCitations = (report: any): any[] => {
+type LegacyEvidenceReport = FeasibilityReport & {
+  citations?: unknown[];
+  research?: FeasibilityReport["research"] & { sources?: unknown[] };
+};
+
+const getCitations = (report: LegacyEvidenceReport): unknown[] => {
   if (!report) return [];
   if (Array.isArray(report.research?.citations)) return report.research.citations;
   if (Array.isArray(report.sources)) return report.sources;
@@ -58,12 +70,16 @@ const getCitations = (report: any): any[] => {
 };
 
 /** True if a risk row looks "critical/high" across any of its possible fields. */
-const isHighRisk = (rk: any): boolean => {
-  const vals = [rk?.level, rk?.severity, rk?.impact, rk?.riskLevel, rk?.priority];
+const riskRecord = (risk: unknown): Record<string, unknown> =>
+  risk && typeof risk === "object" ? risk as Record<string, unknown> : {};
+const isHighRisk = (risk: unknown): boolean => {
+  const rk = riskRecord(risk);
+  const vals = [rk.level, rk.severity, rk.impact, rk.riskLevel, rk.priority];
   return vals.some((v) => typeof v === "string" && /^(high|critical|severe)$/i.test(v.trim()));
 };
-const hasWeakMitigation = (rk: any): boolean => {
-  const m = (rk?.mitigation || rk?.mitigationPlan || "").toString().trim();
+const hasWeakMitigation = (risk: unknown): boolean => {
+  const rk = riskRecord(risk);
+  const m = String(rk.mitigation || rk.mitigationPlan || "").trim();
   return m.length < 8;
 };
 
@@ -137,11 +153,34 @@ export function assessInputQuality(inputs: ConceptInputs): {
   missing: string[]; weak: string[]; needsImprovement: string[]; complete: string[];
   contradictions: string[];
 } {
-  const fields: InputFieldAssessment[] = FIELD_DEFS.map(({ key, label, evaluator, impact, suggestion }) => ({
-    key, label,
-    status: evaluator(String((inputs as any)[key] ?? ""), inputs),
-    impact, suggestion,
-  }));
+  const internal = isInternalConcept(inputs);
+  const fields: InputFieldAssessment[] = FIELD_DEFS.map(({ key, label, evaluator, impact, suggestion }) => {
+    if (internal && key === "revenueModel") {
+      return {
+        key,
+        label: "Internal value model",
+        status: evaluator(String(inputs[key] ?? ""), inputs),
+        impact: "Weak benefit inputs cap Financial confidence and payback reliability.",
+        suggestion: "Quantify annual labour cost avoided, productivity hours, adoption, and internal payback.",
+      };
+    }
+    if (internal && key === "assumptions") {
+      return {
+        key,
+        label,
+        status: evaluator(String(inputs[key] ?? ""), inputs),
+        impact,
+        suggestion: "Quantify baseline labour cost, hours saved, adoption, recurring OpEx, and payback.",
+      };
+    }
+    return {
+      key,
+      label,
+      status: evaluator(String(inputs[key] ?? ""), inputs),
+      impact,
+      suggestion,
+    };
+  });
 
   const overall = Math.round(
     fields.reduce((sum, f) => sum + STATUS_SCORE[f.status], 0) / fields.length
@@ -170,29 +209,15 @@ export function assessInputQuality(inputs: ConceptInputs): {
 /* ---------------- Evidence Mix ---------------- */
 export function deriveEvidenceMix(report: FeasibilityReport, inputs: ConceptInputs) {
   const iq = assessInputQuality(inputs);
-  const citations = getCitations(report).length;
-  const confAvg = report.scores.confidence
-    ? Object.values(report.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6
-    : 50;
-  const confPct = Math.max(0, Math.min(100, confidencePercent(confAvg) ?? 50));
-
-  // user input contribution scales with input quality
-  let userPct = Math.round(iq.overall * 0.45);                    // 0-45
-  // web research contribution scales with citation density (cap 50)
-  let webPct = Math.round(Math.min(50, citations * 6));           // 0-50
-  // AI assumption is the remainder, floored by inverse confidence
-  let aiPct = Math.max(0, 100 - userPct - webPct);
-  const aiFloor = Math.round(Math.max(10, 100 - confPct));
-  if (aiPct < aiFloor) {
-    const deficit = aiFloor - aiPct;
-    const take = Math.min(deficit, userPct);
-    userPct -= take; aiPct += take;
-  }
-  // normalize tiny rounding drift
-  const total = userPct + webPct + aiPct;
-  if (total !== 100) webPct += 100 - total;
-
-  return { userInputPercent: userPct, webResearchPercent: webPct, aiAssumptionPercent: aiPct };
+  const composition = estimateEvidenceComposition({ inputQuality: iq.overall, sources: report.sources ?? [] });
+  return {
+    userInputPercent: composition.userInputPercent,
+    webResearchPercent: composition.citedSourcePercent,
+    calculationPercent: composition.calculationPercent,
+    aiAssumptionPercent: composition.aiInferencePercent,
+    label: "Estimated Evidence Composition",
+    method: EVIDENCE_METHOD_LABEL,
+  };
 }
 
 /* ---------------- Score Explanation ---------------- */
@@ -202,11 +227,20 @@ const DIM_LABEL: Record<ScoreExplanationRow["dimension"], string> = {
 };
 
 const POSITIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: FeasibilityReport, i: ConceptInputs) => string[]> = {
-  financial: (r, i) => [
-    r.financials?.ltvCacRatio ? `LTV:CAC reported as ${r.financials.ltvCacRatio}.` : "",
-    i.revenueModel ? `Revenue model defined (${i.revenueModel}).` : "",
-    i.budgetRange ? `Budget range provided (${i.budgetRange}).` : "",
-  ].filter(Boolean),
+  financial: (r, i) => {
+    const internal = isInternalProject(r, i);
+    const base = r.financials?.scenarios?.find((scenario) => scenario.scenario === "Base Case")
+      ?? r.financials?.scenarios?.[0];
+    return [
+      internal && base?.annualFinancialBenefit != null
+        ? `Annual financial benefit calculated at ${r.financials.currency} ${base.annualFinancialBenefit.toLocaleString()}.`
+        : !internal && r.financials?.ltvCacRatio
+          ? `LTV:CAC reported as ${r.financials.ltvCacRatio}.`
+          : "",
+      i.revenueModel ? `${internal ? "Internal value" : "Revenue"} model defined (${i.revenueModel}).` : "",
+      i.budgetRange ? `Budget range provided (${i.budgetRange}).` : "",
+    ].filter(Boolean);
+  },
   market: (r, i) => [
     r.market?.tamValue ? `TAM estimated at ${r.market.tamValue}.` : "",
     i.location ? `Geography specified (${i.location}).` : "",
@@ -232,8 +266,8 @@ const POSITIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: Feasibility
 };
 
 const NEGATIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: FeasibilityReport, i: ConceptInputs, iqWeak: string[]) => string[]> = {
-  financial: (_r, i, weak) => [
-    !i.revenueModel ? "Revenue model not specified." : "",
+  financial: (r, i, weak) => [
+    !i.revenueModel ? `${isInternalProject(r, i) ? "Internal value" : "Revenue"} model not specified.` : "",
     weak.includes("Financial & business assumptions") ? "Financial assumptions are thin." : "",
     !i.budgetRange ? "Budget not provided." : "",
   ].filter(Boolean),
@@ -272,8 +306,9 @@ const IMPROVE_ACTIONS: Record<ScoreExplanationRow["dimension"], string[]> = {
 export function deriveScoreExplanation(report: FeasibilityReport, inputs: ConceptInputs): ScoreExplanationRow[] {
   const iq = assessInputQuality(inputs);
   const allWeak = [...iq.weak, ...iq.missing, ...iq.needsImprovement];
+  const internal = isInternalProject(report, inputs);
   return (Object.keys(DIM_LABEL) as ScoreExplanationRow["dimension"][]).map((dim) => {
-    const score = Number((report.scores as any)?.[dim] ?? 0);
+    const score = Number(report.scores[dim] ?? 0);
     const positives = POSITIVE_DRIVERS[dim](report, inputs);
     const negatives = NEGATIVE_DRIVERS[dim](report, inputs, allWeak);
     const decisionImplication = score >= 8.5
@@ -288,7 +323,13 @@ export function deriveScoreExplanation(report: FeasibilityReport, inputs: Concep
       positiveDrivers: positives.length ? positives : ["No notable positive drivers detected from inputs."],
       negativeDrivers: negatives.length ? negatives : ["No specific issues detected in inputs."],
       missingEvidence: negatives,
-      improvementActions: IMPROVE_ACTIONS[dim],
+      improvementActions: dim === "financial" && internal
+        ? [
+            "Quantify annual labour cost avoided and productivity benefit.",
+            "Validate adoption against a measured operational baseline.",
+            "Confirm budget and internal payback assumptions.",
+          ]
+        : IMPROVE_ACTIONS[dim],
       decisionImplication,
     };
   });
@@ -297,7 +338,20 @@ export function deriveScoreExplanation(report: FeasibilityReport, inputs: Concep
 /* ---------------- Claim Evidence Map ---------------- */
 export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: ConceptInputs): ClaimEvidenceRow[] {
   const mix = deriveEvidenceMix(report, inputs);
-  const cites = getCitations(report).map((c: any) => c?.source || c?.title || c?.url).filter(Boolean) as string[];
+  const internal = isInternalProject(report, inputs);
+  const baseScenario = report.financials?.scenarios?.find((scenario) => scenario.scenario === "Base Case")
+    ?? report.financials?.scenarios?.[0];
+  const internalBenefit = baseScenario?.annualFinancialBenefit != null
+    ? `${report.financials.currency} ${baseScenario.annualFinancialBenefit.toLocaleString()}`
+    : baseScenario?.annualValueDisplay || "requires validation";
+  const adoption = baseScenario?.adoptionRate != null
+    ? `${Math.round(baseScenario.adoptionRate * 100)}%`
+    : "requires validation";
+  const cites = getCitations(report).map((citation) => {
+    if (!citation || typeof citation !== "object") return "";
+    const row = citation as Record<string, unknown>;
+    return String(row.source || row.title || row.url || "");
+  }).filter(Boolean);
   const conf = (n: number): ClaimEvidenceRow["confidence"] => n >= 70 ? "High" : n >= 45 ? "Medium" : "Low";
 
   const rows: ClaimEvidenceRow[] = [
@@ -314,16 +368,28 @@ export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: Concep
     },
     {
       claimId: "break-even",
-      claimText: `Break-even projected: ${report.financials?.breakEvenSummary || "not stated"}.`,
+      claimText: `${internal ? "Internal payback" : "Break-even"} projected: ${report.financials?.breakEvenSummary || "not stated"}.`,
       reportSection: "Financial Plan",
       userInputPercent: Math.round(mix.userInputPercent * 1.3),
       webResearchPercent: Math.round(mix.webResearchPercent * 0.2),
       aiAssumptionPercent: Math.max(0, 100 - Math.round(mix.userInputPercent * 1.3) - Math.round(mix.webResearchPercent * 0.2)),
       confidence: conf(confidencePercent(report.scores.confidence?.financial) ?? 50),
       sources: [],
-      userCanImproveBy: "Add pricing, expected customers, churn, and gross margin.",
+      userCanImproveBy: internal
+        ? "Add measured labour-cost, productivity, adoption, and recurring-cost inputs."
+        : "Add pricing, expected customers, churn, and gross margin.",
     },
-    {
+    internal ? {
+      claimId: "internal-financial-outcome",
+      claimText: `Base-case annual financial benefit is ${internalBenefit} at ${adoption} adoption.`,
+      reportSection: "Financial Plan",
+      userInputPercent: Math.round(mix.userInputPercent * 0.9),
+      webResearchPercent: Math.round(mix.webResearchPercent * 0.4),
+      aiAssumptionPercent: Math.max(0, 100 - Math.round(mix.userInputPercent * 0.9) - Math.round(mix.webResearchPercent * 0.4)),
+      confidence: conf(confidencePercent(report.scores.confidence?.financial) ?? 50),
+      sources: [],
+      userCanImproveBy: "Provide a measured operating baseline and pilot adoption results.",
+    } : {
       claimId: "cac",
       claimText: `Customer acquisition economics appear ${report.financials?.ltvCacRatio ? `viable (LTV:CAC ${report.financials.ltvCacRatio})` : "uncertain"}.`,
       reportSection: "Financial Plan",
@@ -357,14 +423,34 @@ export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: Concep
       userCanImproveBy: "List the specific regulators, licences, or standards.",
     },
   ].map((r) => {
-    // normalize each row's mix to sum to 100
-    const total = r.userInputPercent + r.webResearchPercent + r.aiAssumptionPercent;
-    if (total === 0) return { ...r, aiAssumptionPercent: 100 };
-    const k = 100 / total;
-    const u = Math.round(r.userInputPercent * k);
-    const w = Math.round(r.webResearchPercent * k);
-    const a = Math.max(0, 100 - u - w);
-    return { ...r, userInputPercent: u, webResearchPercent: w, aiAssumptionPercent: a };
+    // Compatibility claims do not have stable claim-to-source IDs. Never
+    // present report-level citations as direct support for these claims.
+    const composition = normalizeComposition({
+      userInputPercent: r.userInputPercent,
+      citedSourcePercent: 0,
+      calculationPercent: 0,
+      aiInferencePercent: r.aiAssumptionPercent + r.webResearchPercent,
+    });
+    const provenance = composition.userInputPercent >= 95
+      ? "User input" as const
+      : composition.aiInferencePercent >= composition.userInputPercent
+        ? "AI inference" as const
+        : "Mixed" as const;
+    return {
+      ...r,
+      userInputPercent: composition.userInputPercent,
+      webResearchPercent: 0,
+      calculationPercent: composition.calculationPercent,
+      aiAssumptionPercent: composition.aiInferencePercent,
+      sources: [],
+      provenance,
+      supportingSourceIds: [],
+      conflictingSourceIds: [],
+      supportStatus: provenance === "AI inference" ? "ai_inference" as const : "unsupported" as const,
+      displayStatus: provenance === "AI inference"
+        ? "AI-estimated assumption — not externally verified"
+        : "Requires validation",
+    };
   });
   return rows;
 }
@@ -378,6 +464,7 @@ export function computeVerdict(args: {
   marketEvidenceWeak: boolean;
   financialsMissing: boolean;
   criticalRisksWithoutMitigation: boolean;
+  projectType?: "commercial" | "internal";
 }): DecisionVerdict {
   const blockers: string[] = [];
   let verdict: ConsumerVerdict = "PROCEED";
@@ -410,7 +497,11 @@ export function computeVerdict(args: {
 
   let nextStepHint = "Refine assumptions and validate with stakeholders.";
   if (args.marketEvidenceWeak) nextStepHint = "Validate market demand (customer interviews, sizing sources) before any launch decision.";
-  if (args.financialsMissing) nextStepHint = "Complete financial validation (pricing, CAC, churn, gross margin, break-even) before execution.";
+  if (args.financialsMissing) {
+    nextStepHint = args.projectType === "internal"
+      ? "Complete financial validation (cost avoidance, productivity benefit, adoption, recurring cost, and payback) before execution."
+      : "Complete financial validation (pricing, CAC, churn, gross margin, and break-even) before execution.";
+  }
 
   let recommendationLabel = verdict.charAt(0) + verdict.slice(1).toLowerCase();
   if (args.aiAssumptionPct > 40 && !/Needs validation/i.test(recommendationLabel)) {
@@ -429,11 +520,40 @@ export function computeVerdict(args: {
 /* ---------------- Ensure / enrich ---------------- */
 export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptInputs): FeasibilityReport {
   if (!report || !inputs) return report;
+  if (
+    report.reportSchemaVersion === REPORT_SCHEMA_VERSION
+    && report.qualityMetadata?.scoringEngineVersion === SCORING_ENGINE_VERSION
+    && report.scoringAudit
+  ) {
+    return report.inputFieldAssessments
+      ? report
+      : { ...report, inputFieldAssessments: assessInputQuality(inputs).fields };
+  }
+  try {
+    const canonical = buildCanonicalReport(report, inputs, {
+      modelId: report.qualityMetadata?.modelId || "legacy-unrecorded-model",
+      promptVersion: report.qualityMetadata?.promptVersion || "legacy-unrecorded-prompt",
+      inputHash: report.qualityMetadata?.inputHash || `legacy:${report.reportId}`,
+      generationTimestamp: report.qualityMetadata?.generationTimestamp || new Date().toISOString(),
+      researchTimestamp: report.qualityMetadata?.researchTimestamp,
+    });
+    canonical.legacyEvidence = true;
+    canonical.inputFieldAssessments = assessInputQuality(inputs).fields;
+    canonical.executiveSummary = sanitizeForConsumer(canonical.executiveSummary);
+    if (canonical.research) {
+      canonical.research = { ...canonical.research, overview: sanitizeForConsumer(canonical.research.overview) };
+    }
+    return canonical;
+  } catch {
+    // Older malformed reports remain readable; the compatibility layer below
+    // adds safe labels without discarding the stored record.
+  }
   const r = { ...report };
   let derived = false;
 
   if (!r.inputCompleteness || r.inputQualityScore == null) {
     const iq = assessInputQuality(inputs);
+    r.inputFieldAssessments = iq.fields;
     r.inputQualityScore = iq.overall;
     r.inputCompleteness = {
       overall: iq.overall,
@@ -443,6 +563,7 @@ export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptI
     };
     derived = true;
   }
+  if (!r.inputFieldAssessments) r.inputFieldAssessments = assessInputQuality(inputs).fields;
   if (!r.evidenceMix) { r.evidenceMix = deriveEvidenceMix(r, inputs); derived = true; }
   if (!r.scoreExplanation || r.scoreExplanation.length === 0) {
     r.scoreExplanation = deriveScoreExplanation(r, inputs); derived = true;
@@ -457,15 +578,22 @@ export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptI
   const overallConfPct = Math.max(0, Math.min(100, confidencePercent(confAvg) ?? 50));
   const marketEvidenceWeak = getCitations(r).length < 3 || (r.scores.market ?? 0) < 6;
   const assumptionsThin = !(inputs.assumptions && inputs.assumptions.trim().split(/\s+/).length >= 8);
+  const internal = isInternalProject(r, inputs);
+  const baseScenario = r.financials?.scenarios?.find((scenario) => scenario.scenario === "Base Case")
+    ?? r.financials?.scenarios?.[0];
+  const hasInternalBenefit = baseScenario != null && (
+    (baseScenario.annualFinancialBenefit != null && baseScenario.annualFinancialBenefit >= 0)
+    || Boolean(baseScenario.annualValueDisplay)
+  );
   const financialsMissing =
     !inputs.revenueModel ||
     !inputs.budgetRange ||
     assumptionsThin ||
     !r.financials?.breakEvenSummary ||
-    !r.financials?.ltvCacRatio ||
+    (internal ? !hasInternalBenefit : !r.financials?.ltvCacRatio) ||
     (r.scores.financial ?? 0) < 5;
   const criticalRisksWithoutMitigation = (r.risks || []).some(
-    (rk: any) => isHighRisk(rk) && hasWeakMitigation(rk),
+    (risk) => isHighRisk(risk) && hasWeakMitigation(risk),
   );
 
   if (!r.decision) {
@@ -475,6 +603,7 @@ export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptI
       inputQuality: r.inputQualityScore ?? 0,
       aiAssumptionPct: r.evidenceMix?.aiAssumptionPercent ?? 0,
       marketEvidenceWeak, financialsMissing, criticalRisksWithoutMitigation,
+      projectType: internal ? "internal" : "commercial",
     });
     derived = true;
   }
@@ -510,6 +639,9 @@ export function deriveAssumptionRegister(
   report: FeasibilityReport, inputs: ConceptInputs,
 ): AssumptionRow[] {
   const rows: AssumptionRow[] = [];
+  const internal = isInternalProject(report, inputs);
+  const baseScenario = report.financials?.scenarios?.find((scenario) => scenario.scenario === "Base Case")
+    ?? report.financials?.scenarios?.[0];
   const cites = getCitations(report);
   const hasCites = cites.length > 0;
   const conf = (n: number | undefined): AssumptionRow["confidence"] =>
@@ -550,30 +682,34 @@ export function deriveAssumptionRegister(
     });
   }
   rows.push({
-    assumption: `Target customer demand exists as described in the brief.`,
+    assumption: internal
+      ? "Priority departments will adopt the platform as described in the brief."
+      : "Target customer demand exists as described in the brief.",
     section: "Customer Profile",
     sourceType: hasText(inputs.description, 60) ? "Mixed" : "AI assumption",
     evidenceBasis: hasText(inputs.description, 60)
       ? "Based on the brief, with AI generalisation where details are thin."
       : "Largely AI-inferred from category norms.",
     confidence: conf(mConf),
-    riskIfWrong: "Weak demand collapses revenue forecasts.",
-    howToValidate: "Run 8–15 customer interviews or a paid pilot.",
-    whatToAdd: "Add customer interview notes, survey data, or pilot results.",
+    riskIfWrong: internal ? "Weak adoption reduces realized cost avoidance and delays payback." : "Weak demand collapses revenue forecasts.",
+    howToValidate: internal ? "Run a time-boxed pilot with priority departments." : "Run 8–15 customer interviews or a paid pilot.",
+    whatToAdd: internal ? "Add process baselines, stakeholder sign-off, and pilot adoption results." : "Add customer interview notes, survey data, or pilot results.",
     expectedImpact: "Strongest single improvement to Market confidence.",
   });
   rows.push({
-    assumption: `Customers are willing to pay at the modeled price point.`,
+    assumption: internal
+      ? "The measured operational benefit justifies the internal investment."
+      : "Customers are willing to pay at the modeled price point.",
     section: "Customer Profile",
     sourceType: hasText(inputs.revenueModel, 8) ? "Mixed" : "Needs validation",
     evidenceBasis: hasText(inputs.revenueModel, 8)
-      ? "Anchored to the revenue model you provided."
+      ? `Anchored to the ${internal ? "internal value" : "revenue"} model you provided.`
       : "Not directly supported by input or research.",
     confidence: conf(fConf),
-    riskIfWrong: "Price/value mismatch breaks unit economics.",
-    howToValidate: "Run pricing tests or willingness-to-pay surveys.",
-    whatToAdd: "Add actual pricing tiers, contract sizes, or pilot pricing data.",
-    expectedImpact: "Improves Financial confidence and break-even reliability.",
+    riskIfWrong: internal ? "Overstated savings make the investment case uneconomic." : "Price/value mismatch breaks unit economics.",
+    howToValidate: internal ? "Validate labour rates, hours saved, avoidable spend, and adoption with finance and operations." : "Run pricing tests or willingness-to-pay surveys.",
+    whatToAdd: internal ? "Add baseline process cost, benefit ownership, and pilot measurements." : "Add actual pricing tiers, contract sizes, or pilot pricing data.",
+    expectedImpact: `Improves Financial confidence and ${internal ? "payback" : "break-even"} reliability.`,
   });
   rows.push({
     assumption: `Competitive intensity is ${(report.competitors?.length || 0) >= 4 ? "moderate to strong" : "limited or weakly mapped"}.`,
@@ -583,58 +719,100 @@ export function deriveAssumptionRegister(
       ? "Based on the URLs you provided plus AI inference."
       : "AI-inferred — no competitor URLs supplied.",
     confidence: conf(mConf),
-    riskIfWrong: "Mis-reading competition leads to wrong positioning and CAC.",
+    riskIfWrong: internal ? "Mis-reading alternatives leads to weak adoption or duplicated tooling." : "Mis-reading competition leads to wrong positioning and CAC.",
     howToValidate: "Build a side-by-side feature/price matrix of 3–5 competitors.",
     whatToAdd: "Paste 2–4 competitor URLs and note their pricing and positioning.",
     expectedImpact: "Sharpens Market score and lowers AI assumption ratio.",
   });
 
   // ---- Financial ----
-  rows.push({
-    assumption: `Customer acquisition cost (CAC) is within a healthy range.`,
-    section: "Financial Plan",
-    sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "Needs validation",
-    evidenceBasis: hasText(inputs.assumptions, 25)
-      ? "Partly grounded in your stated assumptions."
-      : "Not supported by direct input — based on category norms.",
-    confidence: conf(fConf),
-    riskIfWrong: "Higher CAC erodes margin and pushes break-even out.",
-    howToValidate: "Run a small paid pilot or use industry CAC benchmarks.",
-    whatToAdd: "Add channel CAC benchmarks or pilot acquisition data.",
-    expectedImpact: "Materially improves Financial confidence.",
-  });
-  rows.push({
-    assumption: `Churn / retention is acceptable for the modeled LTV.`,
-    section: "Financial Plan",
-    sourceType: "AI assumption",
-    evidenceBasis: "Not supplied — estimated from category norms.",
-    confidence: conf(fConf - 10),
-    riskIfWrong: "High churn collapses LTV and turns LTV:CAC negative.",
-    howToValidate: "Track cohort retention for at least 90 days post-launch.",
-    whatToAdd: "Add expected monthly logo churn and revenue churn assumptions.",
-    expectedImpact: "Improves Financial confidence and revenue scenario realism.",
-  });
-  rows.push({
-    assumption: `Gross margin supports the financial scenarios.`,
-    section: "Financial Plan",
-    sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "AI assumption",
-    evidenceBasis: hasText(inputs.assumptions, 25) ? "Inferred from your assumptions." : "AI-inferred from business model.",
-    confidence: conf(fConf),
-    riskIfWrong: "Margin compression invalidates break-even analysis.",
-    howToValidate: "Build a bottoms-up COGS model with supplier quotes.",
-    whatToAdd: "Add target gross margin % and key COGS line items.",
-    expectedImpact: "Improves Financial confidence and funding-mix realism.",
-  });
+  if (internal) {
+    const adoption = baseScenario?.adoptionRate != null
+      ? `${Math.round(baseScenario.adoptionRate * 100)}%`
+      : "requires validation";
+    const financialBenefit = baseScenario?.annualFinancialBenefit != null
+      ? `${report.financials.currency} ${baseScenario.annualFinancialBenefit.toLocaleString()}`
+      : baseScenario?.annualValueDisplay || "requires validation";
+    rows.push({
+      assumption: `Base-case adoption reaches ${adoption}.`,
+      section: "Financial Plan",
+      sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "Needs validation",
+      evidenceBasis: hasText(inputs.assumptions, 25) ? "Partly grounded in your stated assumptions." : "Not supported by measured pilot data.",
+      confidence: conf(fConf),
+      riskIfWrong: "Lower adoption reduces realized cost avoidance and delays payback.",
+      howToValidate: "Run a pilot and track active use by eligible staff or departments.",
+      whatToAdd: "Add eligible-user count, adoption ramp, and sustained-use targets.",
+      expectedImpact: "Materially improves Financial confidence.",
+    });
+    rows.push({
+      assumption: `Base-case annual cost avoidance and productivity benefit totals ${financialBenefit}.`,
+      section: "Financial Plan",
+      sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "AI assumption",
+      evidenceBasis: hasText(inputs.assumptions, 25) ? "Calculated from the stated internal value assumptions." : "AI-estimated assumption — not externally verified.",
+      confidence: conf(fConf),
+      riskIfWrong: "Overstated hours or labour rates invalidate the internal value case.",
+      howToValidate: "Measure the current process baseline, loaded labour rate, and avoidable spend.",
+      whatToAdd: "Add baseline hours, loaded labour cost, productivity conversion rate, and benefit owner.",
+      expectedImpact: "Improves Financial confidence and benefit realism.",
+    });
+    rows.push({
+      assumption: "Recurring platform cost remains within the modeled OpEx envelope.",
+      section: "Financial Plan",
+      sourceType: hasText(inputs.budgetRange) ? "Mixed" : "AI assumption",
+      evidenceBasis: "Calculated from current OpEx line items; vendor quotes still require validation.",
+      confidence: conf(fConf),
+      riskIfWrong: "Higher recurring cost reduces net operational benefit and extends payback.",
+      howToValidate: "Confirm licensing, support, hosting, and change-management costs with owners.",
+      whatToAdd: "Add vendor quotes and a three-year internal operating-cost forecast.",
+      expectedImpact: "Improves payback and funding confidence.",
+    });
+  } else {
+    rows.push({
+      assumption: "Customer acquisition cost (CAC) is within a healthy range.",
+      section: "Financial Plan",
+      sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "Needs validation",
+      evidenceBasis: hasText(inputs.assumptions, 25)
+        ? "Partly grounded in your stated assumptions."
+        : "Not supported by direct input — based on category norms.",
+      confidence: conf(fConf),
+      riskIfWrong: "Higher CAC erodes margin and pushes break-even out.",
+      howToValidate: "Run a small paid pilot or use industry CAC benchmarks.",
+      whatToAdd: "Add channel CAC benchmarks or pilot acquisition data.",
+      expectedImpact: "Materially improves Financial confidence.",
+    });
+    rows.push({
+      assumption: "Churn / retention is acceptable for the modeled LTV.",
+      section: "Financial Plan",
+      sourceType: "AI assumption",
+      evidenceBasis: "Not supplied — estimated from category norms.",
+      confidence: conf(fConf - 10),
+      riskIfWrong: "High churn collapses LTV and turns LTV:CAC negative.",
+      howToValidate: "Track cohort retention for at least 90 days post-launch.",
+      whatToAdd: "Add expected monthly logo churn and revenue churn assumptions.",
+      expectedImpact: "Improves Financial confidence and revenue scenario realism.",
+    });
+    rows.push({
+      assumption: "Gross margin supports the financial scenarios.",
+      section: "Financial Plan",
+      sourceType: hasText(inputs.assumptions, 25) ? "Mixed" : "AI assumption",
+      evidenceBasis: hasText(inputs.assumptions, 25) ? "Inferred from your assumptions." : "AI-inferred from business model.",
+      confidence: conf(fConf),
+      riskIfWrong: "Margin compression invalidates break-even analysis.",
+      howToValidate: "Build a bottoms-up COGS model with supplier quotes.",
+      whatToAdd: "Add target gross margin % and key COGS line items.",
+      expectedImpact: "Improves Financial confidence and funding-mix realism.",
+    });
+  }
   if (report.financials?.breakEvenSummary) {
     rows.push({
-      assumption: `Break-even occurs around ${report.financials.breakEvenSummary}.`,
+      assumption: `${internal ? "Internal payback" : "Break-even"} occurs around ${report.financials.breakEvenSummary}.`,
       section: "Financial Plan",
       sourceType: hasText(inputs.budgetRange) && hasText(inputs.revenueModel) ? "Mixed" : "AI assumption",
-      evidenceBasis: "Derived from budget, revenue model, and AI projections.",
+      evidenceBasis: `Derived from budget, ${internal ? "benefit" : "revenue"} model, and current projections.`,
       confidence: conf(fConf),
-      riskIfWrong: "Misses runway requirements and funding sizing.",
-      howToValidate: "Build a monthly cash-flow model with pessimistic scenarios.",
-      whatToAdd: "Add pricing, customer ramp, and OpEx detail.",
+      riskIfWrong: internal ? "Misses internal payback expectations and funding sizing." : "Misses runway requirements and funding sizing.",
+      howToValidate: internal ? "Build a monthly benefit-realization model with conservative adoption." : "Build a monthly cash-flow model with pessimistic scenarios.",
+      whatToAdd: internal ? "Add benefit timing, adoption ramp, and OpEx detail." : "Add pricing, customer ramp, and OpEx detail.",
       expectedImpact: "Reduces runway risk and improves funding plan.",
     });
   }
@@ -651,7 +829,7 @@ export function deriveAssumptionRegister(
       expectedImpact: "Tightens CapEx range and Financial confidence.",
     });
   }
-  if (report.financials?.ltvCacRatio) {
+  if (!internal && report.financials?.ltvCacRatio) {
     rows.push({
       assumption: `LTV:CAC of ${report.financials.ltvCacRatio} is achievable.`,
       section: "Financial Plan",
@@ -672,7 +850,7 @@ export function deriveAssumptionRegister(
     sourceType: hasText(inputs.founderExperience, 20) && presentTrim(inputs.teamSize) ? "User input" : "AI assumption",
     evidenceBasis: hasText(inputs.founderExperience, 20) ? "Based on the team detail you provided." : "AI-inferred from team-size proxies.",
     confidence: conf(oConf),
-    riskIfWrong: "Delivery slip pushes out revenue and burns runway.",
+    riskIfWrong: internal ? "Delivery slip delays operational benefit and extends payback." : "Delivery slip pushes out revenue and burns runway.",
     howToValidate: "Stress-test the plan with an experienced delivery lead.",
     whatToAdd: "Add key roles, prior wins, and a high-level delivery plan.",
     expectedImpact: "Improves Achievability and Operational confidence.",
@@ -727,7 +905,7 @@ export function deriveAssumptionRegister(
     whatToAdd: "Name the regulators, licences, or standards that apply.",
     expectedImpact: "Reduces Risk and Timing surprises.",
   });
-  const weakMitigation = (report.risks || []).some((rk: any) => isHighRisk(rk) && hasWeakMitigation(rk));
+  const weakMitigation = (report.risks || []).some((risk) => isHighRisk(risk) && hasWeakMitigation(risk));
   rows.push({
     assumption: `Risk mitigations are effective enough to keep risks at the stated levels.`,
     section: "Risk Assessment",
@@ -774,7 +952,7 @@ export function buildVersionEntry(
 ): ReportVersion {
   const changed: string[] = [];
   for (const k of Object.keys(nextInputs) as (keyof ConceptInputs)[]) {
-    if ((prevInputs as any)[k] !== (nextInputs as any)[k]) changed.push(String(k));
+    if (prevInputs[k] !== nextInputs[k]) changed.push(String(k));
   }
   const prevConfAvg = previous.scores.confidence
     ? Object.values(previous.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6 : 50;
@@ -787,8 +965,8 @@ export function buildVersionEntry(
 
   const summaryParts: string[] = [];
   if (changed.length) summaryParts.push(`Updated ${changed.length} field${changed.length === 1 ? "" : "s"}.`);
-  if (nextConfPct > prevConfPct + 2) summaryParts.push("Confidence improved.");
-  else if (nextConfPct < prevConfPct - 2) summaryParts.push("Confidence dropped — new info revealed weaknesses.");
+  if (nextConfPct > prevConfPct + 2) summaryParts.push("Model-estimated confidence improved.");
+  else if (nextConfPct < prevConfPct - 2) summaryParts.push("Model-estimated confidence dropped — new information revealed weaknesses.");
   if (nextAi < prevAi - 3) summaryParts.push("AI assumption ratio decreased.");
   if (!summaryParts.length) summaryParts.push("Re-run produced minor changes.");
 

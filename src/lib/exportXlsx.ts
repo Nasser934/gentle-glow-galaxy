@@ -8,9 +8,10 @@
 
 import ExcelJS from "exceljs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
-import { formatConfidence } from "@/lib/format";
+import { formatConfidence, isInternalProject } from "@/lib/format";
 import { buildExportDecisionPack, applyCanonicalToReport } from "@/lib/exportDecisionPack";
 import { deriveAssumptionRegister } from "@/lib/evidence";
+import { numericValue } from "@/lib/numbers";
 
 const PRIMARY = "FF1F4ED8";
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: PRIMARY } };
@@ -43,24 +44,7 @@ const autoWidth = (ws: ExcelJS.Worksheet, min = 12, max = 60) => {
   });
 };
 
-const num = (s?: string) => {
-  const raw = (s || "").toString().trim();
-  if (!raw) return 0;
-
-  const cleaned = raw.replace(/,/g, "");
-  const m = cleaned.match(/-?\d+(?:\.\d+)?/);
-  if (!m) return 0;
-
-  const value = Number(m[0]);
-  const tail = cleaned.slice(m.index! + m[0].length).toLowerCase();
-
-  if (/\b(t|tn|trillion)\b/.test(tail)) return value * 1_000_000_000_000;
-  if (/\b(b|bn|billion)\b/.test(tail)) return value * 1_000_000_000;
-  if (/\b(m|mn|million)\b/.test(tail)) return value * 1_000_000;
-  if (/\b(k|thousand)\b/.test(tail)) return value * 1_000;
-
-  return value;
-};
+const num = (value?: unknown) => numericValue(value, 0);
 
 const sourceConfidenceLabel = (value: unknown): string => {
   const t = String(value ?? "").trim().toLowerCase();
@@ -82,13 +66,13 @@ const sourceConfidenceLabel = (value: unknown): string => {
 };
 
 
-export async function exportReportToXlsx(
+export function buildReportWorkbook(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
-  fileName: string,
 ) {
   const pack = buildExportDecisionPack(rawReport, inputs);
   const report = applyCanonicalToReport(rawReport, pack);
+  const internal = isInternalProject(report, inputs);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Concept AI";
@@ -108,22 +92,23 @@ export async function exportReportToXlsx(
     ["Date Issued", pack.identity.date],
     ["Verdict", pack.verdict.canonical],
     ["Overall Score", `${pack.score.overall.toFixed(1)} / 10`],
-    ["Decision Confidence", pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "—"],
+    ["Model-estimated Confidence", pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "—"],
     ["Investment Range", pack.financial.investmentRange],
     ["CapEx (Mid)", pack.financial.capexMid],
     ["Monthly OpEx", pack.financial.monthlyOpex],
     ["Initial Funding Need", pack.financial.initialFundingNeed],
     ["Break-even", pack.financial.breakEvenDisplay],
-    ["LTV : CAC", pack.financial.ltvCac],
+    ...(internal ? [] : [["LTV : CAC", pack.financial.ltvCac] as [string, string | number]]),
     ["TAM", pack.market.tam],
     ["SAM", pack.market.sam],
     ["SOM", pack.market.som],
     ["CAGR", pack.market.cagr || "—"],
     ["High-severity Risks", pack.risk.highRiskCount],
     ["Material Risks (High + Med)", pack.risk.materialRiskCount],
-    ["Evidence — User input %", pack.evidence.mix.userInputPercent],
-    ["Evidence — Web research %", pack.evidence.mix.webResearchPercent],
-    ["Evidence — AI assumption %", pack.evidence.mix.aiAssumptionPercent],
+    ["Estimated composition — User input %", pack.evidence.mix.userInputPercent],
+    ["Estimated composition — Available external evidence %", pack.evidence.mix.webResearchPercent],
+    ["Estimated composition — AI inference %", pack.evidence.mix.aiAssumptionPercent],
+    ["Composition method", "Heuristic estimate based on input completeness and available sources."],
   ];
   dashRows.forEach((r) => borderRow(dash.addRow(r)));
   autoWidth(dash);
@@ -138,7 +123,7 @@ export async function exportReportToXlsx(
     ["Description", inputs.description],
     ["Strategic objectives", inputs.strategicObjectives],
     ["Business model", inputs.businessModel],
-    ["Revenue model", inputs.revenueModel],
+    [internal ? "Internal value model" : "Revenue model", inputs.revenueModel],
     ["Founder experience", inputs.founderExperience],
     ["Budget range", inputs.budgetRange],
     ["Timeline", inputs.timeline],
@@ -162,7 +147,7 @@ export async function exportReportToXlsx(
 
   /* ========================= Sheet 3 — Assumptions ========================= */
   const ws3 = wb.addWorksheet("Assumptions");
-  styleHeader(ws3.addRow(["Assumption", "Source", "Confidence", "Risk if wrong", "What to add"]));
+  styleHeader(ws3.addRow(["Assumption", "Source", "Model-estimated indicator", "Risk if wrong", "What to add"]));
   const register = deriveAssumptionRegister(report, inputs);
   if (register.length === 0) {
     const r = ws3.addRow(["No structured assumptions captured yet.", "", "", "", ""]);
@@ -247,16 +232,23 @@ export async function exportReportToXlsx(
 
   /* ========================= Sheet 5 — Scenarios ========================= */
   const ws5 = wb.addWorksheet("Scenarios");
-  styleHeader(ws5.addRow(["Scenario", "Probability", "Customers Y1", "Annual Revenue", "Break-even"]));
+  styleHeader(ws5.addRow([
+    "Scenario",
+    "Probability",
+    internal ? "Adoption" : "Customers Y1",
+    internal ? "Annual Financial Benefit" : "Annual Revenue",
+    "Break-even",
+  ]));
   (report.financials.scenarios || []).forEach((sc) => {
     const row = ws5.addRow([
       sc.scenario,
       sc.probability,
-      sc.subscribersYr1,
-      num(sc.annualRevenue),
+      internal ? sc.adoptionRate : sc.subscribersYr1,
+      internal ? num(sc.annualFinancialBenefit ?? sc.annualValueDisplay) : num(sc.annualRevenue),
       sc.breakEven,
     ]);
     borderRow(row);
+    if (internal) row.getCell(3).numFmt = "0%";
     row.getCell(4).numFmt = "#,##0";
   });
   autoWidth(ws5);
@@ -265,26 +257,22 @@ export async function exportReportToXlsx(
   const sens = wb.addWorksheet("Sensitivity");
   sens.addRow(["Sensitivity model — edit blue cells"]).font = { bold: true, size: 14, color: { argb: PRIMARY } };
   sens.addRow([]);
-  const baseRev =
-    num(report.financials.scenarios?.find((s) => s.scenario === "Base Case")?.annualRevenue) ||
-    num(report.financials.scenarios?.[0]?.annualRevenue) ||
-    1_000_000;
+  const baseScenario = report.financials.scenarios?.find((scenario) => scenario.scenario === "Base Case")
+    ?? report.financials.scenarios?.[0];
+  const baseOutcome = internal
+    ? num(baseScenario?.annualFinancialBenefit ?? baseScenario?.annualValueDisplay)
+    : num(baseScenario?.annualRevenue);
   const baseOpex =
-    (report.financials.opEx || []).reduce((s, x) => s + (x.annual || 0), 0) || baseRev * 0.6;
+    (report.financials.opEx || []).reduce((sum, item) => sum + (item.annual || 0), 0);
   const baseCapex =
     report.financials.capExTotal?.mid ||
-    ((report.financials.capExTotal?.low || 0) + (report.financials.capExTotal?.high || 0)) / 2 ||
-    baseRev * 0.3;
+    ((report.financials.capExTotal?.low || 0) + (report.financials.capExTotal?.high || 0)) / 2;
 
   const ih = sens.addRow(["Driver", "Multiplier"]);
   styleHeader(ih);
-  const drivers: Array<[string, number]> = [
-    ["Revenue", 1],
-    ["Costs", 1],
-    ["CAC", 1],
-    ["Conversion", 1],
-    ["Adoption", 1],
-  ];
+  const drivers: Array<[string, number]> = internal
+    ? [["Financial benefit", 1], ["Costs", 1], ["Adoption", 1]]
+    : [["Revenue", 1], ["Costs", 1], ["CAC", 1], ["Conversion", 1], ["Adoption", 1]];
   drivers.forEach(([label, val]) => {
     const row = sens.addRow([label, val]);
     row.getCell(2).font = { color: { argb: "FF0000FF" }, bold: true };
@@ -292,19 +280,19 @@ export async function exportReportToXlsx(
     borderRow(row);
   });
   const driverStart = ih.number + 1;
-  const revRow = driverStart;
+  const outcomeRow = driverStart;
   const costRow = driverStart + 1;
-  const cacRow = driverStart + 2;
-  const convRow = driverStart + 3;
-  const adoptRow = driverStart + 4;
+  const cacRow = internal ? null : driverStart + 2;
+  const convRow = internal ? null : driverStart + 3;
+  const adoptRow = internal ? driverStart + 2 : driverStart + 4;
 
   sens.addRow([]);
   const bh = sens.addRow(["Base Case Inputs", "Value"]);
   styleHeader(bh);
-  sens.addRow(["Revenue (annual)", baseRev]).getCell(2).numFmt = "#,##0";
+  sens.addRow([internal ? "Financial benefit (annual)" : "Revenue (annual)", baseOutcome]).getCell(2).numFmt = "#,##0";
   sens.addRow(["OpEx (annual)", baseOpex]).getCell(2).numFmt = "#,##0";
   sens.addRow(["CapEx", baseCapex]).getCell(2).numFmt = "#,##0";
-  const baseRevRow = bh.number + 1;
+  const baseOutcomeRow = bh.number + 1;
   const baseOpexRow = bh.number + 2;
   const baseCapexRow = bh.number + 3;
 
@@ -318,12 +306,21 @@ export async function exportReportToXlsx(
     row.getCell(3).font = { bold: true };
     borderRow(row);
   };
-  addCalc("Adjusted Revenue", `B${baseRevRow}*B${revRow}*B${convRow}*B${adoptRow}`);
-  addCalc("Adjusted OpEx", `B${baseOpexRow}*B${costRow}*(0.7+0.3*B${cacRow})`);
-  addCalc("Gross Profit", `C${oh2.number + 1}-C${oh2.number + 2}`);
-  addCalc("Net Profit (Y1)", `C${oh2.number + 3}-B${baseCapexRow}*0.2`);
-  addCalc("Payback (months)", `IFERROR(B${baseCapexRow}/(C${oh2.number + 3}/12),0)`, "0.0");
-  addCalc("ROI Y1", `IFERROR(C${oh2.number + 4}/B${baseCapexRow},0)`, "0.0%");
+  if (internal) {
+    addCalc("Adjusted Financial Benefit", `B${baseOutcomeRow}*B${outcomeRow}*B${adoptRow}`);
+    addCalc("Adjusted OpEx", `B${baseOpexRow}*B${costRow}`);
+    addCalc("Positive Year-1 Financial Outcome", `C${oh2.number + 1}-C${oh2.number + 2}`);
+    addCalc("Net Year-1 Outcome after CapEx", `C${oh2.number + 3}-B${baseCapexRow}`);
+    addCalc("Internal Payback (months)", `IFERROR(B${baseCapexRow}/(C${oh2.number + 3}/12),0)`, "0.0");
+    addCalc("Year-1 Benefit / Cost", `IFERROR(C${oh2.number + 1}/(C${oh2.number + 2}+B${baseCapexRow}),0)`, "0.00x");
+  } else {
+    addCalc("Adjusted Revenue", `B${baseOutcomeRow}*B${outcomeRow}*B${convRow}*B${adoptRow}`);
+    addCalc("Adjusted OpEx", `B${baseOpexRow}*B${costRow}*(0.7+0.3*B${cacRow})`);
+    addCalc("Gross Profit", `C${oh2.number + 1}-C${oh2.number + 2}`);
+    addCalc("Net Profit (Y1)", `C${oh2.number + 3}-B${baseCapexRow}*0.2`);
+    addCalc("Payback (months)", `IFERROR(B${baseCapexRow}/(C${oh2.number + 3}/12),0)`, "0.0");
+    addCalc("ROI Y1", `IFERROR(C${oh2.number + 4}/B${baseCapexRow},0)`, "0.0%");
+  }
   autoWidth(sens);
 
   /* ========================= Sheet 7 — Market ========================= */
@@ -363,7 +360,7 @@ export async function exportReportToXlsx(
 
   /* ========================= Sheet 9 — Sources ========================= */
   const src = wb.addWorksheet("Sources");
-  styleHeader(src.addRow(["Source", "Domain", "URL", "Takeaway / claim supported", "Confidence"]));
+  styleHeader(src.addRow(["Source", "Domain", "URL", "Takeaway / claim supported", "Source support indicator"]));
 
   // Map domain from URL
   const domainOf = (u?: string) => {
@@ -393,8 +390,8 @@ export async function exportReportToXlsx(
   const topClaims = pack.evidence.topClaims;
   if (topClaims.length) {
     src.addRow([]);
-    src.addRow(["Top claims & source confidence"]).font = { bold: true, color: { argb: PRIMARY } };
-    styleHeader(src.addRow(["Claim ID", "Claim", "Confidence", "Source domains"]));
+    src.addRow(["Top claims & source support"]).font = { bold: true, color: { argb: PRIMARY } };
+    styleHeader(src.addRow(["Claim ID", "Claim", "Model-estimated indicator", "Source domains"]));
     topClaims.forEach((c) => {
       const row = src.addRow([
         c.claimId,
@@ -446,7 +443,7 @@ export async function exportReportToXlsx(
   /* ============================ FMART-O reference sheet (kept) ============================ */
   // Keep prior scorecard view for review parity with the report.
   const scores = wb.addWorksheet("FMART-O Scores");
-  styleHeader(scores.addRow(["Dimension", "Score (0-10)", "Weight", "Confidence", "Finding", "Rationale"]));
+  styleHeader(scores.addRow(["Dimension", "Score (0-10)", "Weight", "Model-estimated confidence", "Finding", "Rationale"]));
   const dims = ["financial", "market", "achievability", "operational", "risk", "timing"] as const;
   const dimLabels: Record<string, string> = {
     financial: "Financial",
@@ -477,7 +474,15 @@ export async function exportReportToXlsx(
   scores.getColumn(6).width = 50;
   autoWidth(scores);
 
-  /* ----------------------------- Trigger download ----------------------------- */
+  return wb;
+}
+
+export async function exportReportToXlsx(
+  rawReport: FeasibilityReport,
+  inputs: ConceptInputs,
+  fileName: string,
+) {
+  const wb = buildReportWorkbook(rawReport, inputs);
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

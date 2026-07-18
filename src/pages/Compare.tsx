@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, GitCompare, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { listMyReports } from "@/lib/reports";
+import { listMyReports, type ReportRow } from "@/lib/reports";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { FeasibilityReport } from "@/types/analysis";
+import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString } from "@/lib/format";
+import { ensureEvidenceFields } from "@/lib/evidence";
+import { compareCanonicalReports } from "@/lib/reportComparison";
 
 
 const dims = [
@@ -19,21 +21,28 @@ const dims = [
   { key: "overall", label: "Overall" },
 ] as const;
 
+type LoadedReport = { report: FeasibilityReport; inputs: ConceptInputs };
+type ReportListRow = Pick<ReportRow, "id" | "slug" | "title" | "industry" | "status" | "created_at" | "updated_at" | "parent_report_id" | "archived_at">;
+
 const Compare = () => {
   const [searchParams] = useSearchParams();
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<ReportListRow[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState<Record<string, FeasibilityReport>>({});
+  const [loaded, setLoaded] = useState<Record<string, LoadedReport>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Load all reports (active + archived) so deep links from the dashboard
   // can preselect even older versions.
   useEffect(() => {
+    setLoading(true);
+    setLoadError(false);
     listMyReports("all")
       .then(setRows)
-      .catch((e) => toast.error(e.message))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [retryKey]);
 
   // Preselect from ?ids=a,b[,c] — up to 3, fetched in parallel.
   useEffect(() => {
@@ -45,15 +54,20 @@ const Compare = () => {
     (async () => {
       const results = await Promise.all(
         ids.map((id) =>
-          supabase.from("reports").select("output").eq("id", id).maybeSingle()
-            .then(({ data, error }) => (error || !data ? null : { id, output: data.output as unknown as FeasibilityReport })),
+          supabase.from("reports").select("output, inputs").eq("id", id).maybeSingle()
+            .then(({ data, error }) => {
+              if (error || !data) return null;
+              const inputs = data.inputs as unknown as ConceptInputs;
+              const output = ensureEvidenceFields(data.output as unknown as FeasibilityReport, inputs);
+              return { id, value: { report: output, inputs } };
+            }),
         ),
       );
       if (cancelled) return;
-      const next: Record<string, FeasibilityReport> = {};
+      const next: Record<string, LoadedReport> = {};
       const okIds: string[] = [];
       for (const r of results) {
-        if (r) { next[r.id] = r.output; okIds.push(r.id); }
+        if (r) { next[r.id] = r.value; okIds.push(r.id); }
       }
       if (okIds.length) {
         setLoaded((prev) => ({ ...prev, ...next }));
@@ -67,14 +81,35 @@ const Compare = () => {
     if (picked.includes(id)) { setPicked(picked.filter((x) => x !== id)); return; }
     if (picked.length >= 3) { toast.info("Up to 3 reports at once"); return; }
     if (!loaded[id]) {
-      const { data, error } = await supabase.from("reports").select("output").eq("id", id).single();
+      const { data, error } = await supabase.from("reports").select("output, inputs").eq("id", id).single();
       if (error) return toast.error(error.message);
-      setLoaded({ ...loaded, [id]: data!.output as unknown as FeasibilityReport });
+      const reportInputs = data.inputs as unknown as ConceptInputs;
+      setLoaded({
+        ...loaded,
+        [id]: {
+          inputs: reportInputs,
+          report: ensureEvidenceFields(data.output as unknown as FeasibilityReport, reportInputs),
+        },
+      });
     }
     setPicked([...picked, id]);
   };
 
-  const cells = picked.map((id) => ({ id, row: rows.find((r) => r.id === id), report: loaded[id] }));
+  const cells = picked.map((id) => ({
+    id,
+    row: rows.find((r) => r.id === id),
+    report: loaded[id]?.report,
+    inputs: loaded[id]?.inputs,
+  }));
+  const comparisonSummaries = cells.length > 1 && cells[0].report
+    ? cells.slice(1).flatMap((cell) => cell.report
+      ? [{
+          id: cell.id,
+          title: cell.row?.title || "Selected report",
+          diff: compareCanonicalReports(cells[0].report!, cell.report, cells[0].inputs, cell.inputs),
+        }]
+      : [])
+    : [];
 
   return (
     <div>
@@ -94,6 +129,11 @@ const Compare = () => {
 
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+        ) : loadError ? (
+          <div className="rounded-xl border border-border bg-card p-8 text-center">
+            <p className="text-sm text-muted-foreground">Could not load reports for comparison.</p>
+            <Button className="mt-3" onClick={() => setRetryKey((value) => value + 1)}>Retry</Button>
+          </div>
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -173,12 +213,35 @@ const Compare = () => {
                       <td className="px-4 py-3 font-medium align-top">Top risks</td>
                       {cells.map((c) => (
                         <td key={c.id} className="px-4 py-3 align-top text-[12px] text-muted-foreground">
-                          {c.report?.risks.slice(0, 3).map((r: any) => r.name).join(" · ") || "—"}
+                          {c.report?.risks.slice(0, 3).map((risk) => risk.name).join(" · ") || "—"}
                         </td>
                       ))}
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            )}
+            {comparisonSummaries.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h2 className="font-display text-lg font-medium">Meaningful version differences</h2>
+                {comparisonSummaries.map(({ id, title, diff }) => (
+                  <div key={id} className="rounded-xl border border-border bg-card/50 p-4 text-sm">
+                    <div className="font-medium">Baseline → {title}</div>
+                    {diff.scoringVersionMismatch && (
+                      <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+                        Scoring-engine versions differ ({diff.previousScoringVersion} → {diff.nextScoringVersion}); compare score changes with caution.
+                      </div>
+                    )}
+                    <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                      <div><span className="font-semibold">Changed inputs:</span> {diff.changedInputs.join(", ") || "None"}</div>
+                      <div><span className="font-semibold">Score / verdict:</span> {diff.scoreDelta >= 0 ? "+" : ""}{diff.scoreDelta.toFixed(1)}{diff.verdictChanged ? " · verdict changed" : ""}</div>
+                      <div><span className="font-semibold">Sources:</span> +{diff.addedSources.length} / −{diff.removedSources.length}</div>
+                      <div><span className="font-semibold">Financial assumptions:</span> {diff.financialChanges.join(", ") || "No material change"}</div>
+                      <div><span className="font-semibold">Risks added / removed:</span> +{diff.addedRisks.length} / −{diff.removedRisks.length}</div>
+                      <div><span className="font-semibold">Risk levels changed:</span> {diff.changedRiskLevels.join(", ") || "None"}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </>

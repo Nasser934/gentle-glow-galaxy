@@ -5,7 +5,7 @@ import { compactCurrencyString } from "@/lib/format";
 
 
 /**
- * Print-only snapshot of the live dashboard. Uses a fixed hex palette
+ * Print-only snapshot of the analysis dashboard. Uses a fixed hex palette
  * (theme-independent) so the PDF page 1 always matches the printable
  * report's colors regardless of light/dark mode.
  */
@@ -75,7 +75,7 @@ export const DashboardSnapshot = ({
       {/* Header band */}
       <div className="mb-6 flex items-center justify-between border-b-2 pb-3" style={{ borderColor: PALETTE.primary }}>
         <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: PALETTE.primary }}>
-          AI Feasibility Engine · Live Dashboard
+          Concept AI · Analysis Dashboard
         </div>
         <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: PALETTE.muted }}>
           {inputs.projectName} · Page {pageNum}/{total}
@@ -87,7 +87,7 @@ export const DashboardSnapshot = ({
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: PALETTE.muted }}>Project</div>
           <h1 className="mt-1 font-display text-[26px] font-extrabold leading-tight" style={{ color: PALETTE.text }}>
-            {inputs.projectName} — Live Dashboard
+            {inputs.projectName} — Analysis Dashboard
           </h1>
           <p className="mt-1 text-[12px]" style={{ color: PALETTE.muted }}>
             Interactive feasibility command center with market research, charts, risk signals, and financial figures.
@@ -103,12 +103,12 @@ export const DashboardSnapshot = ({
 
       {/* KPI grid */}
       <div className="mb-6 grid grid-cols-3 gap-3">
-        <Kpi label="Overall Score"     value={`${report.scores.overall.toFixed(1)} / 10`} sub="FMART-O weighted" />
+        <Kpi label="Overall Score"     value={`${report.scores.overall.toFixed(1)} / 10`} sub="Server-validated FMART-O weighted" />
         <Kpi label="Investment"        value={compactCurrencyString(report.financials.investmentRange)} sub={cur} />
         <Kpi label="Break-Even"        value={report.financials.breakEvenSummary} />
         <Kpi label="Market TAM"        value={compactCurrencyString(report.market.tamValue)} sub={`CAGR ${report.market.tamCagr}`} />
 
-        <Kpi label="Research Signals"  value={`${researchCount || "—"}`} sub={research?.confidence ? `${research.confidence} confidence` : "Free public sources"} />
+        <Kpi label="Research Signals"  value={`${researchCount || "—"}`} sub={research?.coverage || (research?.confidence ? `${research.confidence} analysis indicator` : "Available external evidence")} />
         <Kpi label="Verdict"           value={report.scores.verdict} sub={`Report ${report.reportId}`} />
       </div>
 

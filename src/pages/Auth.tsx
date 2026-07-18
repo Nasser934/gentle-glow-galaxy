@@ -29,7 +29,8 @@ const AuthPage = () => {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const redirectTo = (loc.state as any)?.from || "/analyze";
+  const routeState = loc.state as { from?: string } | null;
+  const redirectTo = routeState?.from || "/analyze";
 
   useEffect(() => {
     if (!authLoading && user) navigate(redirectTo, { replace: true });
@@ -53,8 +54,8 @@ const AuthPage = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Authentication failed");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Authentication failed");
     } finally {
       setBusy(false);
     }
@@ -65,8 +66,8 @@ const AuthPage = () => {
     try {
       const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
       if (result.error) throw result.error;
-    } catch (e: any) {
-      toast.error(e?.message || "Google sign-in failed");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Google sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -108,7 +109,7 @@ const AuthPage = () => {
               <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
             </div>
 
-            <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+            <Tabs value={mode} onValueChange={(value) => { if (value === "signin" || value === "signup") setMode(value); }}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Sign in</TabsTrigger>
                 <TabsTrigger value="signup">Sign up</TabsTrigger>
@@ -161,7 +162,7 @@ const AuthPage = () => {
               </div>
             </div>
             <p className="max-w-xs text-center text-[13px] leading-relaxed text-primary-foreground/80">
-              Turn ideas into confident decisions — structured FMART scoring, sourced research,
+              Turn ideas into evidence-aware recommendations — server-validated FMART-O scoring, available external evidence,
               and exportable reports.
             </p>
           </div>

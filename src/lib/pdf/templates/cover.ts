@@ -210,7 +210,7 @@ export function drawCover(
 
   const kpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
-    { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
+    { label: "Model-estimated confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
     labels.isInternal
       ? { label: "Investment Range", value: investment, sub: report.financials.currency || undefined }
       : { label: "Break-even", value: beValue, sub: conciseBreakEvenSub(beValue, pack?.financial.breakEvenRange ?? report.financials.breakEvenSummary) },
@@ -270,7 +270,7 @@ export function drawCover(
   setColor(pdf, C.muted);
   pdf.setFont("helvetica", "italic"); pdf.setFontSize(8);
   pdf.text(
-    "AI assumption <30%: stronger confidence  ·  30–40%: validate key inputs  ·  >40%: exploratory — strengthen before decision.",
+    "AI inference <30%: stronger evidence support  ·  30–40%: validate key inputs  ·  >40%: exploratory — strengthen before decision.",
     MARGIN, y,
   );
   y += 10;
