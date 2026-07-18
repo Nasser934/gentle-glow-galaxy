@@ -91,7 +91,7 @@ export function runScenarioSimulation(input: SimulationInput) {
   }
 
   const mean = outcomes.reduce((total, value) => total + value, 0) / outcomes.length;
-  const distributions = (input.projectType === "commercial"
+  const distributions: Array<{ name: string; distribution: string; standardDeviation?: number; value?: number }> = (input.projectType === "commercial"
     ? [
         { name: "Annual revenue", distribution: "Normal", standardDeviation: input.assumptions.revenueStdDev },
         { name: "Annual operating cost", distribution: "Normal", standardDeviation: input.assumptions.costStdDev },
