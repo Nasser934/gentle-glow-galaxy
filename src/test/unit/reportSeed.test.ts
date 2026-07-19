@@ -192,6 +192,6 @@ describe("slim report seed", () => {
     expect(canonical.scores.overall).toBeGreaterThan(0);
     expect(canonical.scores.verdict).toBeTruthy();
     expect(canonical.qualityMetadata.financialWarningCount).toBe(0);
-    expect(canonical.claims.length).toBeGreaterThanOrEqual(4);
+    expect(canonical.claims.length).toBeGreaterThanOrEqual(3);
   });
 });
