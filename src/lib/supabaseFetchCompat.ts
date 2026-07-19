@@ -19,6 +19,10 @@ const OPTIONAL_REPORT_COLUMNS = new Set([
   "generation_timestamp",
 ]);
 
+export const ANALYSIS_CLIENT_TIMEOUT_MS = 180_000;
+const LEGACY_ANALYSIS_PATH = "/functions/v1/analyze-concept";
+const RESILIENT_ANALYSIS_PATH = "/functions/v1/analyze-concept-v2";
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.toString();
@@ -45,6 +49,33 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
 
 function isReportsInsert(input: RequestInfo | URL, init?: RequestInit): boolean {
   return requestMethod(input, init) === "POST" && requestUrl(input).includes("/rest/v1/reports");
+}
+
+function isLegacyAnalysisRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
+  const url = requestUrl(input);
+  const pathMatch = url.includes(LEGACY_ANALYSIS_PATH)
+    && !url.includes(RESILIENT_ANALYSIS_PATH);
+  return requestMethod(input, init) === "POST" && pathMatch;
+}
+
+function routeAnalysisInput(input: RequestInfo | URL): RequestInfo | URL {
+  if (typeof input === "string") {
+    return input.replace(LEGACY_ANALYSIS_PATH, RESILIENT_ANALYSIS_PATH);
+  }
+  if (input instanceof URL) {
+    const routed = new URL(input.toString());
+    routed.pathname = routed.pathname.replace(LEGACY_ANALYSIS_PATH, RESILIENT_ANALYSIS_PATH);
+    return routed;
+  }
+  return input;
+}
+
+function analysisRequestInit(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
+  if (!isLegacyAnalysisRequest(input, init) || init?.signal) return init;
+  return {
+    ...init,
+    signal: AbortSignal.timeout(ANALYSIS_CLIENT_TIMEOUT_MS),
+  };
 }
 
 function missingReportColumn(error: PostgrestErrorBody): string | null {
@@ -92,15 +123,17 @@ async function parsePostgrestError(response: Response): Promise<PostgrestErrorBo
 }
 
 /**
- * Temporary compatibility layer for Lovable Cloud databases whose PostgREST
- * schema cache is behind the repository migrations. It retries report inserts
- * only for known optional columns and leaves RLS, validation, and other errors
- * untouched.
+ * Compatibility layer for Lovable Cloud:
+ * - routes the analysis call to the resilient v2 Edge Function;
+ * - allows the browser to wait up to three minutes;
+ * - retries report inserts only when known optional columns are absent.
  */
 export function createSchemaCompatibleFetch(baseFetch: FetchLike = fetch): FetchLike {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const body = await requestBodyText(input, init);
-    let response = await baseFetch(input, init);
+    const routedInput = routeAnalysisInput(input);
+    const routedInit = analysisRequestInit(input, init);
+    let response = await baseFetch(routedInput, routedInit);
 
     if (response.ok || !isReportsInsert(input, init) || body === null) {
       return response;

@@ -1,12 +1,51 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSchemaCompatibleFetch } from "@/lib/supabaseFetchCompat";
+import {
+  ANALYSIS_CLIENT_TIMEOUT_MS,
+  createSchemaCompatibleFetch,
+} from "@/lib/supabaseFetchCompat";
 
 const missingColumnResponse = (column: string) => new Response(JSON.stringify({
   code: "PGRST204",
   message: `Could not find the '${column}' column of 'reports' in the schema cache`,
 }), { status: 400, headers: { "Content-Type": "application/json" } });
 
-describe("Supabase report save schema compatibility", () => {
+describe("Supabase compatibility fetch", () => {
+  it("routes legacy analysis calls to the resilient v2 function and applies a three-minute timeout", async () => {
+    const successResponse = new Response(JSON.stringify({ reportId: "CAI-1" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const baseFetch = vi.fn().mockResolvedValue(successResponse);
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+
+    const response = await compatibleFetch("https://example.supabase.co/functions/v1/analyze-concept", {
+      method: "POST",
+      body: JSON.stringify({ inputs: { projectName: "Test" } }),
+    });
+
+    expect(response).toBe(successResponse);
+    expect(ANALYSIS_CLIENT_TIMEOUT_MS).toBe(180_000);
+    expect(baseFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = baseFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://example.supabase.co/functions/v1/analyze-concept-v2");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("does not replace a caller-provided abort signal", async () => {
+    const baseFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+    const controller = new AbortController();
+
+    await compatibleFetch("https://example.supabase.co/functions/v1/analyze-concept", {
+      method: "POST",
+      signal: controller.signal,
+    });
+
+    const [url, init] = baseFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("analyze-concept-v2");
+    expect(init.signal).toBe(controller.signal);
+  });
+
   it("retries a reports insert without save_operation_key when PostgREST reports the column missing", async () => {
     const baseFetch = vi.fn()
       .mockResolvedValueOnce(missingColumnResponse("save_operation_key"))
@@ -91,7 +130,7 @@ describe("Supabase report save schema compatibility", () => {
     expect(baseFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves successful requests unchanged", async () => {
+  it("leaves successful non-analysis requests unchanged", async () => {
     const successResponse = new Response("[]", { status: 201 });
     const baseFetch = vi.fn().mockResolvedValue(successResponse);
 
