@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720" role="img" aria-labelledby="title desc">
+<title id="title">Concept AI — Feasibility Intelligence</title>
+<desc id="desc">A branded illustration showing a concept brief becoming an evidence-aware decision report.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071317"/><stop offset="1" stop-color="#0B252A"/></linearGradient>
+  <radialGradient id="g1"><stop stop-color="#43C7C7" stop-opacity=".28"/><stop offset="1" stop-color="#43C7C7" stop-opacity="0"/></radialGradient>
+  <radialGradient id="g2"><stop stop-color="#F2B84B" stop-opacity=".22"/><stop offset="1" stop-color="#F2B84B" stop-opacity="0"/></radialGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000" flood-opacity=".28"/></filter>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#15363C" stroke-width="1" opacity=".5"/></pattern>
+</defs>
+<rect width="1600" height="720" fill="url(#bg)"/>
+<rect width="1600" height="720" fill="url(#grid)"/>
+<circle cx="220" cy="120" r="410" fill="url(#g1)"/>
+<circle cx="1420" cy="570" r="360" fill="url(#g2)"/>
+<g transform="translate(90 78) scale(2.2)" fill="#43C7C7">
+  <rect x="3" y="3" width="14" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="10" rx="1.5" opacity=".78"/><rect x="3" y="23" width="14" height="6" rx="1.5"/><rect x="19" y="11" width="3" height="10" rx="1" opacity=".58"/><circle cx="26.5" cy="16" r="2.25" fill="#F2B84B"/>
+</g>
+<text x="175" y="112" fill="#F4F7F8" font-family="Inter,Segoe UI,sans-serif" font-size="35" font-weight="700">Concept AI</text>
+<text x="176" y="142" fill="#43C7C7" font-family="Inter,Segoe UI,sans-serif" font-size="14" font-weight="700" letter-spacing="3">FEASIBILITY INTELLIGENCE</text>
+<text x="90" y="250" fill="#F4F7F8" font-family="Inter,Segoe UI,sans-serif" font-size="61" font-weight="750">Turn ideas into</text>
+<text x="90" y="320" fill="#F4F7F8" font-family="Inter,Segoe UI,sans-serif" font-size="61" font-weight="750">decision-ready evidence.</text>
+<text x="92" y="378" fill="#A6B6BA" font-family="Inter,Segoe UI,sans-serif" font-size="22">Guided intake · public research · deterministic FMART-O scoring</text>
+<text x="92" y="410" fill="#A6B6BA" font-family="Inter,Segoe UI,sans-serif" font-size="22">claim-level provenance · executive outputs</text>
+<g font-family="Inter,Segoe UI,sans-serif" font-size="14" font-weight="650">
+  <g transform="translate(90 470)"><rect width="174" height="42" rx="12" fill="#102A2F" stroke="#285159"/><circle cx="22" cy="21" r="6" fill="#43C7C7"/><text x="39" y="26" fill="#F4F7F8">Evidence-aware</text></g>
+  <g transform="translate(280 470)"><rect width="188" height="42" rx="12" fill="#102A2F" stroke="#285159"/><circle cx="22" cy="21" r="6" fill="#F2B84B"/><text x="39" y="26" fill="#F4F7F8">Server-validated</text></g>
+  <g transform="translate(484 470)"><rect width="176" height="42" rx="12" fill="#102A2F" stroke="#285159"/><circle cx="22" cy="21" r="6" fill="#54D69A"/><text x="39" y="26" fill="#F4F7F8">Private by default</text></g>
+</g>
+<g transform="translate(90 560)" font-family="Inter,Segoe UI,sans-serif"><rect width="250" height="58" rx="14" fill="#0E5F63"/><text x="125" y="36" text-anchor="middle" fill="#fff" font-size="16" font-weight="750">OPEN LIVE DEMO</text><rect x="266" width="250" height="58" rx="14" fill="#102A2F" stroke="#285159"/><text x="391" y="36" text-anchor="middle" fill="#F4F7F8" font-size="16" font-weight="700">VIEW ARCHITECTURE</text></g>
+<g transform="translate(855 82)" filter="url(#shadow)">
+  <rect width="650" height="555" rx="24" fill="#102A2F" stroke="#2B5961" stroke-width="2"/>
+  <rect x="20" y="20" width="610" height="46" rx="12" fill="#0A1B1F"/>
+  <circle cx="42" cy="43" r="5" fill="#FF7D73"/><circle cx="60" cy="43" r="5" fill="#F2B84B"/><circle cx="78" cy="43" r="5" fill="#54D69A"/>
+  <text x="105" y="49" fill="#43C7C7" font-family="Inter,Segoe UI,sans-serif" font-size="13" font-weight="700">ANALYSIS DASHBOARD</text>
+  <text x="32" y="113" fill="#F4F7F8" font-family="Inter,Segoe UI,sans-serif" font-size="26" font-weight="700">Executive feasibility overview</text>
+  <g font-family="Inter,Segoe UI,sans-serif"><rect x="32" y="140" width="176" height="102" rx="14" fill="#0A1B1F" stroke="#285159"/><text x="50" y="177" fill="#F4F7F8" font-size="31" font-weight="750">7.6</text><text x="50" y="209" fill="#A6B6BA" font-size="11" font-weight="700">FMART-O SCORE</text><rect x="223" y="140" width="176" height="102" rx="14" fill="#0A1B1F" stroke="#285159"/><text x="241" y="177" fill="#F4F7F8" font-size="31" font-weight="750">82%</text><text x="241" y="209" fill="#A6B6BA" font-size="11" font-weight="700">INPUT READINESS</text><rect x="414" y="140" width="204" height="102" rx="14" fill="#0A1B1F" stroke="#285159"/><text x="432" y="177" fill="#F2B84B" font-size="23" font-weight="750">PROCEED</text><text x="432" y="209" fill="#A6B6BA" font-size="11" font-weight="700">WITH CONDITIONS</text></g>
+  <g transform="translate(175 375)"><polygon points="0,-95 82,-48 82,48 0,95 -82,48 -82,-48" fill="none" stroke="#315F66" stroke-width="2"/><polygon points="0,-64 55,-32 55,32 0,64 -55,32 -55,-32" fill="none" stroke="#24464D"/><polygon points="0,-78 61,-35 45,26 0,70 -50,29 -58,-33" fill="#43C7C7" fill-opacity=".20" stroke="#43C7C7" stroke-width="3"/><g fill="#F2B84B"><circle cy="-78" r="5"/><circle cx="61" cy="-35" r="5"/><circle cx="45" cy="26" r="5"/><circle cy="70" r="5"/><circle cx="-50" cy="29" r="5"/><circle cx="-58" cy="-33" r="5"/></g></g>
+  <g font-family="Inter,Segoe UI,sans-serif"><text x="330" y="290" fill="#A6B6BA" font-size="13" font-weight="700">TOP DECISION FACTORS</text><g transform="translate(330 312)"><rect width="288" height="50" rx="11" fill="#0A1B1F" stroke="#285159"/><circle cx="22" cy="25" r="7" fill="#43C7C7"/><text x="42" y="30" fill="#F4F7F8" font-size="14" font-weight="600">Strong strategic alignment</text></g><g transform="translate(330 375)"><rect width="288" height="50" rx="11" fill="#0A1B1F" stroke="#285159"/><circle cx="22" cy="25" r="7" fill="#F2B84B"/><text x="42" y="30" fill="#F4F7F8" font-size="14" font-weight="600">Evidence gaps need validation</text></g><g transform="translate(330 438)"><rect width="288" height="50" rx="11" fill="#0A1B1F" stroke="#285159"/><circle cx="22" cy="25" r="7" fill="#70A7FF"/><text x="42" y="30" fill="#F4F7F8" font-size="14" font-weight="600">Phased delivery recommended</text></g></g>
+</g>
+<text x="90" y="684" fill="#667C81" font-family="Inter,Segoe UI,sans-serif" font-size="14">Built for the ADAPT 2026 Global AI Hackathon in Project Management</text>
+</svg>
