@@ -744,15 +744,20 @@ ${JSON.stringify(compactResearchContext(publicResearch), null, 2)}
 
 Be specific, realistic, and consultant-grade. Reference research only through the exact sourceId supplied in the research context.`;
 
-    const primaryModelId = Deno.env.get("ANALYSIS_MODEL_ID") || "google/gemini-3-flash-preview";
-    const fallbackModelId = Deno.env.get("ANALYSIS_FALLBACK_MODEL_ID") || "google/gemini-2.5-flash";
-    const modelCandidates = fallbackModelId && fallbackModelId !== primaryModelId
-      ? [primaryModelId, fallbackModelId]
-      : [primaryModelId];
-    const promptVersion = "concept-ai-2026-07-18.3";
+    // Full structured report path uses the stable model only. The preview
+    // model rejects this schema with HTTP 400 and would waste the invocation
+    // budget. A retry must be a new user request, not another long attempt.
+    const configuredModelId = (Deno.env.get("ANALYSIS_MODEL_ID") || "").trim();
+    const STABLE_REPORT_MODEL = "google/gemini-2.5-flash";
+    const modelCandidates = [
+      configuredModelId && configuredModelId !== "google/gemini-3-flash-preview"
+        ? configuredModelId
+        : STABLE_REPORT_MODEL,
+    ];
+    const promptVersion = "concept-ai-2026-07-19.1";
     failureCategory = "ai_request";
 
-    let modelId = primaryModelId;
+    let modelId = modelCandidates[0];
     // The provider payload is validated against reportSchema before use.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let data: any = null;
@@ -770,7 +775,7 @@ Be specific, realistic, and consultant-grade. Reference research only through th
           systemPrompt,
           userPrompt,
           schema: reportSchema,
-          timeoutMs: attemptIndex === 0 ? 48_000 : 36_000,
+          timeoutMs: 90_000,
           requestId,
           attempt: attemptIndex + 1,
         });
