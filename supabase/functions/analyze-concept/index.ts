@@ -912,7 +912,7 @@ Be specific, realistic, and consultant-grade. Reference research only through th
         p_request_id: requestId,
         p_completion_status: "failed",
         p_model_id: modelIdForLog,
-        p_prompt_version: "concept-ai-2026-07-18.3",
+        p_prompt_version: "concept-ai-2026-07-19.1",
         p_usage_metadata: {},
         p_research_status: researchStatus,
         p_failure_category: failureCategory,
