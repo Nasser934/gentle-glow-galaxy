@@ -90,9 +90,7 @@ const Analyze = () => {
     ? "Saving report"
     : analysisElapsed < 8
       ? "Researching evidence"
-      : analysisElapsed < 52
-        ? "Generating report"
-        : "Validating response";
+      : "Generating and validating report";
 
   // Per-field validation errors collected by validateStep(). Cleared on field change.
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ConceptInputs, string>>>({});
