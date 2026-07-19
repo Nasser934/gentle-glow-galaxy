@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ANALYSIS_CLIENT_TIMEOUT_MS,
+  ANALYSIS_RETRY_DELAY_MS,
   createSchemaCompatibleFetch,
 } from "@/lib/supabaseFetchCompat";
 
@@ -8,6 +9,8 @@ const missingColumnResponse = (column: string) => new Response(JSON.stringify({
   code: "PGRST204",
   message: `Could not find the '${column}' column of 'reports' in the schema cache`,
 }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+const analysisUrl = "https://example.supabase.co/functions/v1/analyze-concept";
 
 describe("Supabase compatibility fetch", () => {
   it("keeps the production analysis endpoint and applies a three-minute timeout", async () => {
@@ -18,17 +21,80 @@ describe("Supabase compatibility fetch", () => {
     const baseFetch = vi.fn().mockResolvedValue(successResponse);
     const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
 
-    const response = await compatibleFetch("https://example.supabase.co/functions/v1/analyze-concept", {
+    const response = await compatibleFetch(analysisUrl, {
       method: "POST",
       body: JSON.stringify({ inputs: { projectName: "Test" } }),
     });
 
     expect(response).toBe(successResponse);
     expect(ANALYSIS_CLIENT_TIMEOUT_MS).toBe(180_000);
+    expect(ANALYSIS_RETRY_DELAY_MS).toBe(100);
     expect(baseFetch).toHaveBeenCalledTimes(1);
     const [url, init] = baseFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://example.supabase.co/functions/v1/analyze-concept");
+    expect(url).toBe(analysisUrl);
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("retries one network transport failure and returns the completed report", async () => {
+    const successResponse = new Response(JSON.stringify({ reportId: "CAI-2" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const baseFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(successResponse);
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+
+    const response = await compatibleFetch(analysisUrl, {
+      method: "POST",
+      body: JSON.stringify({ inputs: { projectName: "Retry" } }),
+    });
+
+    expect(response).toBe(successResponse);
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+    const firstSignal = (baseFetch.mock.calls[0][1] as RequestInit).signal;
+    const secondSignal = (baseFetch.mock.calls[1][1] as RequestInit).signal;
+    expect(firstSignal).toBeInstanceOf(AbortSignal);
+    expect(secondSignal).toBeInstanceOf(AbortSignal);
+    expect(secondSignal).not.toBe(firstSignal);
+  });
+
+  it("retries one transient Edge Function response", async () => {
+    const successResponse = new Response(JSON.stringify({ reportId: "CAI-3" }), { status: 200 });
+    const baseFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "temporary" }), { status: 503 }))
+      .mockResolvedValueOnce(successResponse);
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+
+    const response = await compatibleFetch(analysisUrl, {
+      method: "POST",
+      body: JSON.stringify({ inputs: { projectName: "Retry status" } }),
+    });
+
+    expect(response).toBe(successResponse);
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry authentication or validation responses", async () => {
+    for (const status of [400, 401, 403, 429]) {
+      const response = new Response(JSON.stringify({ error: "not transient" }), { status });
+      const baseFetch = vi.fn().mockResolvedValue(response);
+      const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+
+      const result = await compatibleFetch(analysisUrl, { method: "POST", body: "{}" });
+
+      expect(result).toBe(response);
+      expect(baseFetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("does not retry a user cancellation or the full timeout", async () => {
+    const timeout = new DOMException("timed out", "TimeoutError");
+    const baseFetch = vi.fn().mockRejectedValue(timeout);
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+
+    await expect(compatibleFetch(analysisUrl, { method: "POST", body: "{}" })).rejects.toBe(timeout);
+    expect(baseFetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not replace a caller-provided abort signal", async () => {
@@ -36,7 +102,7 @@ describe("Supabase compatibility fetch", () => {
     const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
     const controller = new AbortController();
 
-    await compatibleFetch("https://example.supabase.co/functions/v1/analyze-concept", {
+    await compatibleFetch(analysisUrl, {
       method: "POST",
       signal: controller.signal,
     });
@@ -45,6 +111,31 @@ describe("Supabase compatibility fetch", () => {
     expect(url).toContain("/functions/v1/analyze-concept");
     expect(url).not.toContain("analyze-concept-v2");
     expect(init.signal).toBe(controller.signal);
+  });
+
+  it("can retry an analysis Request object without losing its body", async () => {
+    const bodies: string[] = [];
+    const baseFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(input);
+      bodies.push(await request.clone().text());
+      if (bodies.length === 1) throw new TypeError("temporary network failure");
+      return new Response(JSON.stringify({ reportId: "CAI-4" }), { status: 200 });
+    });
+    const compatibleFetch = createSchemaCompatibleFetch(baseFetch as typeof fetch);
+    const request = new Request(analysisUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: { projectName: "Request clone" } }),
+    });
+
+    const response = await compatibleFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(baseFetch).toHaveBeenCalledTimes(2);
+    expect(bodies).toEqual([
+      JSON.stringify({ inputs: { projectName: "Request clone" } }),
+      JSON.stringify({ inputs: { projectName: "Request clone" } }),
+    ]);
   });
 
   it("retries a reports insert without save_operation_key when PostgREST reports the column missing", async () => {
