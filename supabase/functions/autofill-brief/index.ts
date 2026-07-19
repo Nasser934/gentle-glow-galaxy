@@ -216,15 +216,19 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
       failureStatus = 504;
     }
     if (requestId && requestClient) {
-      await requestClient.rpc("complete_analysis_request", {
-        p_request_id: requestId,
-        p_completion_status: "failed",
-        p_model_id: modelId,
-        p_prompt_version: "autofill-2026-07-18.1",
-        p_usage_metadata: {},
-        p_research_status: "not_requested",
-        p_failure_category: failureCategory,
-      }).catch(() => null);
+      try {
+        await requestClient.rpc("complete_analysis_request", {
+          p_request_id: requestId,
+          p_completion_status: "failed",
+          p_model_id: modelId,
+          p_prompt_version: "autofill-2026-07-18.1",
+          p_usage_metadata: {},
+          p_research_status: "not_requested",
+          p_failure_category: failureCategory,
+        });
+      } catch (_) {
+        console.warn(JSON.stringify({ event: "autofill_failure_log_failed", requestId }));
+      }
     }
     console.error(JSON.stringify({ event: "autofill_failed", requestId, category: failureCategory }));
     return new Response(JSON.stringify({ error: "Could not generate draft suggestions. Please try again." }), {

@@ -747,14 +747,9 @@ Be specific, realistic, and consultant-grade. Reference research only through th
     // Full structured report path uses the stable model only. The preview
     // model rejects this schema with HTTP 400 and would waste the invocation
     // budget. A retry must be a new user request, not another long attempt.
-    const configuredModelId = (Deno.env.get("ANALYSIS_MODEL_ID") || "").trim();
-    const STABLE_REPORT_MODEL = "google/gemini-2.5-flash";
-    const modelCandidates = [
-      configuredModelId && configuredModelId !== "google/gemini-3-flash-preview"
-        ? configuredModelId
-        : STABLE_REPORT_MODEL,
-    ];
-    const promptVersion = "concept-ai-2026-07-19.1";
+    const REPORT_MODEL_ID = "google/gemini-3.5-flash";
+    const modelCandidates = [REPORT_MODEL_ID];
+    const promptVersion = "concept-ai-2026-07-19.2";
     failureCategory = "ai_request";
 
     let modelId = modelCandidates[0];
@@ -908,15 +903,19 @@ Be specific, realistic, and consultant-grade. Reference research only through th
     else if (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")) failureCategory = "ai_timeout";
 
     if (requestId && requestClient) {
-      await requestClient.rpc("complete_analysis_request", {
-        p_request_id: requestId,
-        p_completion_status: "failed",
-        p_model_id: modelIdForLog,
-        p_prompt_version: "concept-ai-2026-07-19.1",
-        p_usage_metadata: {},
-        p_research_status: researchStatus,
-        p_failure_category: failureCategory,
-      }).catch(() => null);
+      try {
+        await requestClient.rpc("complete_analysis_request", {
+          p_request_id: requestId,
+          p_completion_status: "failed",
+          p_model_id: modelIdForLog,
+          p_prompt_version: "concept-ai-2026-07-19.2",
+          p_usage_metadata: {},
+          p_research_status: researchStatus,
+          p_failure_category: failureCategory,
+        });
+      } catch (_) {
+        console.warn(JSON.stringify({ event: "analysis_failure_log_failed", requestId }));
+      }
     }
 
     const safeError = gatewayError
