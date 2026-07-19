@@ -5,7 +5,8 @@ export type GatewayFailureCategory =
   | "upstream_error"
   | "upstream_network"
   | "structured_output_missing"
-  | "structured_output_invalid";
+  | "structured_output_invalid"
+  | "structured_output_truncated";
 
 export class GatewayAttemptError extends Error {
   readonly category: GatewayFailureCategory;
@@ -36,7 +37,9 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 
 type GatewayPayload = {
   choices?: Array<{
+    finish_reason?: string | null;
     message?: {
+      content?: string | null;
       tool_calls?: Array<{
         function?: { arguments?: string };
       }>;
@@ -47,7 +50,7 @@ type GatewayPayload = {
 
 const INCOMPATIBLE_FULL_REPORT_MODEL = "google/gemini-3-flash-preview";
 const STABLE_FULL_REPORT_MODEL = "google/gemini-3.5-flash";
-const STABLE_REPORT_TIMEOUT_MS = 85_000;
+const STABLE_REPORT_TIMEOUT_MS = 80_000;
 
 const isTimeoutLike = (error: unknown) =>
   error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
@@ -59,9 +62,7 @@ function stripUnsupportedGoogleSchemaFields(value: unknown): unknown {
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(input)) {
-    if (key === "additionalProperties" || key === "anyOf" || key === "oneOf" || key === "allOf" || key === "$schema") {
-      continue;
-    }
+    if (key === "additionalProperties" || key === "anyOf" || key === "oneOf" || key === "allOf" || key === "$schema") continue;
     if (key === "properties" && typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
       output.properties = Object.fromEntries(
         Object.entries(raw as Record<string, unknown>).map(([property, schema]) => [property, stripUnsupportedGoogleSchemaFields(schema)]),
@@ -78,10 +79,18 @@ function stripUnsupportedGoogleSchemaFields(value: unknown): unknown {
 }
 
 function toolSchemaForModel(modelId: string, schema: unknown) {
-  // Gemini/OpenRouter function declarations accept only a subset of JSON Schema.
-  // Unsupported keywords such as additionalProperties and anyOf can make the
-  // provider reject the entire request with HTTP 400 before generation starts.
   return modelId.startsWith("google/") ? stripUnsupportedGoogleSchemaFields(schema) : schema;
+}
+
+function jsonTextFromContent(content: string): string {
+  const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  return firstBrace >= 0 && lastBrace > firstBrace ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed;
+}
+
+function truncatedFinishReason(value: string | null | undefined) {
+  return /length|max[_ -]?tokens|token[_ -]?limit/i.test(value ?? "");
 }
 
 export function safeGatewayUserError(error: GatewayAttemptError) {
@@ -92,13 +101,16 @@ export function safeGatewayUserError(error: GatewayAttemptError) {
     return { status: 429, message: "The analysis service is busy. Wait briefly, then try again." };
   }
   if (error.category === "ai_timeout") {
-    return { status: 504, message: "The AI model took too long to produce the report. Please retry; the system will use its fallback model when available." };
+    return { status: 504, message: "The report took too long to complete. No report was saved." };
+  }
+  if (error.category === "structured_output_truncated") {
+    return { status: 502, message: "The report response was cut off before completion. No partial report was saved." };
   }
   if (error.category === "structured_output_missing" || error.category === "structured_output_invalid") {
-    return { status: 502, message: "The AI response was incomplete and could not be validated. Please retry." };
+    return { status: 502, message: "The AI response was incomplete and could not be validated. No report was saved." };
   }
   if (error.status === 400) {
-    return { status: 502, message: "The AI service could not accept the structured report request. Please retry." };
+    return { status: 502, message: "The AI service could not accept the structured report request. No report was saved." };
   }
   return { status: 502, message: "The AI provider is temporarily unavailable. Please try again shortly." };
 }
@@ -129,15 +141,12 @@ export async function requestStructuredReport(args: {
   }));
 
   try {
-    // The preview model is known to reject this exact large function schema with
-    // HTTP 400. Fail locally and immediately so the caller can select the stable
-    // fallback without wasting most of the Edge Function execution window.
     if (args.modelId === INCOMPATIBLE_FULL_REPORT_MODEL) {
       throw new GatewayAttemptError({
-        message: "Model is incompatible with the full structured report schema",
+        message: "Model is incompatible with the structured report schema",
         category: "upstream_error",
         status: 400,
-        retryable: true,
+        retryable: false,
         modelId: args.modelId,
         elapsedMs: Date.now() - startedAt,
       });
@@ -148,8 +157,8 @@ export async function requestStructuredReport(args: {
       headers: { Authorization: `Bearer ${args.apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: args.modelId,
-        temperature: 0.2,
-        max_tokens: 7_000,
+        temperature: 0.15,
+        max_tokens: 6_000,
         messages: [
           { role: "system", content: args.systemPrompt },
           { role: "user", content: args.userPrompt },
@@ -158,7 +167,7 @@ export async function requestStructuredReport(args: {
           type: "function",
           function: {
             name: "provide_report",
-            description: "Provide the full feasibility report.",
+            description: "Provide a concise structured feasibility-report seed for deterministic server expansion.",
             parameters: toolSchemaForModel(args.modelId, args.schema),
           },
         }],
@@ -178,19 +187,37 @@ export async function requestStructuredReport(args: {
         message: `AI gateway returned ${response.status}`,
         category,
         status: response.status,
-        retryable: response.status >= 500 || response.status === 408,
+        retryable: false,
         modelId: args.modelId,
         elapsedMs,
       });
     }
 
     const data = await response.json() as GatewayPayload;
-    const rawArguments = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    const choice = data.choices?.[0];
+    const toolArguments = choice?.message?.tool_calls?.[0]?.function?.arguments;
+    const content = typeof choice?.message?.content === "string" ? choice.message.content : "";
+    const rawArguments = toolArguments || (content ? jsonTextFromContent(content) : "");
+    const finishReason = choice?.finish_reason ?? null;
+    const diagnostics = {
+      event: "ai_response_received",
+      requestId: args.requestId,
+      model: args.modelId,
+      elapsedMs,
+      finishReason,
+      hasToolCalls: Boolean(toolArguments),
+      hasContent: Boolean(content),
+      rawArgumentsLength: rawArguments.length,
+      rawArgumentsStartsWithObject: rawArguments.trimStart().startsWith("{"),
+      rawArgumentsEndsWithObject: rawArguments.trimEnd().endsWith("}"),
+    };
+    console.info(JSON.stringify(diagnostics));
+
     if (!rawArguments) {
       throw new GatewayAttemptError({
-        message: "AI did not return the required structured tool call",
-        category: "structured_output_missing",
-        retryable: true,
+        message: "AI did not return structured report data",
+        category: truncatedFinishReason(finishReason) ? "structured_output_truncated" : "structured_output_missing",
+        retryable: false,
         modelId: args.modelId,
         elapsedMs,
       });
@@ -198,12 +225,15 @@ export async function requestStructuredReport(args: {
 
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(rawArguments) as Record<string, unknown>;
+      const result = JSON.parse(rawArguments) as unknown;
+      if (typeof result !== "object" || result === null || Array.isArray(result)) throw new Error("Structured output is not an object");
+      parsed = result as Record<string, unknown>;
     } catch {
+      const truncated = truncatedFinishReason(finishReason) || !rawArguments.trimEnd().endsWith("}");
       throw new GatewayAttemptError({
-        message: "AI returned malformed structured JSON",
-        category: "structured_output_invalid",
-        retryable: true,
+        message: truncated ? "AI structured JSON was truncated" : "AI returned malformed structured JSON",
+        category: truncated ? "structured_output_truncated" : "structured_output_invalid",
+        retryable: false,
         modelId: args.modelId,
         elapsedMs,
       });
@@ -215,8 +245,10 @@ export async function requestStructuredReport(args: {
       attempt: args.attempt,
       model: args.modelId,
       elapsedMs,
+      finishReason,
+      responseSource: toolArguments ? "tool_call" : "message_content",
     }));
-    return { data, parsed, elapsedMs };
+    return { data, parsed, elapsedMs, finishReason, responseSource: toolArguments ? "tool_call" as const : "message_content" as const };
   } catch (error) {
     if (error instanceof GatewayAttemptError) {
       console.warn(JSON.stringify({
@@ -236,7 +268,7 @@ export async function requestStructuredReport(args: {
     const wrapped = new GatewayAttemptError({
       message: isTimeoutLike(error) ? "AI request timed out" : "AI network request failed",
       category: isTimeoutLike(error) ? "ai_timeout" : "upstream_network",
-      retryable: true,
+      retryable: false,
       modelId: args.modelId,
       elapsedMs,
     });
@@ -247,7 +279,7 @@ export async function requestStructuredReport(args: {
       model: args.modelId,
       elapsedMs,
       category: wrapped.category,
-      retryable: true,
+      retryable: false,
     }));
     throw wrapped;
   }
@@ -260,7 +292,7 @@ const asRecord = (value: unknown) => typeof value === "object" && value !== null
 
 export function compactResearchContext(raw: unknown) {
   const research = asRecord(raw);
-  const citations = asArray(research.citations).slice(0, 16).map((entry) => {
+  const citations = asArray(research.citations).slice(0, 12).map((entry) => {
     const citation = asRecord(entry);
     return {
       sourceId: citation.sourceId,
@@ -270,15 +302,15 @@ export function compactResearchContext(raw: unknown) {
       publicationDate: citation.publicationDate,
       sourceType: citation.sourceType,
       quality: citation.quality,
-      takeaway: typeof citation.takeaway === "string" ? citation.takeaway.slice(0, 320) : citation.takeaway,
+      takeaway: typeof citation.takeaway === "string" ? citation.takeaway.slice(0, 220) : citation.takeaway,
     };
   });
-  const competitors = asArray(research.competitorScrapes).slice(0, 4).map((entry) => {
+  const competitors = asArray(research.competitorScrapes).slice(0, 3).map((entry) => {
     const competitor = asRecord(entry);
     return {
       title: competitor.title,
       url: competitor.url,
-      excerpt: typeof competitor.excerpt === "string" ? competitor.excerpt.slice(0, 420) : competitor.excerpt,
+      excerpt: typeof competitor.excerpt === "string" ? competitor.excerpt.slice(0, 260) : competitor.excerpt,
     };
   });
 
@@ -287,8 +319,8 @@ export function compactResearchContext(raw: unknown) {
     reliableExternalEvidence: research.reliableExternalEvidence,
     coverageMetrics: research.coverageMetrics,
     citations,
-    webSignals: asArray(research.webSignals).slice(0, 8),
-    communitySignals: asArray(research.redditSignals).slice(0, 5),
+    webSignals: asArray(research.webSignals).slice(0, 6),
+    communitySignals: asArray(research.redditSignals).slice(0, 3),
     competitorEvidence: competitors,
   };
 }
