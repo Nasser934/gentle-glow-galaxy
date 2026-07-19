@@ -173,15 +173,19 @@ Return ONLY the completed text for this field.`;
     return new Response(JSON.stringify({ text }), { headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
   } catch (_) {
     if (requestId && requestClient) {
-      await requestClient.rpc("complete_analysis_request", {
-        p_request_id: requestId,
-        p_completion_status: "failed",
-        p_model_id: modelId,
-        p_prompt_version: "complete-field-2026-07-18.1",
-        p_usage_metadata: {},
-        p_research_status: "not_requested",
-        p_failure_category: "complete_field_failed",
-      }).catch(() => null);
+      try {
+        await requestClient.rpc("complete_analysis_request", {
+          p_request_id: requestId,
+          p_completion_status: "failed",
+          p_model_id: modelId,
+          p_prompt_version: "complete-field-2026-07-18.1",
+          p_usage_metadata: {},
+          p_research_status: "not_requested",
+          p_failure_category: "complete_field_failed",
+        });
+      } catch (_) {
+        console.warn(JSON.stringify({ event: "complete_field_failure_log_failed", requestId }));
+      }
     }
     console.error(JSON.stringify({ event: "complete_field_failed", requestId }));
     return new Response(JSON.stringify({ error: "Could not prepare a field suggestion. Please try again." }), {

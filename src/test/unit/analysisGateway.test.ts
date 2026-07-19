@@ -8,7 +8,7 @@ import {
 
 const baseArgs = {
   apiKey: "test-key",
-  modelId: "google/gemini-2.5-flash",
+  modelId: "google/gemini-3.5-flash",
   systemPrompt: "system",
   userPrompt: "user",
   schema: { type: "object" },
@@ -28,8 +28,39 @@ describe("analysis gateway resilience", () => {
     expect(result.parsed).toEqual({ executiveSummary: "ok" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const requestBody = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
-    expect(requestBody.model).toBe("google/gemini-2.5-flash");
+    expect(requestBody.model).toBe("google/gemini-3.5-flash");
     expect(requestBody.max_tokens).toBe(7_000);
+  });
+
+  it("strips Gemini-incompatible tool schema fields before sending", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { tool_calls: [{ function: { arguments: JSON.stringify({ ok: true }) } }] } }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await requestStructuredReport({
+      ...baseArgs,
+      schema: {
+        type: "object",
+        properties: {
+          item: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+            additionalProperties: false,
+          },
+          choice: { anyOf: [{ type: "string" }, { type: "number" }] },
+        },
+        required: ["item"],
+        additionalProperties: false,
+      },
+      fetchImpl,
+    });
+
+    const requestBody = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    const parameters = requestBody.tools[0].function.parameters;
+    expect(JSON.stringify(parameters)).not.toContain("additionalProperties");
+    expect(JSON.stringify(parameters)).not.toContain("anyOf");
+    expect(parameters.properties.item.required).toEqual(["name"]);
   });
 
   it("rejects the incompatible preview model immediately without a provider call", async () => {

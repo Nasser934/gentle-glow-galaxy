@@ -46,11 +46,43 @@ type GatewayPayload = {
 };
 
 const INCOMPATIBLE_FULL_REPORT_MODEL = "google/gemini-3-flash-preview";
-const STABLE_FULL_REPORT_MODEL = "google/gemini-2.5-flash";
+const STABLE_FULL_REPORT_MODEL = "google/gemini-3.5-flash";
 const STABLE_REPORT_TIMEOUT_MS = 85_000;
 
 const isTimeoutLike = (error: unknown) =>
   error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
+
+function stripUnsupportedGoogleSchemaFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripUnsupportedGoogleSchemaFields);
+  if (typeof value !== "object" || value === null) return value;
+
+  const input = value as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(input)) {
+    if (key === "additionalProperties" || key === "anyOf" || key === "oneOf" || key === "allOf" || key === "$schema") {
+      continue;
+    }
+    if (key === "properties" && typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      output.properties = Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).map(([property, schema]) => [property, stripUnsupportedGoogleSchemaFields(schema)]),
+      );
+      continue;
+    }
+    if (key === "items") {
+      output.items = stripUnsupportedGoogleSchemaFields(raw);
+      continue;
+    }
+    output[key] = stripUnsupportedGoogleSchemaFields(raw);
+  }
+  return output;
+}
+
+function toolSchemaForModel(modelId: string, schema: unknown) {
+  // Gemini/OpenRouter function declarations accept only a subset of JSON Schema.
+  // Unsupported keywords such as additionalProperties and anyOf can make the
+  // provider reject the entire request with HTTP 400 before generation starts.
+  return modelId.startsWith("google/") ? stripUnsupportedGoogleSchemaFields(schema) : schema;
+}
 
 export function safeGatewayUserError(error: GatewayAttemptError) {
   if (error.category === "upstream_usage_limit") {
@@ -127,7 +159,7 @@ export async function requestStructuredReport(args: {
           function: {
             name: "provide_report",
             description: "Provide the full feasibility report.",
-            parameters: args.schema,
+            parameters: toolSchemaForModel(args.modelId, args.schema),
           },
         }],
         tool_choice: { type: "function", function: { name: "provide_report" } },
