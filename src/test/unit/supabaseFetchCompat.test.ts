@@ -10,7 +10,7 @@ const missingColumnResponse = (column: string) => new Response(JSON.stringify({
 }), { status: 400, headers: { "Content-Type": "application/json" } });
 
 describe("Supabase compatibility fetch", () => {
-  it("routes legacy analysis calls to the resilient v2 function and applies a three-minute timeout", async () => {
+  it("keeps the production analysis endpoint and applies a three-minute timeout", async () => {
     const successResponse = new Response(JSON.stringify({ reportId: "CAI-1" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -27,7 +27,7 @@ describe("Supabase compatibility fetch", () => {
     expect(ANALYSIS_CLIENT_TIMEOUT_MS).toBe(180_000);
     expect(baseFetch).toHaveBeenCalledTimes(1);
     const [url, init] = baseFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://example.supabase.co/functions/v1/analyze-concept-v2");
+    expect(url).toBe("https://example.supabase.co/functions/v1/analyze-concept");
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -42,7 +42,8 @@ describe("Supabase compatibility fetch", () => {
     });
 
     const [url, init] = baseFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("analyze-concept-v2");
+    expect(url).toContain("/functions/v1/analyze-concept");
+    expect(url).not.toContain("analyze-concept-v2");
     expect(init.signal).toBe(controller.signal);
   });
 
