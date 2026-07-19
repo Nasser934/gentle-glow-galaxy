@@ -20,7 +20,9 @@ const OPTIONAL_REPORT_COLUMNS = new Set([
 ]);
 
 export const ANALYSIS_CLIENT_TIMEOUT_MS = 180_000;
+export const ANALYSIS_RETRY_DELAY_MS = 100;
 const ANALYSIS_PATH = "/functions/v1/analyze-concept";
+const TRANSIENT_ANALYSIS_STATUSES = new Set([500, 502, 503, 504]);
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -60,6 +62,54 @@ function analysisRequestInit(input: RequestInfo | URL, init?: RequestInit): Requ
     ...init,
     signal: AbortSignal.timeout(ANALYSIS_CLIENT_TIMEOUT_MS),
   };
+}
+
+function isAbortLike(error: unknown) {
+  return error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+const wait = (milliseconds: number) => new Promise<void>((resolve) => {
+  window.setTimeout(resolve, milliseconds);
+});
+
+/**
+ * Analysis requests get one automatic retry for network transport failures and
+ * transient 5xx Edge Function responses. Validation/auth/rate-limit responses
+ * are returned immediately and are never retried.
+ */
+async function fetchAnalysisWithRetry(
+  baseFetch: FetchLike,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (!isAnalysisRequest(input, init)) return baseFetch(input, init);
+
+  // Prepare both Request copies before the first fetch consumes the body.
+  const firstInput = input instanceof Request ? input.clone() : input;
+  const retryInput = input instanceof Request ? input.clone() : input;
+
+  try {
+    const firstResponse = await baseFetch(firstInput, analysisRequestInit(firstInput, init));
+    if (!TRANSIENT_ANALYSIS_STATUSES.has(firstResponse.status)) return firstResponse;
+
+    console.warn(JSON.stringify({
+      event: "analysis_edge_retry",
+      reason: "transient_status",
+      status: firstResponse.status,
+    }));
+  } catch (error) {
+    // A user cancellation or the full three-minute deadline must not start a
+    // second long-running request. Transport failures such as TypeError do.
+    if (isAbortLike(error)) throw error;
+    console.warn(JSON.stringify({
+      event: "analysis_edge_retry",
+      reason: "network_transport_failure",
+      errorName: error instanceof Error ? error.name : "unknown",
+    }));
+  }
+
+  await wait(ANALYSIS_RETRY_DELAY_MS);
+  return baseFetch(retryInput, analysisRequestInit(retryInput, init));
 }
 
 function missingReportColumn(error: PostgrestErrorBody): string | null {
@@ -109,13 +159,13 @@ async function parsePostgrestError(response: Response): Promise<PostgrestErrorBo
 /**
  * Compatibility layer for Lovable Cloud:
  * - allows the existing production analysis endpoint to run for three minutes;
+ * - retries one transient Edge Function/network failure automatically;
  * - retries report inserts only when known optional columns are absent.
  */
 export function createSchemaCompatibleFetch(baseFetch: FetchLike = fetch): FetchLike {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const body = await requestBodyText(input, init);
-    const effectiveInit = analysisRequestInit(input, init);
-    let response = await baseFetch(input, effectiveInit);
+    let response = await fetchAnalysisWithRetry(baseFetch, input, init);
 
     if (response.ok || !isReportsInsert(input, init) || body === null) {
       return response;
