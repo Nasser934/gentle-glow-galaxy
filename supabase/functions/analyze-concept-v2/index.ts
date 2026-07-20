@@ -6,6 +6,7 @@ import { buildCanonicalReport } from "../_shared/analysis/canonical.ts";
 import { validateConceptInputs, validateInputOrigins } from "../_shared/analysis/input.ts";
 import { fetchPublicResearch } from "../_shared/analysis/publicResearch.ts";
 import { buildBaseReportFromSeed, REPORT_SEED_SCHEMA } from "../_shared/analysis/reportSeed.ts";
+import { REPORT_CONTENT_RULES } from "../_shared/analysis/promptRules.ts";
 import {
   compactResearchContext,
   GatewayAttemptError,
@@ -241,7 +242,7 @@ serve(async (req) => {
     const systemPrompt = `You are Concept AI's evidence-aware feasibility analyst using FMART-O: Financial, Market, Achievability, Risk, Timing, and Operational.
 Call the provide_report tool exactly once and return the complete concise report seed required by the schema.
 The server calculates the authoritative overall score, verdict, weights, totals, investment range, evidence composition, input completeness, growth chart, and score-explanation rows.
-Use concise text so every required field is completed before the output limit. Use full currency-unit numbers. Use zero for unsupported figures and clearly mark them as requiring validation.
+Use concise text so every required field is completed before the output limit. ${REPORT_CONTENT_RULES}
 Only attach an exact sourceId when that source directly supports the claim. Community sources are directional and competitor pages are company claims.
 Choose internal projectType only for cost avoidance, productivity, or avoided spend. Use consumer-safe language and never mention internal debugging details.`;
 

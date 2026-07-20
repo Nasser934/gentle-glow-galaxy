@@ -44,7 +44,36 @@ const autoWidth = (ws: ExcelJS.Worksheet, min = 12, max = 60) => {
   });
 };
 
-const num = (value?: unknown) => numericValue(value, 0);
+const finishWorksheet = (ws: ExcelJS.Worksheet) => {
+  ws.views = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
+  ws.properties.defaultRowHeight = 18;
+  ws.pageSetup = {
+    orientation: ws.columnCount > 5 ? "landscape" : "portrait",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.4, right: 0.4, top: 0.55, bottom: 0.55, header: 0.2, footer: 0.2 },
+  };
+  ws.headerFooter = {
+    oddHeader: `&LConcept AI&R${ws.name}`,
+    oddFooter: "&CPage &P of &N",
+  };
+  ws.eachRow((row) => {
+    row.eachCell((cell) => {
+      const shouldWrap = typeof cell.value === "string" && cell.value.length > 36;
+      cell.alignment = {
+        ...cell.alignment,
+        vertical: cell.alignment?.vertical ?? "top",
+        wrapText: cell.alignment?.wrapText ?? shouldWrap,
+      };
+    });
+  });
+};
+
+const positiveNumber = (value?: unknown): number | null => {
+  const parsed = numericValue(value, Number.NaN);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
 
 const sourceConfidenceLabel = (value: unknown): string => {
   const t = String(value ?? "").trim().toLowerCase();
@@ -241,16 +270,19 @@ export function buildReportWorkbook(
     "Break-even",
   ]));
   (report.financials.scenarios || []).forEach((sc) => {
+    const scenarioValue = internal
+      ? positiveNumber(sc.annualFinancialBenefit ?? sc.annualValueDisplay)
+      : positiveNumber(sc.annualRevenue);
     const row = ws5.addRow([
       sc.scenario,
       sc.probability,
       internal ? sc.adoptionRate : sc.subscribersYr1,
-      internal ? num(sc.annualFinancialBenefit ?? sc.annualValueDisplay) : num(sc.annualRevenue),
+      scenarioValue ?? "Requires validation",
       sc.breakEven,
     ]);
     borderRow(row);
     if (internal) row.getCell(3).numFmt = "0%";
-    row.getCell(4).numFmt = "#,##0";
+    if (scenarioValue !== null) row.getCell(4).numFmt = "#,##0";
   });
   autoWidth(ws5);
 
@@ -261,14 +293,21 @@ export function buildReportWorkbook(
   const baseScenario = report.financials.scenarios?.find((scenario) => scenario.scenario === "Base Case")
     ?? report.financials.scenarios?.[0];
   const baseOutcome = internal
-    ? num(baseScenario?.annualFinancialBenefit ?? baseScenario?.annualValueDisplay)
-    : num(baseScenario?.annualRevenue);
+    ? positiveNumber(baseScenario?.annualFinancialBenefit ?? baseScenario?.annualValueDisplay)
+    : positiveNumber(baseScenario?.annualRevenue);
   const baseOpex =
     (report.financials.opEx || []).reduce((sum, item) => sum + (item.annual || 0), 0);
   const baseCapex =
     report.financials.capExTotal?.mid ||
     ((report.financials.capExTotal?.low || 0) + (report.financials.capExTotal?.high || 0)) / 2;
 
+  if (baseOutcome === null) {
+    const notice = sens.addRow([
+      "Sensitivity unavailable until the base-case financial outcome is validated.",
+    ]);
+    notice.font = { bold: true, color: { argb: "FFB45309" } };
+    notice.getCell(1).alignment = { wrapText: true, vertical: "top" };
+  } else {
   const ih = sens.addRow(["Driver", "Multiplier"]);
   styleHeader(ih);
   const drivers: Array<[string, number]> = internal
@@ -321,6 +360,7 @@ export function buildReportWorkbook(
     addCalc("Net Profit (Y1)", `C${oh2.number + 3}-B${baseCapexRow}*0.2`);
     addCalc("Payback (months)", `IFERROR(B${baseCapexRow}/(C${oh2.number + 3}/12),0)`, "0.0");
     addCalc("ROI Y1", `IFERROR(C${oh2.number + 4}/B${baseCapexRow},0)`, "0.0%");
+  }
   }
   autoWidth(sens);
 
@@ -474,6 +514,8 @@ export function buildReportWorkbook(
   scores.getColumn(5).width = 50;
   scores.getColumn(6).width = 50;
   autoWidth(scores);
+
+  wb.worksheets.forEach(finishWorksheet);
 
   return wb;
 }

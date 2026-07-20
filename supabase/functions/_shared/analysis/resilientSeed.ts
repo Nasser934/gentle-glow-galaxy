@@ -84,6 +84,50 @@ function dimensionScores(inputs: Record<string, string>, reliableEvidence: boole
   return dimensions;
 }
 
+function mitigationForRisk(name: string) {
+  if (/data|security|privacy|breach|cyber/i.test(name)) {
+    return `For ${name}, appoint a security owner, complete a privacy-impact and security review, and close all high findings before the pilot.`;
+  }
+  if (/integration|dependency|supplier|vendor|delay|delivery/i.test(name)) {
+    return `For ${name}, assign an integration lead, validate a sandbox path and fallback supplier, and reach at least 95% test-transaction success before launch.`;
+  }
+  if (/adoption|demand|customer|pricing|willingness/i.test(name)) {
+    return `For ${name}, run three target-user pilots, measure activation and willingness to pay, and stop or revise if the agreed success threshold is missed.`;
+  }
+  if (/cost|funding|budget|runway|cash/i.test(name)) {
+    return `For ${name}, obtain two supplier quotations, keep a 15% contingency, and release funding only after variance is within the approved envelope.`;
+  }
+  if (/regulatory|compliance|legal|policy/i.test(name)) {
+    return `For ${name}, name a compliance owner, complete the applicable control checklist and legal review, and record approval before production use.`;
+  }
+  if (/competition|competitor|alternative/i.test(name)) {
+    return `For ${name}, complete a feature-and-price comparison, test the differentiation with five prospects, and track win/loss reasons each month.`;
+  }
+  return `For ${name}, assign an accountable owner, define one leading indicator and one stop/go threshold, and review both at every delivery gate.`;
+}
+
+function contextualActions(inputs: Record<string, string>) {
+  const assumption = cleanText(inputs.assumptions, "the highest-impact demand and value assumptions");
+  const dependencies = cleanText(inputs.dependencies, "the critical delivery dependencies");
+  const successFactors = cleanText(inputs.successFactors, "measurable pilot adoption, value, and delivery targets");
+  const regulatory = cleanText(inputs.regulatoryConsiderations, "the applicable privacy, security, and sector controls");
+  return {
+    recommendations: [
+      `Validate the core planning assumption with direct evidence: ${assumption}`,
+      `Run a controlled pilot against the submitted success criteria: ${successFactors}`,
+      `Resolve and assign owners for the critical dependencies: ${dependencies}`,
+      `Complete the required regulatory and control review: ${regulatory}`,
+      "Replace planning estimates with customer evidence, supplier quotations, and measured pilot results before full commitment.",
+    ],
+    nextSteps: [
+      `Within 30 days, assign owners and resolve dependencies: ${dependencies}`,
+      `Within 30 days, approve pilot success criteria: ${successFactors}`,
+      `Within 60 days, complete the regulatory review: ${regulatory}`,
+      "Within 90 days, re-run the analysis using signed quotations, measured outcomes, and customer evidence.",
+    ],
+  };
+}
+
 function riskRows(inputs: Record<string, string>) {
   const supplied = splitItems(inputs.knownRisks);
   const defaults = [
@@ -100,7 +144,7 @@ function riskRows(inputs: Record<string, string>) {
     probability: "Med",
     impact: "Med",
     level: "Med",
-    mitigation: "Assign an accountable owner, validate the exposure, and define a measurable control before commitment.",
+    mitigation: mitigationForRisk(name),
   }));
 }
 
@@ -144,6 +188,7 @@ function fallbackSeed(inputs: Record<string, string>, publicResearch: unknown, r
   const location = cleanText(inputs.location, "the selected market");
   const painPoints = splitItems(inputs.knownRisks).slice(0, 5);
   const firstSourceId = cleanText(citations[0]?.sourceId);
+  const actions = contextualActions(inputs);
 
   return {
     executiveSummary: `${projectName} was assessed using the submitted brief, deterministic FMART-O calculations, and the public evidence that could be retrieved. The narrative AI response was unavailable or incomplete (${reason}); therefore missing sections were completed conservatively and unsupported figures are marked for validation.`,
@@ -186,9 +231,9 @@ function fallbackSeed(inputs: Record<string, string>, publicResearch: unknown, r
       capExItems: [],
       opExItems: [],
       scenarios: [
-        { scenario: "Optimistic", probabilityPct: 25, annualValue: 0, adoptionRatePct: 0, volumeAssumption: "Requires validation", breakEvenMonths: 12, basis: "No verified commercial outcome data was available." },
-        { scenario: "Base Case", probabilityPct: 50, annualValue: 0, adoptionRatePct: 0, volumeAssumption: "Requires validation", breakEvenMonths: 24, basis: "No verified commercial outcome data was available." },
-        { scenario: "Pessimistic", probabilityPct: 25, annualValue: 0, adoptionRatePct: 0, volumeAssumption: "Requires validation", breakEvenMonths: 36, basis: "No verified commercial outcome data was available." },
+        { scenario: "Optimistic", probabilityPct: 25, annualValue: 0, adoptionRatePct: 65, volumeAssumption: "Derived planning target", breakEvenMonths: 12, basis: "Derive a transparent planning estimate from the submitted budget." },
+        { scenario: "Base Case", probabilityPct: 50, annualValue: 0, adoptionRatePct: 45, volumeAssumption: "Derived planning target", breakEvenMonths: 18, basis: "Derive a transparent planning estimate from the submitted budget." },
+        { scenario: "Pessimistic", probabilityPct: 25, annualValue: 0, adoptionRatePct: 25, volumeAssumption: "Derived planning target", breakEvenMonths: 30, basis: "Derive a transparent planning estimate from the submitted budget." },
       ],
       ltvCacRatio: "Requires validation",
     },
@@ -199,19 +244,8 @@ function fallbackSeed(inputs: Record<string, string>, publicResearch: unknown, r
       { source: "Contingency or phased funding", sharePct: 25, rationale: "Reserve funding for validated risks and delivery uncertainty." },
     ],
     fundingAdvisory: "Use stage-gated funding. Do not commit the full estimated range until pricing, demand, delivery, and regulatory assumptions are validated.",
-    recommendations: [
-      "Validate customer demand and willingness to pay with direct interviews or paid pilots.",
-      "Obtain supplier quotations and replace estimated costs with approved figures.",
-      "Confirm regulatory, privacy, security, and data-hosting requirements.",
-      "Assign owners to the highest-impact risks and dependencies.",
-      "Re-run the analysis after adding primary evidence and measured pilot results.",
-    ],
-    nextSteps: [
-      "Approve a short evidence-validation plan with owners and due dates.",
-      "Collect current market, pricing, customer, and competitor evidence.",
-      "Complete a technical and operational proof of concept.",
-      "Review the updated report before any irreversible commitment.",
-    ],
+    recommendations: actions.recommendations,
+    nextSteps: actions.nextSteps,
     evidenceClaims: [
       {
         claimText: `${projectName} is intended for ${location}.`,
