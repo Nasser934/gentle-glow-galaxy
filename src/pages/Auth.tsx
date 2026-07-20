@@ -36,7 +36,8 @@ const AuthPage = () => {
   const [busy, setBusy] = useState(false);
 
   const routeState = loc.state as { from?: string } | null;
-  const redirectTo = sanitizeAuthReturnPath(routeState?.from);
+  const nextParam = new URLSearchParams(loc.search).get("next");
+  const redirectTo = sanitizeAuthReturnPath(nextParam ?? routeState?.from);
 
   useEffect(() => {
     if (authLoading || !user) return;
