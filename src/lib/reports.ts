@@ -65,6 +65,7 @@ export async function saveReport(
       industry: inputs.industry || null,
       inputs: inputs as unknown as Json,
       output: output as unknown as Json,
+      is_public: false,
       save_operation_key: saveOperationKey,
     })
     .select("id, slug, display_id, output")
@@ -115,6 +116,7 @@ export async function saveRerunReport(params: {
       inputs: params.inputs as unknown as Json,
       output: params.report as unknown as Json,
       parent_report_id: rootId,
+      is_public: false,
       save_operation_key: saveOperationKey,
     })
     .select("id, slug, display_id, output")
@@ -220,9 +222,12 @@ export async function listReportVersions(reportId: string) {
 export type ReportScope = "active" | "archived" | "all";
 
 export async function listMyReports(scope: ReportScope = "active") {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
   let q = supabase
     .from("reports")
     .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, archived_at")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200);
   if (scope === "active") q = q.is("archived_at", null);
