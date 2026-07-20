@@ -6,17 +6,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
 // Typed wrapper — supabase.auth.oauth is a beta namespace not always in the .d.ts.
+type OAuthError = { message: string } | null;
+type OAuthClient = {
+  name?: string;
+  client_name?: string;
+  redirect_uris?: string[];
+};
+type OAuthAuthorizationDetails = {
+  client?: OAuthClient;
+  redirect_url?: string;
+  redirect_to?: string;
+  scopes?: string[];
+  scope?: string;
+} | null;
+type OAuthResult<T> = { data: T; error: OAuthError };
 type OAuthApi = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: any }>;
-  approveAuthorization: (id: string) => Promise<{ data: any; error: any }>;
-  denyAuthorization: (id: string) => Promise<{ data: any; error: any }>;
+  getAuthorizationDetails: (id: string) => Promise<OAuthResult<OAuthAuthorizationDetails>>;
+  approveAuthorization: (id: string) => Promise<OAuthResult<OAuthAuthorizationDetails>>;
+  denyAuthorization: (id: string) => Promise<OAuthResult<OAuthAuthorizationDetails>>;
 };
 const oauth = (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
   const authorizationId = params.get("authorization_id") ?? "";
-  const [details, setDetails] = useState<any>(null);
+  const [details, setDetails] = useState<OAuthAuthorizationDetails>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
