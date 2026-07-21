@@ -18,6 +18,7 @@ export interface ParsedUnitAwareNumber {
  * so malformed legacy rows cannot become decision KPIs.
  */
 export const MAX_BREAK_EVEN_MONTHS = 120;
+
 const SCALE: Record<string, number> = {
   k: 1_000,
   thousand: 1_000,
@@ -35,8 +36,8 @@ function currencyFromText(text: string): CurrencyCode | null {
   const code = text.match(/\b(SAR|USD|AED|EUR|GBP)\b/i)?.[1]?.toUpperCase();
   if (code && ["SAR", "USD", "AED", "EUR", "GBP"].includes(code)) return code as CurrencyCode;
   if (/\$/.test(text)) return "USD";
-  if (/€/.test(text)) return "EUR";
-  if (/£/.test(text)) return "GBP";
+  if (/\u20ac/.test(text)) return "EUR";
+  if (/\u00a3/.test(text)) return "GBP";
   return null;
 }
 
@@ -65,19 +66,25 @@ export function parseUnitAwareNumber(raw: unknown): ParsedUnitAwareNumber {
     unit: null,
     displayText,
   };
-  if (!displayText || /^(?:n\/?a|none|null|undefined|—|requires validation)$/i.test(displayText)) return missing;
+  if (!displayText || /^(?:n\/?a|none|null|undefined|\u2014|requires validation)$/i.test(displayText)) return missing;
 
   // A plain hyphen between two positive tokens is a range delimiter, not the
   // sign of the second value. Preserve a leading minus for genuine negatives.
-  const tokenText = displayText.replace(/(\d|[kmbt])\s*-\s*(?=\d)/gi, "$1–");
+  const tokenText = displayText.replace(/(\d|[kmbt])\s*-\s*(?=\d)/gi, "$1\u2013");
   const tokens = tokenText.match(TOKEN_RE) ?? [];
-  const parts = tokens.map(tokenParts).filter((item): item is { number: number; scale: number | null } => item !== null);
-  if (parts.length === 0) return missing;
+  const parsedParts = tokens.map(tokenParts).filter((item): item is { number: number; scale: number | null } => item !== null);
+  if (parsedParts.length === 0) return missing;
 
   const currency = currencyFromText(displayText);
   const isMonth = /\bmonths?\b/i.test(displayText);
   const isYear = /\byears?\b/i.test(displayText);
   const isPercent = /%|\bpercent(?:age)?\b/i.test(displayText);
+  // TOKEN_RE intentionally accepts compact financial suffixes such as "12M".
+  // In temporal phrases, however, the "m" in "months" is part of the unit and
+  // must never multiply the number by one million.
+  const parts = isMonth || isYear
+    ? parsedParts.map((part) => ({ ...part, scale: null }))
+    : parsedParts;
   const hasScale = parts.some((part) => part.scale !== null);
   const unit: NumericUnit = isMonth
     ? "month"
@@ -89,7 +96,7 @@ export function parseUnitAwareNumber(raw: unknown): ParsedUnitAwareNumber {
           ? "money"
           : "number";
 
-  const rangeSyntax = parts.length >= 2 && /(?:\d|[kmbt])\s*(?:–|—|\bto\b)\s*(?:\d|[kmbt])/i.test(tokenText);
+  const rangeSyntax = parts.length >= 2 && /(?:\d|[kmbt])\s*(?:\u2013|\u2014|\bto\b)\s*(?:\d|[kmbt])/i.test(tokenText);
   if (rangeSyntax) {
     const first = parts[0];
     const second = parts[1];
@@ -135,6 +142,6 @@ export function safeBreakEvenRange(raw: unknown): { low: number; high: number } 
   const multiplier = parsed.unit === "year" ? 12 : 1;
   const low = (parsed.low ?? parsed.value) * multiplier;
   const high = (parsed.high ?? parsed.value) * multiplier;
-  if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high > MAX_BREAK_EVEN_MONTHS) return null;
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low <= 0 || high > MAX_BREAK_EVEN_MONTHS) return null;
   return { low, high };
 }

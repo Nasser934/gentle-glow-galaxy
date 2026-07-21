@@ -24,6 +24,13 @@ describe("financial consistency", () => {
     expect(result.warnings.map((warning) => warning.code)).toContain("break_even_invalid");
   });
 
+  it("rejects zero-month break-even", () => {
+    const report = makeReport();
+    report.financials.breakEvenSummary = "Month 0";
+    expect(validateFinancialModel(report).warnings.map((warning) => warning.code))
+      .toContain("break_even_invalid");
+  });
+
   it("detects CapEx item/total and midpoint mismatches", () => {
     const report = makeReport();
     report.financials.capExTotal = { low: 250_000, high: 600_000, mid: 500_000 };

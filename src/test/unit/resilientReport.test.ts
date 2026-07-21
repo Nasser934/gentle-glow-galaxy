@@ -110,4 +110,54 @@ describe("resilient report generation", () => {
     expect(result.seed.recommendations).toEqual(["AI recommendation"]);
     expect(result.seed.risks).toHaveLength(5);
   });
+
+  it("builds a decision-useful fallback from the submitted budget and brief", () => {
+    const resilient = buildResilientReportSeed({
+      inputs,
+      publicResearch: limitedResearch,
+      degradedReason: "structured_output_truncated",
+    });
+    const base = buildBaseReportFromSeed({
+      seed: resilient.seed,
+      inputs,
+      publicResearch: limitedResearch,
+      inputIssues: [],
+    });
+
+    expect(base.financials.capEx).toHaveLength(5);
+    expect(base.financials.opEx).toHaveLength(4);
+    expect(base.financials.scenarios.every((scenario) =>
+      scenario.annualRevenue !== "Requires validation")).toBe(true);
+    expect(base.financials.scenarios.map((scenario) => scenario.breakEven))
+      .toEqual(["12 months", "18 months", "30 months"]);
+    expect(base.financials.scenarios.every((scenario) =>
+      /planning assumption/i.test(scenario.basis))).toBe(true);
+    expect(new Set(base.risks.map((risk) => risk.mitigation)).size).toBe(5);
+    expect(base.recommendations.join(" ")).toContain(inputs.successFactors);
+    expect(base.nextSteps.join(" ")).toContain(inputs.dependencies);
+  });
+
+  it("normalizes internal scenario adoption to a zero-to-one ratio", () => {
+    const internalInputs = {
+      ...inputs,
+      description: "An internal workforce analytics platform for employee productivity and cost avoidance.",
+      businessModel: "Internal platform",
+      revenueModel: "Cost avoidance and productivity benefits",
+    };
+    const resilient = buildResilientReportSeed({
+      inputs: internalInputs,
+      publicResearch: limitedResearch,
+      degradedReason: "ai_not_configured",
+    });
+    const base = buildBaseReportFromSeed({
+      seed: resilient.seed,
+      inputs: internalInputs,
+      publicResearch: limitedResearch,
+      inputIssues: [],
+    });
+
+    expect(base.financials.projectType).toBe("internal");
+    expect(base.financials.scenarios.every((scenario) =>
+      scenario.adoptionRate > 0 && scenario.adoptionRate <= 1)).toBe(true);
+  });
 });

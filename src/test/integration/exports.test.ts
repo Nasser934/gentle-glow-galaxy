@@ -33,6 +33,27 @@ describe("canonical exports", () => {
     expect(bytes.byteLength).toBeGreaterThan(10_000);
   });
 
+  it("does not coerce unknown scenario outcomes into zero or sensitivity formulas", () => {
+    const report = structuredClone(demoReport);
+    report.financials.scenarios.forEach((scenario) => {
+      delete scenario.annualFinancialBenefit;
+      scenario.annualValueDisplay = "Requires validation";
+    });
+
+    const workbook = buildReportWorkbook(report, demoInputs);
+    expect(workbook.getWorksheet("Scenarios")!.getRow(2).getCell(4).value)
+      .toBe("Requires validation");
+
+    const sensitivity = workbook.getWorksheet("Sensitivity")!;
+    expect(sensitivity.getColumn(3).values.some((value) =>
+      typeof value === "object" && value !== null && "formula" in value)).toBe(false);
+    expect(sensitivity.getColumn(1).values).toContain(
+      "Sensitivity unavailable until the base-case financial outcome is validated.",
+    );
+    expect(workbook.worksheets.every((sheet) =>
+      sheet.views.some((view) => view.state === "frozen"))).toBe(true);
+  });
+
   it("builds a 10-slide PowerPoint with safe font fallbacks", async () => {
     const presentation = buildReportPresentation(demoReport, demoInputs);
     const bytes = await presentation.write({ outputType: "uint8array" });

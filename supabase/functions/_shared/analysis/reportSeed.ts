@@ -252,15 +252,9 @@ function clamp(value: unknown, low: number, high: number, fallback: number): num
   return Math.max(low, Math.min(high, finite(value, fallback)));
 }
 
-function safeBreakEvenMonths(value: unknown, fallback: number): number {
-  const candidate = Math.round(finite(value, fallback));
-  return candidate >= 0 && candidate <= MAX_BREAK_EVEN_MONTHS ? candidate : fallback;
-}
-
-function normalizedAdoptionRate(value: unknown, fallbackPercent: number): number {
-  const raw = finite(value, fallbackPercent);
-  const ratio = raw > 1 ? raw / 100 : raw;
-  return clamp(ratio, 0, 1, fallbackPercent / 100);
+function positiveMonths(value: unknown, fallback: number): number {
+  const rounded = Math.round(finite(value, fallback));
+  return rounded > 0 && rounded <= MAX_BREAK_EVEN_MONTHS ? rounded : fallback;
 }
 
 function limitedStrings(value: unknown, limit: number, fallback: string[]): string[] {
@@ -318,10 +312,50 @@ function fallbackCapEx(inputs: Record<string, string>) {
   const budget = parseUnitAwareNumber(inputs.budgetRange);
   const low = Math.max(0, budget.low ?? (budget.value ? budget.value * 0.75 : 50_000));
   const high = Math.max(low, budget.high ?? (budget.value ? budget.value * 1.25 : 100_000));
+  if (budget.valid) {
+    const categories = [
+      ["Product design and engineering", 0.4],
+      ["Data and systems integration", 0.2],
+      ["Security and compliance", 0.15],
+      ["Launch and change enablement", 0.15],
+      ["Contingency reserve", 0.1],
+    ] as const;
+    return categories.map(([category, weight]) => ({
+      category,
+      low: Math.round(low * weight),
+      high: Math.round(high * weight),
+      notes: "AI-estimated planning assumption derived from the submitted budget; validate with quotations before commitment.",
+    }));
+  }
   return [
     { category: "Product and implementation", low: Math.round(low * 0.65), high: Math.round(high * 0.65), notes: "AI-estimated assumption — validate with supplier quotations." },
     { category: "Launch, compliance, and contingency", low: Math.round(low * 0.35), high: Math.round(high * 0.35), notes: "AI-estimated assumption — validate before commitment." },
   ];
+}
+
+function fallbackOpEx(capExMid: number, projectType: "commercial" | "internal") {
+  const monthlyTotal = Math.max(5_000, Math.round(capExMid * 0.06));
+  const categories = projectType === "internal"
+    ? [
+        ["Cloud, data, and software", 0.25],
+        ["Product operations and support", 0.3],
+        ["Training and change adoption", 0.25],
+        ["Security, compliance, and continuous improvement", 0.2],
+      ] as const
+    : [
+        ["Cloud, data, and software", 0.25],
+        ["Operations and customer support", 0.3],
+        ["Sales and customer success", 0.25],
+        ["Security, compliance, and continuous improvement", 0.2],
+      ] as const;
+  let allocated = 0;
+  return categories.map(([category, weight], index) => {
+    const monthly = index === categories.length - 1
+      ? monthlyTotal - allocated
+      : Math.round(monthlyTotal * weight);
+    allocated += monthly;
+    return { category, monthly, annual: monthly * 12 };
+  });
 }
 
 function inputCompleteness(inputs: Record<string, string>, issues: InputIssue[]) {
@@ -429,7 +463,7 @@ export function buildBaseReportFromSeed(args: {
       annual: monthly * 12,
     };
   }).filter((item) => item.monthly > 0);
-  if (!opEx.length) opEx.push({ category: "Operations and support", monthly: Math.max(1_000, Math.round(capExMid * 0.02)), annual: Math.max(12_000, Math.round(capExMid * 0.24)) });
+  if (!opEx.length) opEx.push(...fallbackOpEx(capExMid, projectType));
   const monthlyOpEx = opEx.reduce((sum, item) => sum + item.monthly, 0);
 
   const scenarioOrder = ["Optimistic", "Base Case", "Pessimistic"];
@@ -437,15 +471,25 @@ export function buildBaseReportFromSeed(args: {
   const scenarioRecords = scenarioOrder.map((name) => scenarioByName.get(name) ?? {});
   const probabilityValues = normalizedPercentages(scenarioRecords.map((scenario) => finite(scenario.probabilityPct)), [25, 50, 25]);
   const scenarios = scenarioRecords.map((scenario, index) => {
-    const annualValue = nonNegative(scenario.annualValue);
-    const breakEvenMonths = safeBreakEvenMonths(scenario.breakEvenMonths, [12, 24, 36][index]);
+    const breakEvenMonths = positiveMonths(scenario.breakEvenMonths, [12, 18, 30][index]);
+    const submittedAnnualValue = nonNegative(scenario.annualValue);
+    const annualValue = submittedAnnualValue > 0
+      ? submittedAnnualValue
+      : Math.round(monthlyOpEx * 12 + capExMid / (breakEvenMonths / 12));
+    const submittedAdoption = finite(scenario.adoptionRatePct);
+    const adoptionPct = submittedAdoption > 0
+      ? clamp(submittedAdoption, 0, 100, [65, 45, 25][index])
+      : [65, 45, 25][index];
+    const estimatedBasis = submittedAnnualValue <= 0;
     const common = {
       scenario: scenarioOrder[index],
       probability: percentage(probabilityValues[index]),
       breakEven: `${breakEvenMonths} months`,
-      adoptionRate: normalizedAdoptionRate(scenario.adoptionRatePct, [75, 50, 25][index]),
+      adoptionRate: adoptionPct / 100,
       annualValueDisplay: annualValue > 0 ? money(currency, annualValue) : "Requires validation",
-      basis: text(scenario.basis, "AI-estimated assumption — validate with project data."),
+      basis: estimatedBasis
+        ? "AI-estimated planning assumption derived from the submitted budget, operating envelope, and target payback; validate with pricing or measured benefit data."
+        : text(scenario.basis, "AI-estimated assumption — validate with project data."),
     };
     return projectType === "internal"
       ? {
@@ -456,14 +500,16 @@ export function buildBaseReportFromSeed(args: {
         }
       : {
           ...common,
-          subscribersYr1: text(scenario.volumeAssumption, "Requires validation"),
+          subscribersYr1: estimatedBasis
+            ? `Validate customer count and annual price required to reach ${money(currency, annualValue)}`
+            : text(scenario.volumeAssumption, "Requires validation"),
           annualRevenue: annualValue > 0 ? money(currency, annualValue) : "Requires validation",
         };
   });
 
   const investmentLow = capExLow + monthlyOpEx * 6;
   const investmentHigh = capExHigh + monthlyOpEx * 6;
-  const baseBreakEven = safeBreakEvenMonths(scenarioRecords[1]?.breakEvenMonths, 24);
+  const baseBreakEven = positiveMonths(scenarioRecords[1]?.breakEvenMonths, 18);
 
   const fundingSeed = asArray(seed.funding).map(asRecord).slice(0, 3);
   while (fundingSeed.length < 3) fundingSeed.push({});
@@ -543,7 +589,7 @@ export function buildBaseReportFromSeed(args: {
       opEx,
       scenarios,
       investmentRange: `${currency} ${Math.round(investmentLow).toLocaleString("en-US")}–${Math.round(investmentHigh).toLocaleString("en-US")}`,
-      breakEvenSummary: `${Math.max(0, Math.round(baseBreakEven))} months`,
+      breakEvenSummary: `${positiveMonths(baseBreakEven, 18)} months`,
       ltvCacRatio: projectType === "commercial" ? text(financialSeed.ltvCacRatio, "Requires validation") : "Not applicable to internal value case",
     },
     risks,

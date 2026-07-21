@@ -12,7 +12,6 @@ export interface FinancialWarning {
   message: string;
   path?: string;
 }
-
 interface FinancialReportLike {
   market?: { tamValue?: unknown; samValue?: unknown; somValue?: unknown; currency?: unknown };
   financials?: {

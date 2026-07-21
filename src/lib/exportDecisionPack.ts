@@ -20,7 +20,7 @@ import {
   confidencePercent,
   prettifySource,
 } from "@/lib/format";
-import { safeBreakEvenRange } from "@/lib/numbers";
+import { MAX_BREAK_EVEN_MONTHS, safeBreakEvenRange } from "@/lib/numbers";
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -152,7 +152,19 @@ export function canonicalizeVerdict(raw: string | undefined | null): CanonicalVe
 
 /** Extract a single canonical break-even month from any free-form string. */
 export function extractBreakEvenMonth(raw: string | undefined | null): number | null {
-  return safeBreakEvenRange(raw)?.low ?? null;
+  const validated = safeBreakEvenRange(raw);
+  if (validated && validated.low > 0) return validated.low;
+
+  // Keep support for compact legacy notation (M26/Y3) while applying the
+  // same positive, bounded horizon policy as the shared validator.
+  const text = (raw || "").toString();
+  const positiveMonth = (value: number): number | null =>
+    Number.isFinite(value) && value > 0 && value <= MAX_BREAK_EVEN_MONTHS ? value : null;
+  let match = text.match(/\bM(\d{1,3})\b/i);
+  if (match) return positiveMonth(Number(match[1]));
+  match = text.match(/\bY(\d{1,2})\b/i);
+  if (match) return positiveMonth(Number(match[1]) * 12);
+  return null;
 }
 
 function buildBreakEvenDisplay(raw: string | undefined | null, month: number | null): string {

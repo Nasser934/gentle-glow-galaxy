@@ -1,5 +1,6 @@
 
 drop policy if exists "Profiles viewable by everyone" on public.profiles;
+drop policy if exists "Users view own profile" on public.profiles;
 create policy "Users view own profile"
   on public.profiles for select
   to authenticated

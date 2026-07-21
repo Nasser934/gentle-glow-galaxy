@@ -178,8 +178,8 @@ describe("slim report seed", () => {
       publicResearch,
       inputIssues: [],
     });
-    expect(base.financials.breakEvenSummary).toBe("24 months");
-    expect(base.financials.scenarios[1].breakEven).toBe("24 months");
+    expect(base.financials.breakEvenSummary).toBe("18 months");
+    expect(base.financials.scenarios[1].breakEven).toBe("18 months");
   });
 
   it("normalizes AI percentage adoption to the 0-1 report contract", () => {

@@ -7,6 +7,7 @@ import { validateConceptInputs, validateInputOrigins } from "../_shared/analysis
 import { fetchPublicResearch } from "../_shared/analysis/publicResearch.ts";
 import { buildBaseReportFromSeed, REPORT_SEED_SCHEMA } from "../_shared/analysis/reportSeed.ts";
 import { buildResilientReportSeed } from "../_shared/analysis/resilientSeed.ts";
+import { REPORT_CONTENT_RULES } from "../_shared/analysis/promptRules.ts";
 import {
   compactResearchContext,
   GatewayAttemptError,
@@ -265,7 +266,7 @@ serve(async (req) => {
     const systemPrompt = `You are Concept AI's evidence-aware feasibility analyst using FMART-O: Financial, Market, Achievability, Risk, Timing, and Operational.
 Call the provide_report tool exactly once and return the complete concise report seed required by the schema.
 The server calculates the authoritative score, verdict, weights, totals, investment range, evidence composition, input completeness, charts, and score explanations.
-Use full currency-unit numbers. Use zero for unsupported figures and clearly state that they require validation. Never invent a citation or source ID.`;
+${REPORT_CONTENT_RULES}`;
 
     const userPrompt = `Create a complete feasibility-report seed for this concept.
 Project: ${inputs.projectName}
