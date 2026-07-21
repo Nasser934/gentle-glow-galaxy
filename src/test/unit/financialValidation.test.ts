@@ -17,6 +17,13 @@ describe("financial consistency", () => {
     expect(result.normalized.capEx.midpoint).toBe(400_000);
   });
 
+  it("rejects an unbounded break-even horizon", () => {
+    const report = makeReport();
+    report.financials.breakEvenSummary = "24000000 months";
+    const result = validateFinancialModel(report);
+    expect(result.warnings.map((warning) => warning.code)).toContain("break_even_invalid");
+  });
+
   it("detects CapEx item/total and midpoint mismatches", () => {
     const report = makeReport();
     report.financials.capExTotal = { low: 250_000, high: 600_000, mid: 500_000 };

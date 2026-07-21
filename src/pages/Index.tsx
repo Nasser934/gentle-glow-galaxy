@@ -11,11 +11,21 @@ import {
   Globe,
   Briefcase,
   FileSearch,
+  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { Logo } from "@/components/Logo";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const features = [
   {
@@ -66,6 +76,33 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 md:hidden" aria-label="Open navigation menu">
+                  <Menu className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[min(20rem,calc(100vw-2rem))]">
+                <SheetHeader className="text-left">
+                  <SheetTitle>Concept AI</SheetTitle>
+                  <SheetDescription>Explore the product and start a feasibility analysis.</SheetDescription>
+                </SheetHeader>
+                <nav className="mt-8 flex flex-col gap-2" aria-label="Mobile navigation">
+                  {[
+                    ["Product", "#features"],
+                    ["Solutions", "#industries"],
+                    ["Evidence", "#features"],
+                  ].map(([label, href]) => (
+                    <SheetClose asChild key={`${label}-${href}`}>
+                      <a href={href} className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent">{label}</a>
+                    </SheetClose>
+                  ))}
+                  <SheetClose asChild>
+                    <Button type="button" onClick={() => navigate("/demo")} className="mt-4 justify-start">View synthetic demo</Button>
+                  </SheetClose>
+                </nav>
+              </SheetContent>
+            </Sheet>
             <Button
               type="button"
               size="sm"

@@ -1,4 +1,4 @@
-import { numericRange, parseUnitAwareNumber, type CurrencyCode } from "./numbers.ts";
+import { numericRange, parseUnitAwareNumber, safeBreakEvenRange, MAX_BREAK_EVEN_MONTHS, type CurrencyCode } from "./numbers.ts";
 
 export type FigureValidationStatus =
   | "Verified from user input"
@@ -179,9 +179,9 @@ export function validateFinancialModel(report: FinancialReportLike) {
     warnings.push({ code: "investment_range_inconsistent", message: "Investment range must align with CapEx and six months of operating runway.", path: "financials.investmentRange" });
   }
 
-  const breakEven = parseUnitAwareNumber(financials.breakEvenSummary);
-  if (!breakEven.valid || breakEven.unit !== "month" || breakEven.value === null || breakEven.value < 0) {
-    warnings.push({ code: "break_even_invalid", message: "Break-even or internal payback must be a valid non-negative month or range.", path: "financials.breakEvenSummary" });
+  const breakEven = safeBreakEvenRange(financials.breakEvenSummary);
+  if (!breakEven) {
+    warnings.push({ code: "break_even_invalid", message: `Break-even or internal payback must be a finite horizon between 0 and ${MAX_BREAK_EVEN_MONTHS} months.`, path: "financials.breakEvenSummary" });
   }
 
   return {

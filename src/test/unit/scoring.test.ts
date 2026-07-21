@@ -125,4 +125,15 @@ describe("authoritative verdict governance", () => {
     expect(result.verdict).toBe("REVISE");
     expect(result.overrideReasons).toContain("unmitigated_critical_risk");
   });
+
+  it("requires financial validation before a positive decision", () => {
+    const result = deriveAuthoritativeVerdict(9, {
+      overallConfidencePct: 90,
+      inputQuality: 90,
+      hasUnmitigatedCriticalRisk: false,
+      hasFinancialValidationBlocker: true,
+    });
+    expect(result.verdict).toBe("REVISE");
+    expect(result.overrideReasons).toContain("financial_validation_required");
+  });
 });

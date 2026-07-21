@@ -44,7 +44,7 @@ export interface ScenarioOutcome {
   capex: number;
   grossProfit: number;
   netProfit: number;
-  paybackMonths: number;
+  paybackMonths: number | null;
   roi: number;
 }
 
@@ -60,7 +60,7 @@ export function projectOutcome(report: FeasibilityReport, sensitivity: Sensitivi
   const grossProfit = financialValue - opex;
   const netProfit = grossProfit - capex * 0.2;
   const monthlyContribution = grossProfit / 12;
-  const paybackMonths = capex <= 0 ? 0 : monthlyContribution > 0 ? capex / monthlyContribution : Number.POSITIVE_INFINITY;
+  const paybackMonths = capex <= 0 ? 0 : monthlyContribution > 0 ? capex / monthlyContribution : null;
   const roi = capex > 0 ? netProfit / capex : 0;
   return { projectType, financialValue, revenue: financialValue, opex, capex, grossProfit, netProfit, paybackMonths, roi };
 }
@@ -91,7 +91,8 @@ export interface MonteCarloResult {
   disclaimer: string;
   distributions: Array<{ name: string; standardDeviation: number }>;
   netProfit: { p10: number; p50: number; p90: number; mean: number };
-  paybackMonths: { p10: number; p50: number; p90: number; mean: number };
+  paybackMonths: { p10: number | null; p50: number | null; p90: number | null; mean: number | null };
+  noPaybackProbability: number;
   roi: { p10: number; p50: number; p90: number; mean: number };
   positiveOutcomeProbability: number;
   successProbability: number;
@@ -102,6 +103,12 @@ const percentile = (values: number[], percentage: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((percentage / 100) * (sorted.length - 1))));
   return sorted[index];
+};
+
+const percentileOrNull = (values: Array<number | null>, percentage: number): number | null => {
+  const sorted = values.map((value) => value ?? Number.POSITIVE_INFINITY).sort((a, b) => a - b);
+  const value = sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((percentage / 100) * (sorted.length - 1))))];
+  return Number.isFinite(value) ? value : null;
 };
 
 export function runMonteCarlo(
@@ -115,7 +122,7 @@ export function runMonteCarlo(
   const projectType = baseCase(report).projectType;
   const random = seededRandom(seed);
   const profits: number[] = [];
-  const paybacks: number[] = [];
+  const paybacks: Array<number | null> = [];
   const rois: number[] = [];
   let positive = 0;
 
@@ -129,7 +136,7 @@ export function runMonteCarlo(
     };
     const outcome = projectOutcome(report, sample);
     profits.push(outcome.netProfit);
-    paybacks.push(Math.min(outcome.paybackMonths, 120));
+    paybacks.push(outcome.paybackMonths == null ? null : Math.min(outcome.paybackMonths, 120));
     rois.push(outcome.roi);
     if (outcome.netProfit > 0) positive += 1;
   }
@@ -148,6 +155,7 @@ export function runMonteCarlo(
   }
   const positiveOutcomeProbability = positive / iterations * 100;
   const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const reachedPaybacks = paybacks.filter((value): value is number => value !== null);
   return {
     iterations,
     seed,
@@ -167,7 +175,13 @@ export function runMonteCarlo(
           { name: "Market adoption", standardDeviation: 0.18 },
         ],
     netProfit: { p10: percentile(profits, 10), p50: percentile(profits, 50), p90: percentile(profits, 90), mean: mean(profits) },
-    paybackMonths: { p10: percentile(paybacks, 10), p50: percentile(paybacks, 50), p90: percentile(paybacks, 90), mean: mean(paybacks) },
+    paybackMonths: {
+      p10: percentileOrNull(paybacks, 10),
+      p50: percentileOrNull(paybacks, 50),
+      p90: percentileOrNull(paybacks, 90),
+      mean: reachedPaybacks.length ? mean(reachedPaybacks) : null,
+    },
+    noPaybackProbability: (iterations - reachedPaybacks.length) / iterations * 100,
     roi: { p10: percentile(rois, 10), p50: percentile(rois, 50), p90: percentile(rois, 90), mean: mean(rois) },
     positiveOutcomeProbability,
     successProbability: positiveOutcomeProbability,

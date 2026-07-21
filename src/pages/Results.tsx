@@ -23,6 +23,7 @@ import { ActivityTab } from "@/components/report/workspace/ActivityTab";
 import { useAuth } from "@/contexts/AuthContext";
 import { SharingDialog } from "@/components/report/SharingDialog";
 import { demoInputs, demoReport } from "@/data/demoReport";
+import { sanitizeFileName } from "@/lib/format";
 
 type WorkspaceTab = "overview" | "report" | "versions" | "activity";
 const TAB_VALUES: WorkspaceTab[] = ["overview", "report", "versions", "activity"];
@@ -324,9 +325,10 @@ const Results = () => {
       const { exportReportToPdf } = await import("@/lib/exportPdf");
       await waitForCaptureMount();
       const versionFamily = await fetchVersionFamilySafe();
+      const fileStem = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
       const result = await exportReportToPdf(
         captureRootRef.current,
-        `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}.pdf`,
+        `${fileStem}.pdf`,
         { report, inputs, versionFamily },
       );
       console.info(JSON.stringify({ event: "export_completed", format: "pdf", reportId: reportId || "unsaved", bytes: result.bytes, pages: result.pageCount }));
@@ -347,7 +349,7 @@ const Results = () => {
     console.info(JSON.stringify({ event: "export_started", format: "pptx", reportId: reportId || "unsaved" }));
     try {
       const { exportReportToPptx } = await import("@/lib/exportPptx");
-      const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
+      const baseName = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
       await exportReportToPptx(report, inputs, `${baseName}.pptx`);
       console.info(JSON.stringify({ event: "export_completed", format: "pptx", reportId: reportId || "unsaved" }));
       toast.success("Deck downloaded", { id });
@@ -363,7 +365,7 @@ const Results = () => {
     console.info(JSON.stringify({ event: "export_started", format: "xlsx", reportId: reportId || "unsaved" }));
     try {
       const { exportReportToXlsx } = await import("@/lib/exportXlsx");
-      const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
+      const baseName = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
       const result = await exportReportToXlsx(report, inputs, `${baseName}.xlsx`);
       console.info(JSON.stringify({ event: "export_completed", format: "xlsx", reportId: reportId || "unsaved", bytes: result.bytes }));
       toast.success("Workbook downloaded", { id });

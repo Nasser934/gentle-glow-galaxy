@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseUnitAwareNumber } from "../../../supabase/functions/_shared/analysis/numbers";
+import { parseUnitAwareNumber, safeBreakEvenRange } from "../../../supabase/functions/_shared/analysis/numbers";
 
 describe("unit-aware numeric parsing", () => {
   it.each([
@@ -41,6 +41,13 @@ describe("unit-aware numeric parsing", () => {
       value: 14,
       unit: "month",
     });
+    expect(parseUnitAwareNumber("20 months")).toMatchObject({ valid: true, value: 20, unit: "month" });
+  });
+
+  it("accepts bounded break-even ranges and rejects unbounded legacy values", () => {
+    expect(safeBreakEvenRange("Month 12–16")).toEqual({ low: 12, high: 16 });
+    expect(safeBreakEvenRange("Year 3")).toEqual({ low: 36, high: 36 });
+    expect(safeBreakEvenRange("24000000 months")).toBeNull();
   });
 
   it.each(["Invalid text", "", undefined, null])("returns a missing result for %s", (raw) => {

@@ -290,7 +290,7 @@ const Analyze = () => {
     fieldErrors[field] ? "border-destructive ring-1 ring-destructive/40" : "";
   const InlineError = ({ field }: { field: keyof ConceptInputs }) =>
     fieldErrors[field] ? (
-      <p id={`${field}-error`} className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
+      <p id={`analysis-${field}-error`} className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
         <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
         <span>{fieldErrors[field]}</span>
       </p>
@@ -309,6 +309,11 @@ const Analyze = () => {
     };
     return <Badge variant="outline" className="text-[9px] font-normal normal-case">{label[origin]}</Badge>;
   };
+
+  const fieldId = (field: keyof ConceptInputs) => `analysis-${field}`;
+  const FieldLabel = ({ field, children }: { field: keyof ConceptInputs; children: React.ReactNode }) => (
+    <Label htmlFor={fieldId(field)}>{children}</Label>
+  );
 
 
   const next = () => { if (validateStep()) setStep((s) => Math.min(s + 1, 3)); };
@@ -415,7 +420,7 @@ const Analyze = () => {
 
   const EssayLabel = ({ field, children }: { field: EssayField; children: React.ReactNode }) => (
     <div className="flex items-center justify-between">
-      <div className="flex flex-wrap items-center gap-2"><Label>{children}</Label><OriginBadge field={field} /></div>
+      <div className="flex flex-wrap items-center gap-2"><FieldLabel field={field}>{children}</FieldLabel><OriginBadge field={field} /></div>
       <Button
         type="button" variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary hover:bg-accent"
         onClick={() => completeField(field)} disabled={completing === field}
@@ -573,7 +578,9 @@ const Analyze = () => {
               <Wand2 className="h-4 w-4 text-primary" />
               <h3 className="font-display text-sm font-semibold text-foreground">Start with one sentence — AI fills the rest</h3>
             </div>
-            <Textarea
+              <Label htmlFor="analysis-brief" className="sr-only">Concept brief for AI draft</Label>
+              <Textarea
+                id="analysis-brief"
               value={brief} onChange={(e) => setBrief(e.target.value)} rows={2}
               placeholder="e.g., A subscription healthy meals platform for working professionals in Riyadh"
               maxLength={500}
@@ -618,16 +625,16 @@ const Analyze = () => {
             {step === 0 && (
               <>
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2"><Label>Project Name *</Label><OriginBadge field="projectName" /></div>
-                  <Input value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} className={errorClass("projectName")} aria-invalid={!!fieldErrors.projectName} />
+                  <div className="flex flex-wrap items-center gap-2"><FieldLabel field="projectName">Project Name *</FieldLabel><OriginBadge field="projectName" /></div>
+                  <Input id={fieldId("projectName")} value={inputs.projectName} onChange={(e) => set("projectName", e.target.value)} placeholder="e.g., Healthy Meals Delivery Platform" maxLength={200} className={errorClass("projectName")} aria-invalid={!!fieldErrors.projectName} aria-describedby={fieldErrors.projectName ? "analysis-projectName-error" : undefined} />
                   <InlineError field="projectName" />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>Industry / Sector *</Label><OriginBadge field="industry" /></div>
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="industry">Industry / Sector *</FieldLabel><OriginBadge field="industry" /></div>
                     <Select value={inputs.industry} onValueChange={(v) => set("industry", v)}>
-                      <SelectTrigger className={errorClass("industry")} aria-invalid={!!fieldErrors.industry}><SelectValue placeholder="Select industry" /></SelectTrigger>
+                      <SelectTrigger id={fieldId("industry")} className={errorClass("industry")} aria-invalid={!!fieldErrors.industry} aria-describedby={fieldErrors.industry ? "analysis-industry-error" : undefined}><SelectValue placeholder="Select industry" /></SelectTrigger>
                       <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
                     </Select>
                     <InlineError field="industry" />
@@ -648,43 +655,43 @@ const Analyze = () => {
                     })()}
                   </div>
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>Location (City / Country)</Label><OriginBadge field="location" /></div>
-                    <Input value={inputs.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g., Riyadh, Saudi Arabia" maxLength={120} />
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="location">Location (City / Country)</FieldLabel><OriginBadge field="location" /></div>
+                    <Input id={fieldId("location")} value={inputs.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g., Riyadh, Saudi Arabia" maxLength={120} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="description">Project Description *</EssayLabel>
-                  <Textarea value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} className={errorClass("description")} aria-invalid={!!fieldErrors.description} />
+                   <Textarea id={fieldId("description")} value={inputs.description} onChange={(e) => set("description", e.target.value)} placeholder="Describe the project concept, its purpose, and expected outcomes…" rows={4} maxLength={2000} className={errorClass("description")} aria-invalid={!!fieldErrors.description} aria-describedby={fieldErrors.description ? "analysis-description-error" : undefined} />
                   <InlineError field="description" />
                 </div>
 
                 <div className="space-y-2">
                   <EssayLabel field="strategicObjectives">Strategic Objectives</EssayLabel>
-                  <Textarea value={inputs.strategicObjectives} onChange={(e) => set("strategicObjectives", e.target.value)} placeholder="Key strategic objectives this project aims to achieve…" rows={3} maxLength={1500} />
+                   <Textarea id={fieldId("strategicObjectives")} value={inputs.strategicObjectives} onChange={(e) => set("strategicObjectives", e.target.value)} placeholder="Key strategic objectives this project aims to achieve…" rows={3} maxLength={1500} />
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>Business Model</Label><OriginBadge field="businessModel" /></div>
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="businessModel">Business Model</FieldLabel><OriginBadge field="businessModel" /></div>
                     <Select value={inputs.businessModel} onValueChange={(v) => set("businessModel", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
+                      <SelectTrigger id={fieldId("businessModel")}><SelectValue placeholder="Select model" /></SelectTrigger>
                       <SelectContent>{BUSINESS_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>{internalBrief ? "Internal Value Model" : "Revenue Model"}</Label><OriginBadge field="revenueModel" /></div>
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="revenueModel">{internalBrief ? "Internal Value Model" : "Revenue Model"}</FieldLabel><OriginBadge field="revenueModel" /></div>
                     <Select value={inputs.revenueModel} onValueChange={(v) => set("revenueModel", v)}>
-                      <SelectTrigger><SelectValue placeholder={internalBrief ? "Select internal value model" : "Select revenue model"} /></SelectTrigger>
+                      <SelectTrigger id={fieldId("revenueModel")}><SelectValue placeholder={internalBrief ? "Select internal value model" : "Select revenue model"} /></SelectTrigger>
                       <SelectContent>{REVENUE_MODELS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="founderExperience">Founder / Team Experience</EssayLabel>
-                  <Textarea value={inputs.founderExperience} onChange={(e) => set("founderExperience", e.target.value)} placeholder="Years of experience, prior exits, domain expertise…" rows={2} maxLength={1000} />
+                   <Textarea id={fieldId("founderExperience")} value={inputs.founderExperience} onChange={(e) => set("founderExperience", e.target.value)} placeholder="Years of experience, prior exits, domain expertise…" rows={2} maxLength={1000} />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2"><Label>Competitor URLs <span className="text-xs text-muted-foreground">(optional · one per line)</span></Label><OriginBadge field="competitorUrls" /></div>
-                  <Textarea value={inputs.competitorUrls} onChange={(e) => set("competitorUrls", e.target.value)} placeholder={"https://competitor1.com\nhttps://competitor2.com"} rows={2} maxLength={800} className={errorClass("competitorUrls")} aria-invalid={!!fieldErrors.competitorUrls} />
+                  <div className="flex flex-wrap items-center gap-2"><FieldLabel field="competitorUrls">Competitor URLs <span className="text-xs text-muted-foreground">(optional · one per line)</span></FieldLabel><OriginBadge field="competitorUrls" /></div>
+                  <Textarea id={fieldId("competitorUrls")} value={inputs.competitorUrls} onChange={(e) => set("competitorUrls", e.target.value)} placeholder={"https://competitor1.com\nhttps://competitor2.com"} rows={2} maxLength={800} className={errorClass("competitorUrls")} aria-invalid={!!fieldErrors.competitorUrls} aria-describedby={fieldErrors.competitorUrls ? "analysis-competitorUrls-error" : undefined} />
                   <InlineError field="competitorUrls" />
                 </div>
               </>
@@ -694,17 +701,17 @@ const Analyze = () => {
               <>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>Estimated Budget Range *</Label><OriginBadge field="budgetRange" /></div>
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="budgetRange">Estimated Budget Range *</FieldLabel><OriginBadge field="budgetRange" /></div>
                     <Select value={inputs.budgetRange} onValueChange={(v) => set("budgetRange", v)}>
-                      <SelectTrigger className={errorClass("budgetRange")} aria-invalid={!!fieldErrors.budgetRange}><SelectValue placeholder="Select budget range" /></SelectTrigger>
+                      <SelectTrigger id={fieldId("budgetRange")} className={errorClass("budgetRange")} aria-invalid={!!fieldErrors.budgetRange} aria-describedby={fieldErrors.budgetRange ? "analysis-budgetRange-error" : undefined}><SelectValue placeholder="Select budget range" /></SelectTrigger>
                       <SelectContent>{BUDGET_RANGES.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                     </Select>
                     <InlineError field="budgetRange" />
                   </div>
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2"><Label>Expected Timeline *</Label><OriginBadge field="timeline" /></div>
+                    <div className="flex flex-wrap items-center gap-2"><FieldLabel field="timeline">Expected Timeline *</FieldLabel><OriginBadge field="timeline" /></div>
                     <Select value={inputs.timeline} onValueChange={(v) => set("timeline", v)}>
-                      <SelectTrigger className={errorClass("timeline")} aria-invalid={!!fieldErrors.timeline}><SelectValue placeholder="Select timeline" /></SelectTrigger>
+                      <SelectTrigger id={fieldId("timeline")} className={errorClass("timeline")} aria-invalid={!!fieldErrors.timeline} aria-describedby={fieldErrors.timeline ? "analysis-timeline-error" : undefined}><SelectValue placeholder="Select timeline" /></SelectTrigger>
                       <SelectContent>{TIMELINES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
                     <InlineError field="timeline" />
@@ -712,15 +719,15 @@ const Analyze = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2"><Label>Team Size</Label><OriginBadge field="teamSize" /></div>
+                  <div className="flex flex-wrap items-center gap-2"><FieldLabel field="teamSize">Team Size</FieldLabel><OriginBadge field="teamSize" /></div>
                   <Select value={inputs.teamSize} onValueChange={(v) => set("teamSize", v)}>
-                    <SelectTrigger><SelectValue placeholder="Select team size" /></SelectTrigger>
+                    <SelectTrigger id={fieldId("teamSize")}><SelectValue placeholder="Select team size" /></SelectTrigger>
                     <SelectContent>{TEAM_SIZES.map((ts) => <SelectItem key={ts} value={ts}>{ts}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="dependencies">Key Dependencies</EssayLabel>
-                  <Textarea value={inputs.dependencies} onChange={(e) => set("dependencies", e.target.value)} placeholder="Third-party vendors, regulatory approvals, other projects…" rows={3} maxLength={1500} />
+                   <Textarea id={fieldId("dependencies")} value={inputs.dependencies} onChange={(e) => set("dependencies", e.target.value)} placeholder="Third-party vendors, regulatory approvals, other projects…" rows={3} maxLength={1500} />
                 </div>
               </>
             )}
@@ -729,15 +736,15 @@ const Analyze = () => {
               <>
                 <div className="space-y-2">
                   <EssayLabel field="assumptions">Key Assumptions</EssayLabel>
-                  <Textarea value={inputs.assumptions} onChange={(e) => set("assumptions", e.target.value)} placeholder="List key assumptions the project is based on…" rows={4} maxLength={1500} />
+                   <Textarea id={fieldId("assumptions")} value={inputs.assumptions} onChange={(e) => set("assumptions", e.target.value)} placeholder="List key assumptions the project is based on…" rows={4} maxLength={1500} />
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="constraints">Known Constraints</EssayLabel>
-                  <Textarea value={inputs.constraints} onChange={(e) => set("constraints", e.target.value)} placeholder="Budget limits, technology restrictions, team availability…" rows={3} maxLength={1500} />
+                   <Textarea id={fieldId("constraints")} value={inputs.constraints} onChange={(e) => set("constraints", e.target.value)} placeholder="Budget limits, technology restrictions, team availability…" rows={3} maxLength={1500} />
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="successFactors">Critical Success Factors</EssayLabel>
-                  <Textarea value={inputs.successFactors} onChange={(e) => set("successFactors", e.target.value)} placeholder="What must go right for this project to succeed?" rows={3} maxLength={1500} />
+                   <Textarea id={fieldId("successFactors")} value={inputs.successFactors} onChange={(e) => set("successFactors", e.target.value)} placeholder="What must go right for this project to succeed?" rows={3} maxLength={1500} />
                 </div>
               </>
             )}
@@ -746,16 +753,16 @@ const Analyze = () => {
               <>
                 <div className="space-y-2">
                   <EssayLabel field="knownRisks">Known Risks</EssayLabel>
-                  <Textarea value={inputs.knownRisks} onChange={(e) => set("knownRisks", e.target.value)} placeholder="Describe any known risks, threats, or uncertainties…" rows={4} maxLength={1500} />
+                   <Textarea id={fieldId("knownRisks")} value={inputs.knownRisks} onChange={(e) => set("knownRisks", e.target.value)} placeholder="Describe any known risks, threats, or uncertainties…" rows={4} maxLength={1500} />
                 </div>
                 <div className="space-y-2">
                   <EssayLabel field="regulatoryConsiderations">Regulatory / Compliance Considerations</EssayLabel>
-                  <Textarea value={inputs.regulatoryConsiderations} onChange={(e) => set("regulatoryConsiderations", e.target.value)} placeholder="Relevant regulations, standards, or compliance requirements…" rows={3} maxLength={1500} />
+                   <Textarea id={fieldId("regulatoryConsiderations")} value={inputs.regulatoryConsiderations} onChange={(e) => set("regulatoryConsiderations", e.target.value)} placeholder="Relevant regulations, standards, or compliance requirements…" rows={3} maxLength={1500} />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2"><Label>Technology Readiness</Label><OriginBadge field="technologyReadiness" /></div>
+                  <div className="flex flex-wrap items-center gap-2"><FieldLabel field="technologyReadiness">Technology Readiness</FieldLabel><OriginBadge field="technologyReadiness" /></div>
                   <Select value={inputs.technologyReadiness} onValueChange={(v) => set("technologyReadiness", v)}>
-                    <SelectTrigger><SelectValue placeholder="Select readiness level" /></SelectTrigger>
+                    <SelectTrigger id={fieldId("technologyReadiness")}><SelectValue placeholder="Select readiness level" /></SelectTrigger>
                     <SelectContent>{TECHNOLOGY_READINESS.map((tr) => <SelectItem key={tr} value={tr}>{tr}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>

@@ -115,6 +115,19 @@ export const compactCurrencyString = (input?: string | null): string => {
   return s;
 };
 
+const INVALID_FILENAME_CHARS = new RegExp(`[<>:"/\\\\|?*${String.fromCharCode(0)}-${String.fromCharCode(31)}]`, "g");
+
+/** Make a user-provided title safe for browser downloads on Windows and macOS. */
+export const sanitizeFileName = (raw: unknown, fallback = "report"): string => {
+  const value = String(raw ?? "")
+    .replace(INVALID_FILENAME_CHARS, "-")
+    .replace(/[\s_]+/g, "_")
+    .replace(/-+/g, "-")
+    .replace(/^[.\s-]+|[.\s-]+$/g, "")
+    .slice(0, 120);
+  return value || fallback;
+};
+
 /** Canonical title-case label for a status value. Internal value stays lowercase. */
 export const statusLabel = (s?: string | null): string => {
   switch ((s || "").toLowerCase()) {

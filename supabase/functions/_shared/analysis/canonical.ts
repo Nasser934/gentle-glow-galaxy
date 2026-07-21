@@ -88,6 +88,16 @@ function domainFor(url: string): string {
   try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
 }
 
+function safeHttpUrl(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function classifyQuality(source: string, domain: string): SourceQuality {
   const text = `${source} ${domain}`.toLowerCase();
   if (/official|primary source/.test(text)) return "Primary official source";
@@ -113,7 +123,7 @@ function stableClaimId(section: string, text: string) {
 function normalizeSources(report: MutableReport, accessDate: string): EvidenceSource[] {
   const usedIds = new Set<string>();
   return (report.research?.citations ?? []).map((citation, index) => {
-    const url = String(citation.url ?? "").trim();
+    const url = safeHttpUrl(citation.url);
     const domain = String(citation.domain ?? "").trim() || domainFor(url);
     const source = String(citation.publisher ?? citation.source ?? "").trim();
     const title = String(citation.title ?? source ?? "Source");
@@ -461,6 +471,7 @@ export function buildCanonicalReport<T extends object>(
       overallConfidencePct: confidence.average,
       inputQuality,
       hasUnmitigatedCriticalRisk: unmitigatedCriticalRisk,
+      hasFinancialValidationBlocker: financialValidation.warnings.length > 0,
     },
   });
   claims.push(normalizeClaim({

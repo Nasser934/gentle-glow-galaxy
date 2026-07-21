@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, History } from "lucide-react";
+import { Loader2, History, AlertCircle } from "lucide-react";
 import { statusLabel } from "@/lib/format";
 
 interface StatusEvent {
@@ -36,14 +36,21 @@ const pill = (status: string | null) => (
 export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; refreshKey?: number }) => {
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     void supabase
       .rpc("get_report_status_history", { p_report_id: reportId })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return;
+        if (error) {
+          setLoadError(true);
+          setLoading(false);
+          return;
+        }
         setEvents((data ?? []) as StatusEvent[]);
         setLoading(false);
       });
@@ -56,6 +63,16 @@ export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; re
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-warning/40 bg-warning/5 p-10 text-center">
+        <AlertCircle className="mb-2 h-5 w-5 text-warning" />
+        <p className="text-sm font-medium text-foreground">Could not load activity.</p>
+        <p className="text-xs text-muted-foreground">Try opening this tab again in a moment.</p>
       </div>
     );
   }

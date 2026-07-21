@@ -217,8 +217,17 @@ serve(async (req) => {
         p_ip_hash: ipHash,
       });
       if (requestError || !requestRows?.length) {
-        degradedReason = "usage_control_unavailable";
-        console.warn(JSON.stringify({ event: "analysis_usage_control_advisory", reason: degradedReason }));
+        console.error(JSON.stringify({
+          event: "analysis_usage_control_unavailable",
+          reason: "usage_control_unavailable",
+          errorCode: requestError?.code ?? null,
+        }));
+        return jsonResponse(
+          { error: "Analysis is temporarily unavailable. Please try again shortly.", errorCode: "usage_control_unavailable" },
+          503,
+          corsHeaders,
+          { "Retry-After": "30" },
+        );
       } else {
         const decision = requestRows[0] as {
           request_id: string | null;
@@ -233,12 +242,17 @@ serve(async (req) => {
         }
       }
     } catch (error) {
-      degradedReason = "usage_control_unavailable";
-      console.warn(JSON.stringify({
-        event: "analysis_usage_control_advisory",
-        reason: degradedReason,
+      console.error(JSON.stringify({
+        event: "analysis_usage_control_unavailable",
+        reason: "usage_control_unavailable",
         errorName: error instanceof Error ? error.name : "unknown",
       }));
+      return jsonResponse(
+        { error: "Analysis is temporarily unavailable. Please try again shortly.", errorCode: "usage_control_unavailable" },
+        503,
+        corsHeaders,
+        { "Retry-After": "30" },
+      );
     }
 
     const publicResearch = await fetchPublicResearch(inputs);

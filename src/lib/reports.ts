@@ -212,8 +212,8 @@ export async function listReportVersions(reportId: string) {
   const rootId = await getReportRootId(reportId);
   const { data, error } = await supabase
     .from("reports")
-    .select("id, slug, title, created_at, parent_report_id, user_id")
-    .or(`id.eq.${rootId},parent_report_id.eq.${rootId}`)
+    .select("id, slug, title, created_at, parent_report_id, root_report_id, user_id")
+    .or(`id.eq.${rootId},root_report_id.eq.${rootId},parent_report_id.eq.${rootId}`)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
@@ -226,7 +226,7 @@ export async function listMyReports(scope: ReportScope = "active") {
   if (!user) return [];
   let q = supabase
     .from("reports")
-    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, archived_at")
+    .select("id, slug, title, industry, status, created_at, updated_at, parent_report_id, root_report_id, archived_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200);

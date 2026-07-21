@@ -27,7 +27,15 @@ const SliderRow = ({
       </div>
       <Badge variant="outline" className="font-mono text-xs">{format(value)}</Badge>
     </div>
-    <Slider min={min} max={max} step={step} value={[value]} onValueChange={(v) => onChange(v[0])} />
+    <Slider
+      min={min}
+      max={max}
+      step={step}
+      value={[value]}
+      onValueChange={(v) => onChange(v[0])}
+      aria-label={label}
+      aria-valuetext={format(value)}
+    />
   </div>
 );
 
@@ -57,6 +65,9 @@ export const SensitivityPanel = ({ report }: { report: FeasibilityReport }) => {
 
   const fmt = (n: number) => `${cur} ${formatShort(n)}`;
   const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+  const paybackDelta = outcome.paybackMonths != null && baseOutcome.paybackMonths != null
+    ? baseOutcome.paybackMonths - outcome.paybackMonths
+    : null;
 
   return (
     <div className="space-y-4">
@@ -90,15 +101,15 @@ export const SensitivityPanel = ({ report }: { report: FeasibilityReport }) => {
             {[
               { label: internal ? "Financial benefit" : "Revenue", value: fmt(outcome.financialValue), delta: outcome.financialValue - baseOutcome.financialValue },
               { label: "Net profit (Y1)", value: fmt(outcome.netProfit), delta: outcome.netProfit - baseOutcome.netProfit },
-              { label: "Payback", value: `${outcome.paybackMonths.toFixed(1)} mo`, delta: baseOutcome.paybackMonths - outcome.paybackMonths },
+              { label: "Payback", value: outcome.paybackMonths == null ? "No payback" : `${outcome.paybackMonths.toFixed(1)} mo`, delta: paybackDelta },
               { label: "ROI Y1", value: `${(outcome.roi * 100).toFixed(0)}%`, delta: (outcome.roi - baseOutcome.roi) * 100 },
             ].map((kpi) => (
               <Card key={kpi.label}>
                 <CardContent className="p-4">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{kpi.label}</div>
                   <div className="mt-1 font-display text-lg font-bold text-foreground">{kpi.value}</div>
-                  <div className={`mt-0.5 text-[11px] ${kpi.delta >= 0 ? "text-success" : "text-destructive"}`}>
-                    {kpi.delta >= 0 ? "▲" : "▼"} vs base
+                   <div className={`mt-0.5 text-[11px] ${kpi.delta == null ? "text-muted-foreground" : kpi.delta >= 0 ? "text-success" : "text-destructive"}`}>
+                     {kpi.delta == null ? "Requires validation" : `${kpi.delta >= 0 ? "▲" : "▼"} vs base`}
                   </div>
                 </CardContent>
               </Card>
@@ -145,8 +156,11 @@ export const SensitivityPanel = ({ report }: { report: FeasibilityReport }) => {
               </CardContent></Card>
               <Card><CardContent className="p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payback P50</div>
-                <div className="mt-1 font-display text-lg font-bold text-foreground">{mc.paybackMonths.p50.toFixed(1)} mo</div>
-                <div className="text-[11px] text-muted-foreground">P10 {mc.paybackMonths.p10.toFixed(1)} · P90 {mc.paybackMonths.p90.toFixed(1)}</div>
+                <div className="mt-1 font-display text-lg font-bold text-foreground">{mc.paybackMonths.p50 == null ? "Not reached" : `${mc.paybackMonths.p50.toFixed(1)} mo`}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  P10 {mc.paybackMonths.p10 == null ? "not reached" : `${mc.paybackMonths.p10.toFixed(1)} mo`} · P90 {mc.paybackMonths.p90 == null ? "not reached" : `${mc.paybackMonths.p90.toFixed(1)} mo`}
+                </div>
+                <div className="text-[11px] text-warning">Not reached in {mc.noPaybackProbability.toFixed(0)}% of trials</div>
               </CardContent></Card>
               <Card><CardContent className="p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">ROI P50</div>
