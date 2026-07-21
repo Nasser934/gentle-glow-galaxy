@@ -312,6 +312,21 @@ function fallbackCapEx(inputs: Record<string, string>) {
   const budget = parseUnitAwareNumber(inputs.budgetRange);
   const low = Math.max(0, budget.low ?? (budget.value ? budget.value * 0.75 : 50_000));
   const high = Math.max(low, budget.high ?? (budget.value ? budget.value * 1.25 : 100_000));
+  if (budget.valid) {
+    const categories = [
+      ["Product design and engineering", 0.4],
+      ["Data and systems integration", 0.2],
+      ["Security and compliance", 0.15],
+      ["Launch and change enablement", 0.15],
+      ["Contingency reserve", 0.1],
+    ] as const;
+    return categories.map(([category, weight]) => ({
+      category,
+      low: Math.round(low * weight),
+      high: Math.round(high * weight),
+      notes: "AI-estimated planning assumption derived from the submitted budget; validate with quotations before commitment.",
+    }));
+  }
   return [
     { category: "Product and implementation", low: Math.round(low * 0.65), high: Math.round(high * 0.65), notes: "AI-estimated assumption — validate with supplier quotations." },
     { category: "Launch, compliance, and contingency", low: Math.round(low * 0.35), high: Math.round(high * 0.35), notes: "AI-estimated assumption — validate before commitment." },
@@ -472,7 +487,9 @@ export function buildBaseReportFromSeed(args: {
       breakEven: `${breakEvenMonths} months`,
       adoptionRate: adoptionPct / 100,
       annualValueDisplay: annualValue > 0 ? money(currency, annualValue) : "Requires validation",
-      basis: text(scenario.basis, "AI-estimated assumption — validate with project data."),
+      basis: estimatedBasis
+        ? "AI-estimated planning assumption derived from the submitted budget, operating envelope, and target payback; validate with pricing or measured benefit data."
+        : text(scenario.basis, "AI-estimated assumption — validate with project data."),
     };
     return projectType === "internal"
       ? {
