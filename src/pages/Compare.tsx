@@ -9,6 +9,7 @@ import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString } from "@/lib/format";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { compareCanonicalReports } from "@/lib/reportComparison";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 
 const dims = [
@@ -227,7 +228,7 @@ const Compare = () => {
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium">Break-even</td>
-                      {cells.map((c) => <td key={c.id} className="px-4 py-3">{c.report?.financials.breakEvenSummary || "—"}</td>)}
+                      {cells.map((c) => <td key={c.id} className="px-4 py-3">{c.report ? formatBreakEvenDisplay(c.report.financials.breakEvenSummary) : "—"}</td>)}
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium">TAM</td>

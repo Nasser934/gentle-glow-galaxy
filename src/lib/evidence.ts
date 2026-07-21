@@ -11,6 +11,7 @@ import type {
   DecisionVerdict, ConsumerVerdict,
 } from "@/types/analysis";
 import { confidencePercent, isInternalConcept, isInternalProject } from "@/lib/format";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 import { buildCanonicalReport, REPORT_SCHEMA_VERSION } from "../../supabase/functions/_shared/analysis/canonical";
 import { SCORING_ENGINE_VERSION } from "../../supabase/functions/_shared/analysis/scoring";
 import {
@@ -387,7 +388,7 @@ export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: Concep
     },
     {
       claimId: "break-even",
-      claimText: `${internal ? "Internal payback" : "Break-even"} projected: ${report.financials?.breakEvenSummary || "not stated"}.`,
+      claimText: `${internal ? "Internal payback" : "Break-even"} projected: ${report.financials?.breakEvenSummary ? formatBreakEvenDisplay(report.financials.breakEvenSummary) : "not stated"}.`,
       reportSection: "Financial Plan",
       userInputPercent: Math.round(mix.userInputPercent * 1.3),
       webResearchPercent: Math.round(mix.webResearchPercent * 0.2),
@@ -824,7 +825,7 @@ export function deriveAssumptionRegister(
   }
   if (report.financials?.breakEvenSummary) {
     rows.push({
-      assumption: `${internal ? "Internal payback" : "Break-even"} occurs around ${report.financials.breakEvenSummary}.`,
+      assumption: `${internal ? "Internal payback" : "Break-even"} occurs around ${formatBreakEvenDisplay(report.financials.breakEvenSummary)}.`,
       section: "Financial Plan",
       sourceType: hasText(inputs.budgetRange) && hasText(inputs.revenueModel) ? "Mixed" : "AI assumption",
       evidenceBasis: `Derived from budget, ${internal ? "benefit" : "revenue"} model, and current projections.`,

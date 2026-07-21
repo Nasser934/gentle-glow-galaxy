@@ -13,6 +13,7 @@ import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 import { projectLabels } from "../project";
 import { sanitizeForConsumer } from "@/lib/evidence";
 import type { ExportDecisionPack } from "@/lib/exportDecisionPack";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
@@ -34,11 +35,7 @@ function trimBullets(items: string[], max: number): string[] {
 function shortenBreakEven(raw: string | undefined): string {
   const t = s(raw).trim();
   if (!t) return "";
-  const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
-  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
-  // Sentence start clause up to first delimiter
-  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
-  return head.length > 28 ? head.slice(0, 26) + "…" : head;
+  return formatBreakEvenDisplay(t);
 }
 
 function shortenPayback(raw: string | undefined): string {
@@ -89,6 +86,7 @@ function cleanRecommendationLabel(verdict: string, label: string): string {
 export const conciseBreakEvenSub = (main: string, raw: string | undefined | null): string | undefined => {
   const t = (raw || "").toString().trim();
   if (!t || t === main) return undefined;
+  if (formatBreakEvenDisplay(t) === "Requires validation") return undefined;
   const range = t.match(/\b\d{1,3}\s*(?:–|-|to)\s*\d{1,3}\s*months?\b/i)?.[0];
   if (range) return range.replace(/\s+/g, " ");
   if (/expects to reach break-even|projected|based on|depends on/i.test(t)) return undefined;

@@ -41,8 +41,9 @@ import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString, isInternalProject } from "@/lib/format";
-import { numericValue, safeBreakEvenRange } from "@/lib/numbers";
+import { numericValue } from "@/lib/numbers";
 import { safeExternalUrl } from "@/lib/safeUrl";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 
 const CHART_COLORS = [
@@ -150,18 +151,6 @@ const KpiCard = ({
   </div>
 );
 
-const extractShortBreakEven = (text?: string | null) => {
-  if (!text) return "—";
-  const range = safeBreakEvenRange(text);
-  if (!range) return "Requires validation";
-  const isYear = /year/i.test(text) && !/month/i.test(text);
-  const multiplier = isYear ? 12 : 1;
-  const low = isYear ? range.low / multiplier : range.low;
-  const high = isYear ? range.high / multiplier : range.high;
-  const label = isYear ? "Year" : "Month";
-  return low === high ? `${label} ${low}` : `${label} ${low}–${high}`;
-};
-
 const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
 
 const levelScore = (level: string) => level === "High" ? 3 : level === "Med" ? 2 : 1;
@@ -261,10 +250,10 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         <KpiCard
           icon={Clock}
           label="Break-even"
-          value={extractShortBreakEven(report.financials.breakEvenSummary)}
+          value={formatBreakEvenDisplay(report.financials.breakEvenSummary)}
           caption="Base case"
           insight={report.normalizedFigures?.breakEven?.label || "AI-estimated assumption — not externally verified"}
-          fullValue={report.financials.breakEvenSummary}
+          fullValue={formatBreakEvenDisplay(report.financials.breakEvenSummary)}
         />
         <KpiCard
           icon={TrendingUp}

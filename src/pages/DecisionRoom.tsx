@@ -15,6 +15,7 @@ import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
@@ -377,7 +378,7 @@ const DecisionRoom = () => {
               ["Problem", inputs.description || inputs.strategicObjectives || "—"],
               ["Solution", inputs.strategicObjectives || inputs.description || "—"],
               ["Evidence", report.research?.overview || `${supportedClaimCount} directly supported claim${supportedClaimCount === 1 ? "" : "s"}.`],
-              ["Business impact", internal ? `Internal value: ${report.financials.investmentRange} · break-even ${report.financials.breakEvenSummary}` : `Investment ${report.financials.investmentRange} · break-even ${report.financials.breakEvenSummary} · ${report.market.tamValue} TAM`],
+              ["Business impact", internal ? `Internal value: ${report.financials.investmentRange} · break-even ${formatBreakEvenDisplay(report.financials.breakEvenSummary)}` : `Investment ${report.financials.investmentRange} · break-even ${formatBreakEvenDisplay(report.financials.breakEvenSummary)} · ${report.market.tamValue} TAM`],
               ["Current limitation", biggestRisk.name],
               ["Next step", bestNextAction],
             ].map(([label, value]) => (
