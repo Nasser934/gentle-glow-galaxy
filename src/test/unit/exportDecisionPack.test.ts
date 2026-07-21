@@ -12,7 +12,8 @@ describe("export decision pack", () => {
     const report = makeReport();
     report.financials.breakEvenSummary = "Month 0";
 
-    expect(buildExportDecisionPack(report, completeInputs).financial.breakEvenDisplay)
-      .toBe("Requires validation");
+    const financial = buildExportDecisionPack(report, completeInputs).financial;
+    expect(financial.breakEvenDisplay).toBe("Requires validation");
+    expect(financial.breakEvenRange).toBe("Requires validation");
   });
 });

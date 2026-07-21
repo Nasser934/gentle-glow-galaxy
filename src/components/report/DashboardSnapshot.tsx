@@ -2,6 +2,7 @@ import { BarChart, Bar, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { FMARTRadar } from "./FMARTRadar";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString } from "@/lib/format";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 
 /**
@@ -105,7 +106,7 @@ export const DashboardSnapshot = ({
       <div className="mb-6 grid grid-cols-3 gap-3">
         <Kpi label="Overall Score"     value={`${report.scores.overall.toFixed(1)} / 10`} sub="Server-validated FMART-O weighted" />
         <Kpi label="Investment"        value={compactCurrencyString(report.financials.investmentRange)} sub={cur} />
-        <Kpi label="Break-Even"        value={report.financials.breakEvenSummary} />
+        <Kpi label="Break-Even"        value={formatBreakEvenDisplay(report.financials.breakEvenSummary)} />
         <Kpi label="Market TAM"        value={compactCurrencyString(report.market.tamValue)} sub={`CAGR ${report.market.tamCagr}`} />
 
         <Kpi label="Research Signals"  value={`${researchCount || "—"}`} sub={research?.coverage || (research?.confidence ? `${research.confidence} analysis indicator` : "Available external evidence")} />

@@ -8,7 +8,7 @@
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { assessInputQuality, sanitizeForConsumer } from "@/lib/evidence";
-import { safeBreakEvenRange } from "@/lib/numbers";
+import { formatBreakEvenDisplay } from "@/lib/breakEven";
 import { projectLabels } from "./project";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
@@ -116,14 +116,7 @@ export function deriveDecisionBlockers(
 export function shortBreakEven(raw: string | undefined): string {
   const t = s(raw || "").trim();
   if (!t) return "";
-  const range = safeBreakEvenRange(t);
-  if (!range) return "Requires validation";
-  const isYear = /year/i.test(t) && !/month/i.test(t);
-  const divisor = isYear ? 12 : 1;
-  const low = range.low / divisor;
-  const high = range.high / divisor;
-  const label = isYear ? "Year" : "Month";
-  return low === high ? `${label} ${low}` : `${label} ${low}–${high}`;
+  return formatBreakEvenDisplay(t);
 }
 
 export interface MemoSections {
@@ -383,14 +376,7 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
 
   return {
     investmentRange: fin.investmentRange ? withCurrency(fin.investmentRange, cur) : "Requires validation",
-    breakEven: (() => {
-      const t = s(fin.breakEvenSummary || "").trim();
-      if (!t) return "Requires validation";
-      const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
-      if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
-      const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
-      return head.length > 28 ? head.slice(0, 26) + "…" : head;
-    })(),
+    breakEven: formatBreakEvenDisplay(fin.breakEvenSummary),
     ltvCac: s(fin.ltvCacRatio) || "Requires validation",
     capExMid: fin.capExTotal?.mid != null ? `${fin.capExTotal.mid.toLocaleString("en-US")} ${cur}`.trim() : "Requires validation",
     opExMonthly: opExMonthly > 0 ? `${opExMonthly.toLocaleString("en-US")} ${cur}/mo`.trim() : "Requires validation",

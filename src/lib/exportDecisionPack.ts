@@ -20,7 +20,9 @@ import {
   confidencePercent,
   prettifySource,
 } from "@/lib/format";
-import { MAX_BREAK_EVEN_MONTHS, safeBreakEvenRange } from "@/lib/numbers";
+import { extractBreakEvenMonth, formatBreakEvenDisplay } from "@/lib/breakEven";
+
+export { extractBreakEvenMonth } from "@/lib/breakEven";
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -150,35 +152,6 @@ export function canonicalizeVerdict(raw: string | undefined | null): CanonicalVe
 
 /* ------------------------------- Break-even ------------------------------- */
 
-/** Extract a single canonical break-even month from any free-form string. */
-export function extractBreakEvenMonth(raw: string | undefined | null): number | null {
-  const validated = safeBreakEvenRange(raw);
-  if (validated && validated.low > 0) return validated.low;
-
-  // Keep support for compact legacy notation (M26/Y3) while applying the
-  // same positive, bounded horizon policy as the shared validator.
-  const text = (raw || "").toString();
-  const positiveMonth = (value: number): number | null =>
-    Number.isFinite(value) && value > 0 && value <= MAX_BREAK_EVEN_MONTHS ? value : null;
-  let match = text.match(/\bM(\d{1,3})\b/i);
-  if (match) return positiveMonth(Number(match[1]));
-  match = text.match(/\bY(\d{1,2})\b/i);
-  if (match) return positiveMonth(Number(match[1]) * 12);
-  return null;
-}
-
-function buildBreakEvenDisplay(raw: string | undefined | null, month: number | null): string {
-  const t = (raw || "").toString().trim();
-  if (month != null) {
-    // Prefer Month N when month value exists.
-    if (month > 0 && month % 12 === 0 && /year/i.test(t) && !/month/i.test(t)) {
-      return `Year ${month / 12}`;
-    }
-    return `Month ${month}`;
-  }
-  return "Requires validation";
-}
-
 /* ---------------------------- Financial helpers --------------------------- */
 
 function withCurrencyPrefix(value: string, currency: string): string {
@@ -307,8 +280,8 @@ export function buildExportDecisionPack(
 
   // Financial — single source of break-even truth
   const beMonth = extractBreakEvenMonth(fin.breakEvenSummary);
-  const beDisplay = buildBreakEvenDisplay(fin.breakEvenSummary, beMonth);
-  const beRange = (fin.breakEvenSummary || "").trim() || beDisplay;
+  const beDisplay = formatBreakEvenDisplay(fin.breakEvenSummary);
+  const beRange = beMonth == null ? beDisplay : (fin.breakEvenSummary || "").trim() || beDisplay;
 
   const capExMidValue = fin.capExTotal?.mid
     ?? ((fin.capExTotal?.low || 0) + (fin.capExTotal?.high || 0)) / 2;
