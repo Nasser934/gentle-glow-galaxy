@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Logo, LogoMark } from "@/components/Logo";
@@ -11,12 +11,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  clearAuthReturnPath,
-  consumeAuthReturnPath,
-  rememberAuthReturnPath,
-  sanitizeAuthReturnPath,
-} from "@/lib/authRedirect";
 import { toast } from "sonner";
 
 const GoogleIcon = () => (
@@ -35,14 +29,10 @@ const AuthPage = () => {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const routeState = loc.state as { from?: string } | null;
-  const nextParam = new URLSearchParams(loc.search).get("next");
-  const redirectTo = sanitizeAuthReturnPath(nextParam ?? routeState?.from);
+  const redirectTo = (loc.state as any)?.from || "/analyze";
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    const pendingTarget = consumeAuthReturnPath(window.sessionStorage);
-    navigate(pendingTarget ?? redirectTo, { replace: true });
+    if (!authLoading && user) navigate(redirectTo, { replace: true });
   }, [user, authLoading, navigate, redirectTo]);
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -63,8 +53,8 @@ const AuthPage = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Authentication failed");
+    } catch (e: any) {
+      toast.error(e?.message || "Authentication failed");
     } finally {
       setBusy(false);
     }
@@ -72,17 +62,11 @@ const AuthPage = () => {
 
   const handleGoogle = async () => {
     setBusy(true);
-    rememberAuthReturnPath(window.sessionStorage, redirectTo);
-
     try {
-      // Let Lovable Cloud choose its supported callback for the current preview or domain.
-      // Passing a protected route as redirect_uri can fail when that exact URL is not allow-listed.
-      const result = await lovable.auth.signInWithOAuth("google");
-      if (result.redirected) return;
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
       if (result.error) throw result.error;
-    } catch (error: unknown) {
-      clearAuthReturnPath(window.sessionStorage);
-      toast.error(error instanceof Error ? error.message : "Google sign-in failed");
+    } catch (e: any) {
+      toast.error(e?.message || "Google sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -124,7 +108,7 @@ const AuthPage = () => {
               <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
             </div>
 
-            <Tabs value={mode} onValueChange={(value) => { if (value === "signin" || value === "signup") setMode(value); }}>
+            <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Sign in</TabsTrigger>
                 <TabsTrigger value="signup">Sign up</TabsTrigger>
@@ -177,7 +161,7 @@ const AuthPage = () => {
               </div>
             </div>
             <p className="max-w-xs text-center text-[13px] leading-relaxed text-primary-foreground/80">
-              Turn ideas into evidence-aware recommendations — server-validated FMART-O scoring, available external evidence,
+              Turn ideas into confident decisions — structured FMART scoring, sourced research,
               and exportable reports.
             </p>
           </div>

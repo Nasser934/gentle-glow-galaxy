@@ -13,7 +13,6 @@ import {
   applyCanonicalToReport,
   type CanonicalVerdict,
 } from "@/lib/exportDecisionPack";
-import { isInternalProject } from "@/lib/format";
 
 const COLORS = {
   primary: "1F4ED8",
@@ -34,15 +33,20 @@ const verdictColor = (v: CanonicalVerdict): string => {
   return COLORS.warning; // Proceed with Caution + Revise
 };
 
+const num = (s?: string) => {
+  const m = s?.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+};
+
 const truncate = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
 
-export function buildReportPresentation(
+export async function exportReportToPptx(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
+  fileName: string,
 ) {
   const pack = buildExportDecisionPack(rawReport, inputs);
   const report = applyCanonicalToReport(rawReport, pack);
-  const internal = isInternalProject(report, inputs);
 
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE"; // 13.33 x 7.5 in
@@ -56,11 +60,11 @@ export function buildReportPresentation(
   const chrome = (s: pptxgen.Slide, title: string, subtitle?: string) => {
     s.background = { color: COLORS.white };
     s.addShape("rect", { x: 0, y: 0, w: W, h: 0.08, fill: { color: COLORS.primary }, line: { color: COLORS.primary } });
-    s.addText(title, { x: 0.5, y: 0.25, w: 12, h: 0.6, fontSize: 26, bold: true, color: COLORS.text, fontFace: "Arial" });
-    if (subtitle) s.addText(subtitle, { x: 0.5, y: 0.85, w: 12, h: 0.4, fontSize: 13, color: COLORS.muted, fontFace: "Arial" });
+    s.addText(title, { x: 0.5, y: 0.25, w: 12, h: 0.6, fontSize: 26, bold: true, color: COLORS.text, fontFace: "Inter" });
+    if (subtitle) s.addText(subtitle, { x: 0.5, y: 0.85, w: 12, h: 0.4, fontSize: 13, color: COLORS.muted, fontFace: "Inter" });
     s.addText(
       `${inputs.projectName} · Concept AI · Confidential`,
-      { x: 0.5, y: H - 0.35, w: 12, h: 0.3, fontSize: 9, color: COLORS.muted, fontFace: "Arial" },
+      { x: 0.5, y: H - 0.35, w: 12, h: 0.3, fontSize: 9, color: COLORS.muted, fontFace: "Inter" },
     );
   };
 
@@ -77,16 +81,16 @@ export function buildReportPresentation(
     });
     s.addText(label.toUpperCase(), {
       x: x + 0.18, y: y + 0.12, w: w - 0.36, h: 0.32,
-      fontSize: 10, bold: true, color: COLORS.muted, charSpacing: 2, fontFace: "Arial",
+      fontSize: 10, bold: true, color: COLORS.muted, charSpacing: 2, fontFace: "Inter",
     });
     s.addText(value || "—", {
       x: x + 0.18, y: y + 0.46, w: w - 0.36, h: 0.7,
-      fontSize: 18, bold: true, color: COLORS.primary, fontFace: "Arial",
+      fontSize: 18, bold: true, color: COLORS.primary, fontFace: "Inter",
     });
     if (sub) {
       s.addText(sub, {
         x: x + 0.18, y: y + h - 0.4, w: w - 0.36, h: 0.32,
-        fontSize: 10, color: COLORS.muted, fontFace: "Arial",
+        fontSize: 10, color: COLORS.muted, fontFace: "Inter",
       });
     }
   };
@@ -96,14 +100,14 @@ export function buildReportPresentation(
   s1.background = { color: COLORS.primaryDark };
   s1.addShape("rect", { x: 0, y: 0, w: W, h: 1.2, fill: { color: COLORS.primary } });
   s1.addText("CONCEPT AI · FEASIBILITY REPORT", {
-    x: 0.6, y: 0.35, w: 12, h: 0.5, fontSize: 12, bold: true, color: COLORS.white, fontFace: "Arial", charSpacing: 4,
+    x: 0.6, y: 0.35, w: 12, h: 0.5, fontSize: 12, bold: true, color: COLORS.white, fontFace: "Inter", charSpacing: 4,
   });
   s1.addText(inputs.projectName || "Untitled Project", {
-    x: 0.6, y: 1.8, w: 12, h: 1.4, fontSize: 44, bold: true, color: COLORS.white, fontFace: "Arial",
+    x: 0.6, y: 1.8, w: 12, h: 1.4, fontSize: 44, bold: true, color: COLORS.white, fontFace: "Inter",
   });
   s1.addText(
     `${inputs.industry || ""}${inputs.location ? "  ·  " + inputs.location : ""}`,
-    { x: 0.6, y: 3.2, w: 12, h: 0.5, fontSize: 18, color: "CADCFC", fontFace: "Arial" },
+    { x: 0.6, y: 3.2, w: 12, h: 0.5, fontSize: 18, color: "CADCFC", fontFace: "Inter" },
   );
 
   // Verdict pill
@@ -114,22 +118,22 @@ export function buildReportPresentation(
   });
   s1.addText(pack.verdict.canonical, {
     x: 0.6, y: 4.2, w: 5, h: 0.75, fontSize: 18, bold: true, color: COLORS.white,
-    align: "center", valign: "middle", fontFace: "Arial",
+    align: "center", valign: "middle", fontFace: "Inter",
   });
 
   s1.addText(`Overall score  ${pack.score.overall.toFixed(1)} / 10`, {
-    x: 5.9, y: 4.2, w: 7, h: 0.4, fontSize: 16, bold: true, color: COLORS.white, valign: "middle", fontFace: "Arial",
+    x: 5.9, y: 4.2, w: 7, h: 0.4, fontSize: 16, bold: true, color: COLORS.white, valign: "middle", fontFace: "Inter",
   });
   s1.addText(
     pack.score.decisionConfidencePct != null
-      ? `Model-estimated confidence  ${pack.score.decisionConfidencePct}%`
-      : "Model-estimated confidence  —",
-    { x: 5.9, y: 4.6, w: 7, h: 0.4, fontSize: 14, color: "CADCFC", valign: "middle", fontFace: "Arial" },
+      ? `Decision confidence  ${pack.score.decisionConfidencePct}%`
+      : "Decision confidence  —",
+    { x: 5.9, y: 4.6, w: 7, h: 0.4, fontSize: 14, color: "CADCFC", valign: "middle", fontFace: "Inter" },
   );
 
   s1.addText(
     `Report ID ${pack.identity.reportId}   ·   ${pack.identity.date}`,
-    { x: 0.6, y: 6.7, w: 12, h: 0.4, fontSize: 11, color: "94A3B8", fontFace: "Arial" },
+    { x: 0.6, y: 6.7, w: 12, h: 0.4, fontSize: 11, color: "94A3B8", fontFace: "Inter" },
   );
 
   /* ============================ Slide 2 — Executive Decision ============================ */
@@ -144,7 +148,7 @@ export function buildReportPresentation(
         ? "Conditional go. Validate the items in the next page before committing full funding."
         : pack.verdict.canonical === "Revise"
           ? "Strengthen the inputs and assumptions before re-running this analysis."
-          : "Do not proceed with the current evidence level. Re-scope the concept or improve evidence first.";
+          : "Do not proceed at current confidence. Re-scope the concept or improve evidence first.";
 
   const topRiskName = pack.risk.topRisks[0]?.name || (report.risks?.[0]?.name) || "Validate top assumptions";
   const requiredValidation =
@@ -168,10 +172,10 @@ export function buildReportPresentation(
     const y = 1.45 + i * 1.25;
     s2.addText(label.toUpperCase(), {
       x: 0.5, y, w: 8.0, h: 0.3, fontSize: 11, bold: true, color: COLORS.primary,
-      charSpacing: 2, fontFace: "Arial",
+      charSpacing: 2, fontFace: "Inter",
     });
     s2.addText(truncate(body, 240), {
-      x: 0.5, y: y + 0.3, w: 8.0, h: 0.85, fontSize: 13, color: COLORS.text, fontFace: "Arial", valign: "top",
+      x: 0.5, y: y + 0.3, w: 8.0, h: 0.85, fontSize: 13, color: COLORS.text, fontFace: "Inter", valign: "top",
     });
   });
 
@@ -181,7 +185,7 @@ export function buildReportPresentation(
   const cardH = 1.25;
   kpiCard(s2, colX, 1.45, cardW, cardH, "Overall Score", `${pack.score.overall.toFixed(1)} / 10`);
   kpiCard(
-    s2, colX, 2.78, cardW, cardH, "Model-estimated Confidence",
+    s2, colX, 2.78, cardW, cardH, "Decision Confidence",
     pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "—",
     pack.score.confidenceLabel,
   );
@@ -223,19 +227,19 @@ export function buildReportPresentation(
     });
     s3.addText(`Driver ${i + 1}`, {
       x: x + 0.25, y: 1.9, w: cardWidth - 0.5, h: 0.35,
-      fontSize: 10, bold: true, color: COLORS.muted, charSpacing: 2, fontFace: "Arial",
+      fontSize: 10, bold: true, color: COLORS.muted, charSpacing: 2, fontFace: "Inter",
     });
     s3.addText(truncate(d.dim, 40), {
       x: x + 0.25, y: 2.25, w: cardWidth - 0.5, h: 0.55,
-      fontSize: 17, bold: true, color: COLORS.primary, fontFace: "Arial",
+      fontSize: 17, bold: true, color: COLORS.primary, fontFace: "Inter",
     });
     s3.addText(truncate(d.driver, 240), {
       x: x + 0.25, y: 2.95, w: cardWidth - 0.5, h: 2.6,
-      fontSize: 12, color: COLORS.text, fontFace: "Arial", valign: "top",
+      fontSize: 12, color: COLORS.text, fontFace: "Inter", valign: "top",
     });
     s3.addText(`FMART-O · ${truncate(d.dim, 24)}`, {
       x: x + 0.25, y: 6.05, w: cardWidth - 0.5, h: 0.3,
-      fontSize: 10, italic: true, color: COLORS.muted, fontFace: "Arial",
+      fontSize: 10, italic: true, color: COLORS.muted, fontFace: "Inter",
     });
   });
 
@@ -297,7 +301,7 @@ export function buildReportPresentation(
   ];
   s4.addTable(valRows, {
     x: 0.5, y: 1.5, w: 12.3, colW: [4.3, 6.5, 1.5],
-    fontSize: 11, fontFace: "Arial",
+    fontSize: 11, fontFace: "Inter",
     border: { type: "solid", color: COLORS.border, pt: 1 },
     valign: "top",
   });
@@ -306,8 +310,7 @@ export function buildReportPresentation(
   const s5 = pptx.addSlide();
   chrome(s5, "FMART-O Scorecard", "Six-dimension feasibility breakdown");
 
-  type DimensionKey = "financial" | "market" | "achievability" | "operational" | "risk" | "timing";
-  const dimRows: Array<{ key: DimensionKey; label: string; score: number; finding: string }> = [
+  const dimRows: Array<{ key: keyof typeof findingByDim; label: string; score: number; finding: string }> = [
     { key: "financial",     label: "Financial",     score: report.scores.financial,     finding: report.scores.financialFinding || "" },
     { key: "market",        label: "Market",        score: report.scores.market,        finding: report.scores.marketFinding || "" },
     { key: "achievability", label: "Achievability", score: report.scores.achievability, finding: report.scores.achievabilityFinding || "" },
@@ -315,6 +318,10 @@ export function buildReportPresentation(
     { key: "risk",          label: "Risk",          score: report.scores.risk,          finding: report.scores.riskFinding || "" },
     { key: "timing",        label: "Timing",        score: report.scores.timing,        finding: report.scores.timingFinding || "" },
   ];
+  // Eslint placeholder map (type only) – not used at runtime
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const findingByDim = { financial: "", market: "", achievability: "", operational: "", risk: "", timing: "" };
+
   // Bar chart (left)
   s5.addChart(pptx.ChartType.bar, [{
     name: "Score (0-10)",
@@ -323,17 +330,17 @@ export function buildReportPresentation(
   }], {
     x: 0.5, y: 1.5, w: 6.3, h: 5.5, barDir: "bar", showLegend: false,
     catAxisLabelFontSize: 12, valAxisMaxVal: 10, valAxisMinVal: 0, valAxisLabelFontSize: 10,
-    chartColors: [COLORS.primary], showValue: true, dataLabelFontSize: 11, fontFace: "Arial",
+    chartColors: [COLORS.primary], showValue: true, dataLabelFontSize: 11, fontFace: "Inter",
   });
 
   // Findings (right) — compact
   dimRows.slice(0, 6).forEach((d, i) => {
     const y = 1.5 + i * 0.92;
     s5.addText(`${d.label} · ${d.score.toFixed(1)}`, {
-      x: 7.1, y, w: 5.7, h: 0.3, fontSize: 11, bold: true, color: COLORS.primary, fontFace: "Arial",
+      x: 7.1, y, w: 5.7, h: 0.3, fontSize: 11, bold: true, color: COLORS.primary, fontFace: "Inter",
     });
     s5.addText(truncate(d.finding || "Validate with stakeholder evidence.", 140), {
-      x: 7.1, y: y + 0.3, w: 5.7, h: 0.55, fontSize: 10, color: COLORS.text, fontFace: "Arial", valign: "top",
+      x: 7.1, y: y + 0.3, w: 5.7, h: 0.55, fontSize: 10, color: COLORS.text, fontFace: "Inter", valign: "top",
     });
   });
 
@@ -353,7 +360,7 @@ export function buildReportPresentation(
   ];
   s6.addTable(mktRows, {
     x: 0.5, y: 1.5, w: 6, colW: [1.2, 3.0, 1.8],
-    fontSize: 12, fontFace: "Arial",
+    fontSize: 12, fontFace: "Inter",
     border: { type: "solid", color: COLORS.border, pt: 1 },
   });
 
@@ -361,21 +368,21 @@ export function buildReportPresentation(
   const pains = (report.research?.painPoints || []).filter(Boolean).slice(0, 2);
 
   s6.addText("Demand signals", {
-    x: 7, y: 1.5, w: 5.8, h: 0.35, fontSize: 12, bold: true, color: COLORS.primary, fontFace: "Arial",
+    x: 7, y: 1.5, w: 5.8, h: 0.35, fontSize: 12, bold: true, color: COLORS.primary, fontFace: "Inter",
   });
   s6.addText(
     (signals.length ? signals : ["Add demand evidence", "Add demand evidence", "Add demand evidence"])
       .map((t) => ({ text: truncate(t, 140), options: { bullet: { code: "25A0" } } })),
-    { x: 7, y: 1.9, w: 5.8, h: 2.2, fontSize: 11, color: COLORS.text, fontFace: "Arial", valign: "top", paraSpaceAfter: 4 },
+    { x: 7, y: 1.9, w: 5.8, h: 2.2, fontSize: 11, color: COLORS.text, fontFace: "Inter", valign: "top", paraSpaceAfter: 4 },
   );
 
   s6.addText("Pain points", {
-    x: 7, y: 4.3, w: 5.8, h: 0.35, fontSize: 12, bold: true, color: COLORS.primary, fontFace: "Arial",
+    x: 7, y: 4.3, w: 5.8, h: 0.35, fontSize: 12, bold: true, color: COLORS.primary, fontFace: "Inter",
   });
   s6.addText(
     (pains.length ? pains : ["Add validated user pain", "Add validated user pain"])
       .map((t) => ({ text: truncate(t, 160), options: { bullet: { code: "25A0" } } })),
-    { x: 7, y: 4.7, w: 5.8, h: 2.0, fontSize: 11, color: COLORS.text, fontFace: "Arial", valign: "top", paraSpaceAfter: 4 },
+    { x: 7, y: 4.7, w: 5.8, h: 2.0, fontSize: 11, color: COLORS.text, fontFace: "Inter", valign: "top", paraSpaceAfter: 4 },
   );
 
   /* ============================ Slide 7 — Financial Outlook ============================ */
@@ -389,9 +396,9 @@ export function buildReportPresentation(
     ["Monthly OpEx", pack.financial.monthlyOpex],
     ["Initial Funding Need", pack.financial.initialFundingNeed],
     ["Break-even", pack.financial.breakEvenDisplay],
-    ...(internal ? [] : [["LTV : CAC", pack.financial.ltvCac]]),
+    ["LTV : CAC", pack.financial.ltvCac],
   ];
-  const finCardW = (W - 1.0 - (finKpis.length - 1) * 0.15) / finKpis.length;
+  const finCardW = (W - 1.0 - 5 * 0.15) / 6;
   finKpis.forEach(([label, value], i) => {
     kpiCard(s7, 0.5 + i * (finCardW + 0.15), 1.45, finCardW, 1.5, label!, value!);
   });
@@ -401,23 +408,21 @@ export function buildReportPresentation(
     [
       { text: "Scenario",        options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
       { text: "Probability",     options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
-      { text: internal ? "Adoption" : "Customers Y1", options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
-      { text: internal ? "Annual Financial Benefit" : "Annual Revenue", options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
+      { text: "Customers Y1",    options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
+      { text: "Annual Revenue",  options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
       { text: "Break-even",      options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
     ],
     ...(report.financials.scenarios || []).map((sc) => [
       { text: sc.scenario, options: { bold: true } },
       { text: sc.probability },
-      { text: internal ? (sc.adoptionRate != null ? `${Math.round(sc.adoptionRate * 100)}%` : "Requires validation") : (sc.subscribersYr1 || "Requires validation") },
-      { text: internal
-          ? (sc.annualValueDisplay || (sc.annualFinancialBenefit != null ? `${report.financials.currency} ${sc.annualFinancialBenefit.toLocaleString()}` : "Requires validation"))
-          : (sc.annualRevenue || "Requires validation") },
+      { text: sc.subscribersYr1 },
+      { text: sc.annualRevenue },
       { text: sc.breakEven },
     ] as pptxgen.TableRow),
   ];
   s7.addTable(scenRows, {
     x: 0.5, y: 3.4, w: 12.3, colW: [2.5, 1.7, 2.5, 3.1, 2.5],
-    fontSize: 12, fontFace: "Arial",
+    fontSize: 12, fontFace: "Inter",
     border: { type: "solid", color: COLORS.border, pt: 1 },
     valign: "middle",
   });
@@ -451,19 +456,18 @@ export function buildReportPresentation(
   ];
   s8.addTable(riskRows, {
     x: 0.5, y: 2.9, w: 12.3, colW: [3.5, 1.5, 7.3],
-    fontSize: 11, fontFace: "Arial",
+    fontSize: 11, fontFace: "Inter",
     border: { type: "solid", color: COLORS.border, pt: 1 }, valign: "top",
   });
 
   /* ============================ Slide 9 — Evidence & Assumptions ============================ */
   const s9 = pptx.addSlide();
-  chrome(s9, "Estimated Evidence Composition", "Heuristic estimate based on input completeness and available sources");
+  chrome(s9, "Evidence & Assumptions", "Source quality and top claims");
 
   const mix = pack.evidence.mix;
-  kpiCard(s9, 0.5, 1.45, 2.9, 1.2, "User Input", `${mix.userInputPercent}%`);
-  kpiCard(s9, 3.6, 1.45, 2.9, 1.2, "External Evidence", `${mix.webResearchPercent}%`);
-  kpiCard(s9, 6.7, 1.45, 2.9, 1.2, "Calculations", `${mix.calculationPercent ?? 0}%`);
-  kpiCard(s9, 9.8, 1.45, 3.0, 1.2, "AI Inference", `${mix.aiAssumptionPercent}%`,
+  kpiCard(s9, 0.5, 1.45, 4.0, 1.2, "User Input", `${mix.userInputPercent}%`);
+  kpiCard(s9, 4.7, 1.45, 4.0, 1.2, "Web Research", `${mix.webResearchPercent}%`);
+  kpiCard(s9, 8.9, 1.45, 3.9, 1.2, "AI Assumption", `${mix.aiAssumptionPercent}%`,
     mix.aiAssumptionPercent > 40 ? "High dependency — validate" : "Acceptable");
 
   const claims = pack.evidence.topClaims.slice(0, 3);
@@ -471,7 +475,7 @@ export function buildReportPresentation(
     [
       { text: "ID",         options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
       { text: "Claim",      options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
-      { text: "Model-estimated indicator", options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
+      { text: "Confidence", options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
       { text: "Sources",    options: { bold: true, color: COLORS.white, fill: { color: COLORS.primary } } },
     ],
     ...(claims.length ? claims : [
@@ -483,14 +487,14 @@ export function buildReportPresentation(
       { text: truncate(c.claimText, 200) },
       { text: c.confidence || "—", options: { align: "center" as const } },
       {
-        text: (c.sources || []).map((src) => `${src.relationship === "conflicting" ? "Conflict: " : ""}${src.domain || src.title}`).filter(Boolean).slice(0, 2).join(", ") || "—",
+        text: (c.sources || []).map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ") || "—",
         options: { color: COLORS.muted },
       },
     ] as pptxgen.TableRow),
   ];
   s9.addTable(claimRows, {
     x: 0.5, y: 2.9, w: 12.3, colW: [0.9, 7.0, 1.5, 2.9],
-    fontSize: 11, fontFace: "Arial",
+    fontSize: 11, fontFace: "Inter",
     border: { type: "solid", color: COLORS.border, pt: 1 }, valign: "top",
   });
 
@@ -520,7 +524,7 @@ export function buildReportPresentation(
     });
     s10.addText(p.title.toUpperCase(), {
       x: x + 0.25, y: 1.9, w: colW - 0.5, h: 0.4,
-      fontSize: 14, bold: true, color: COLORS.primary, charSpacing: 2, fontFace: "Arial",
+      fontSize: 14, bold: true, color: COLORS.primary, charSpacing: 2, fontFace: "Inter",
     });
     s10.addText(
       p.items.slice(0, 3).map((t) => ({
@@ -529,24 +533,15 @@ export function buildReportPresentation(
       })),
       {
         x: x + 0.25, y: 2.45, w: colW - 0.5, h: 4.0,
-        fontSize: 12, color: COLORS.text, fontFace: "Arial", valign: "top", paraSpaceAfter: 8,
+        fontSize: 12, color: COLORS.text, fontFace: "Inter", valign: "top", paraSpaceAfter: 8,
       },
     );
   });
 
   s10.addText("Generated by Concept AI · Not financial or legal advice", {
-    x: 0.5, y: H - 0.45, w: 12, h: 0.3, fontSize: 10, color: COLORS.muted, fontFace: "Arial", align: "center",
+    x: 0.5, y: H - 0.45, w: 12, h: 0.3, fontSize: 10, color: COLORS.muted, fontFace: "Inter", align: "center",
   });
 
-  return pptx;
-}
-
-export async function exportReportToPptx(
-  rawReport: FeasibilityReport,
-  inputs: ConceptInputs,
-  fileName: string,
-) {
-  const pptx = buildReportPresentation(rawReport, inputs);
   await pptx.writeFile({ fileName: fileName.endsWith(".pptx") ? fileName : `${fileName}.pptx` });
   return { fileName };
 }

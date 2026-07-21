@@ -11,21 +11,11 @@ import {
   Globe,
   Briefcase,
   FileSearch,
-  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { Logo } from "@/components/Logo";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 
 const features = [
   {
@@ -37,17 +27,17 @@ const features = [
   {
     icon: Shield,
     title: "Risk Heatmap",
-    description: "Structured risk exposure with mitigations, likelihood and impact ranking.",
+    description: "Quantified risk exposure with mitigations, likelihood and impact ranking.",
   },
   {
     icon: Target,
-    title: "AI-supported Recommendation",
-    description: "A server-governed recommendation with reasoning, assumptions and trade-offs surfaced inline.",
+    title: "Go / No-Go Verdict",
+    description: "A defensible recommendation with the reasoning, assumptions and trade-offs surfaced inline.",
   },
   {
     icon: FileSearch,
     title: "Public Research",
-    description: "Available external evidence is ranked by source quality; community sources remain directional signals.",
+    description: "Reddit, HN and Wikipedia signals fused into the report with citations — no API keys required.",
   },
 ];
 
@@ -76,33 +66,6 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 md:hidden" aria-label="Open navigation menu">
-                  <Menu className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-[min(20rem,calc(100vw-2rem))]">
-                <SheetHeader className="text-left">
-                  <SheetTitle>Concept AI</SheetTitle>
-                  <SheetDescription>Explore the product and start a feasibility analysis.</SheetDescription>
-                </SheetHeader>
-                <nav className="mt-8 flex flex-col gap-2" aria-label="Mobile navigation">
-                  {[
-                    ["Product", "#features"],
-                    ["Solutions", "#industries"],
-                    ["Evidence", "#features"],
-                  ].map(([label, href]) => (
-                    <SheetClose asChild key={`${label}-${href}`}>
-                      <a href={href} className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent">{label}</a>
-                    </SheetClose>
-                  ))}
-                  <SheetClose asChild>
-                    <Button type="button" onClick={() => navigate("/demo")} className="mt-4 justify-start">View synthetic demo</Button>
-                  </SheetClose>
-                </nav>
-              </SheetContent>
-            </Sheet>
             <Button
               type="button"
               size="sm"
@@ -142,8 +105,8 @@ const Index = () => {
             </h1>
 
             <p className="mx-auto mt-7 max-w-xl text-[17px] leading-[1.55] text-muted-foreground">
-              Turn a structured concept brief into an evidence-aware feasibility report — server-validated FMART-O scoring,
-              transparent assumptions, risks and an AI-supported recommendation.
+              From a one-line idea to an investor-ready feasibility report — FMART-O scoring, market sizing,
+              risk heatmap and a defensible go/no-go verdict.
             </p>
           </motion.div>
 
@@ -170,15 +133,6 @@ const Index = () => {
             >
               How it works
             </Button>
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              onClick={() => navigate("/demo")}
-              className="h-10 rounded-md px-5 text-[14px] font-medium"
-            >
-              View synthetic demo
-            </Button>
           </motion.div>
 
           {/* Faux product preview frame */}
@@ -193,22 +147,21 @@ const Index = () => {
                 <div className="mb-4 flex items-center justify-between border-b border-border/60 pb-4">
                   <div>
                     <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Illustrative interface · synthetic example
+                      Feasibility report
                     </div>
-                    <div className="mt-0.5 text-[15px] font-medium">Synthetic smart-meter rollout</div>
+                    <div className="mt-0.5 text-[15px] font-medium">Smart-meter rollout · Tier-1 telco</div>
                   </div>
                   <div className="rounded-md border border-success/40 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
-                    AI-supported recommendation · Model-estimated confidence 72%
+                    GO · Confidence 82%
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   {[
-                    { k: "Financial", v: "7.8", w: 78 },
-                    { k: "Market", v: "7.4", w: 74 },
-                    { k: "Achievable", v: "7.1", w: 71 },
-                    { k: "Risk", v: "6.6", w: 66 },
-                    { k: "Timing", v: "7.3", w: 73 },
-                    { k: "Operational", v: "7.0", w: 70 },
+                    { k: "Feasibility", v: "84" },
+                    { k: "Market", v: "76" },
+                    { k: "ROI", v: "71" },
+                    { k: "Risk", v: "38" },
+                    { k: "Tech", v: "88" },
                   ].map((m) => (
                     <div
                       key={m.k}
@@ -221,7 +174,7 @@ const Index = () => {
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-border/60">
                         <div
                           className="h-full rounded-full bg-primary"
-                          style={{ width: `${m.w}%` }}
+                          style={{ width: `${m.v}%` }}
                         />
                       </div>
                     </div>
@@ -317,7 +270,7 @@ const Index = () => {
           <div className="flex items-center gap-4">
             <span>FMART-O™ scoring</span>
             <span className="h-1 w-1 rounded-full bg-border" />
-            <span>Available external evidence</span>
+            <span>Public research enabled</span>
           </div>
         </div>
       </footer>

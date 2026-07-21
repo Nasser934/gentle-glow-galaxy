@@ -1,5 +1,4 @@
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
-export { numericRange, numericValue, parseUnitAwareNumber } from "@/lib/numbers";
 
 /**
  * Normalize any "confidence" value to a percentage string.
@@ -39,22 +38,13 @@ export const confidencePercent = (raw: unknown): number | null => {
 export const normalizeConfidenceToPercent = (raw: unknown): number =>
   confidencePercent(raw) ?? 0;
 
-/** Detect the financial model from explicit brief fields before using a legacy fallback. */
-export const isInternalConcept = (inputs?: ConceptInputs): boolean => {
-  const model = `${inputs?.businessModel ?? ""} ${inputs?.revenueModel ?? ""}`.toLowerCase();
-  return /internal platform|cost avoidance|productivity benefit|internal payback/.test(model);
-};
-
 /**
- * Treat a report as internal when the canonical project type or brief says so.
- * The LTV:CAC check exists only as a compatibility fallback for legacy rows.
+ * Treat a report as "internal" when LTV:CAC is missing or N/A. Used only for
+ * label disambiguation in revenue tables — never affects scoring.
  */
-export const isInternalProject = (report: FeasibilityReport, inputs?: ConceptInputs): boolean => {
-  if (report.financials.projectType === "internal") return true;
-  if (report.financials.projectType === "commercial") return false;
-  if (isInternalConcept(inputs)) return true;
+export const isInternalProject = (report: FeasibilityReport, _inputs?: ConceptInputs): boolean => {
   const ltv = (report.financials.ltvCacRatio || "").trim().toLowerCase();
-  return ltv === "" || ltv === "—" || ltv === "-" || /n\/?a|not applicable|internal platform/.test(ltv);
+  return ltv === "" || ltv === "—" || ltv === "-" || /n\/?a/.test(ltv);
 };
 
 export const internalLabels = {
@@ -115,19 +105,6 @@ export const compactCurrencyString = (input?: string | null): string => {
   return s;
 };
 
-const INVALID_FILENAME_CHARS = new RegExp(`[<>:"/\\\\|?*${String.fromCharCode(0)}-${String.fromCharCode(31)}]`, "g");
-
-/** Make a user-provided title safe for browser downloads on Windows and macOS. */
-export const sanitizeFileName = (raw: unknown, fallback = "report"): string => {
-  const value = String(raw ?? "")
-    .replace(INVALID_FILENAME_CHARS, "-")
-    .replace(/[\s_]+/g, "_")
-    .replace(/-+/g, "-")
-    .replace(/^[.\s-]+|[.\s-]+$/g, "")
-    .slice(0, 120);
-  return value || fallback;
-};
-
 /** Canonical title-case label for a status value. Internal value stays lowercase. */
 export const statusLabel = (s?: string | null): string => {
   switch ((s || "").toLowerCase()) {
@@ -156,3 +133,4 @@ export const prettifySource = (c?: { source?: string | null; title?: string | nu
   }
   return raw || c.title || "Source";
 };
+

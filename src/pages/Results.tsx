@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Lock } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -12,7 +12,9 @@ import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { FMARTRadar } from "@/components/report/FMARTRadar";
 import { MarketGrowthChart } from "@/components/report/MarketGrowthChart";
 import { CapExBarChart } from "@/components/report/CapExBarChart";
-import type { VersionFamilyEntry } from "@/lib/exportPdf";
+import { exportReportToPdf, type VersionFamilyEntry } from "@/lib/exportPdf";
+import { exportReportToPptx } from "@/lib/exportPptx";
+import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
@@ -21,9 +23,6 @@ import { StatusControl } from "@/components/report/StatusControl";
 import { WorkspaceHeader } from "@/components/report/workspace/WorkspaceHeader";
 import { ActivityTab } from "@/components/report/workspace/ActivityTab";
 import { useAuth } from "@/contexts/AuthContext";
-import { SharingDialog } from "@/components/report/SharingDialog";
-import { demoInputs, demoReport } from "@/data/demoReport";
-import { sanitizeFileName } from "@/lib/format";
 
 type WorkspaceTab = "overview" | "report" | "versions" | "activity";
 const TAB_VALUES: WorkspaceTab[] = ["overview", "report", "versions", "activity"];
@@ -55,26 +54,20 @@ const Results = () => {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(routeReportId ?? null);
   const [savingShare, setSavingShare] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
-  const savePromiseRef = useRef<ReturnType<typeof saveReport> | null>(null);
-  const saveOperationKeyRef = useRef(crypto.randomUUID());
-  const shareAfterSaveRef = useRef(false);
-  const isDemo = location.pathname === "/demo";
+  const [copied, setCopied] = useState(false);
 
-  const stateReport = isDemo ? demoReport : location.state?.report as FeasibilityReport | undefined;
-  const stateInputs = isDemo ? demoInputs : location.state?.inputs as ConceptInputs | undefined;
+  const stateReport = location.state?.report as FeasibilityReport | undefined;
+  const stateInputs = location.state?.inputs as ConceptInputs | undefined;
   const existingSlug = location.state?.slug as string | undefined;
   const existingId = location.state?.reportId as string | undefined;
   const stateOwnerId = location.state?.ownerId as string | undefined;
-  const readOnlyFlag = isDemo || location.state?.readOnly === true;
+  const readOnlyFlag = location.state?.readOnly === true;
 
   // Fetched payload when arriving via /reports/:id without navigation state.
   const [fetched, setFetched] = useState<ReportRow | null>(null);
-  const [fetchState, setFetchState] = useState<"idle" | "loading" | "not_found" | "forbidden" | "error" | "ok">(
+  const [fetchState, setFetchState] = useState<"idle" | "loading" | "not_found" | "forbidden" | "ok">(
     routeReportId && !stateReport ? "loading" : "idle",
   );
-  const [fetchRetryKey, setFetchRetryKey] = useState(0);
 
   const rawReport: FeasibilityReport | undefined = stateReport ?? (fetched?.output as FeasibilityReport | undefined);
   const inputs: ConceptInputs | undefined = stateInputs ?? (fetched?.inputs as ConceptInputs | undefined);
@@ -88,18 +81,6 @@ const Results = () => {
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [status, setStatus] = useState<ReportRow["status"]>("draft");
-
-  const persistUnsavedReport = () => {
-    if (!report || !inputs) return Promise.reject(new Error("Report data is not available."));
-    if (!savePromiseRef.current) {
-      savePromiseRef.current = saveReport(inputs, report, saveOperationKeyRef.current)
-        .catch((error) => {
-          savePromiseRef.current = null;
-          throw error;
-        });
-    }
-    return savePromiseRef.current;
-  };
 
   // Hydrate slug/id from navigation state if present.
   useEffect(() => {
@@ -155,7 +136,6 @@ const Results = () => {
           if (row.user_id !== ownerId) setOwnerId(row.user_id);
           if (row.slug && !shareSlug) setShareSlug(row.slug);
           setArchivedAt(row.archived_at ?? null);
-          setIsPublic(row.is_public);
           if (row.status) setStatus(row.status);
         })
         .catch(() => { /* non-fatal */ });
@@ -181,23 +161,14 @@ const Results = () => {
         setShareSlug(row.slug);
         setReportId(row.id);
         setArchivedAt(row.archived_at ?? null);
-        setIsPublic(row.is_public);
         if (row.status) setStatus(row.status);
         setFetchState("ok");
       })
-      .catch(() => { if (!cancelled) setFetchState("error"); });
+      .catch(() => { if (!cancelled) setFetchState("not_found"); });
     return () => { cancelled = true; };
-  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId, shareSlug, fetchRetryKey]);
+  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId, shareSlug]);
 
   const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
-
-  useEffect(() => {
-    if (searchParams.get("share") !== "1" || !canEdit || !reportId || !shareSlug) return;
-    setShareOpen(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete("share");
-    setSearchParams(next, { replace: true });
-  }, [canEdit, reportId, searchParams, setSearchParams, shareSlug]);
 
   // Auto-save once on first load — never in read-only/shared view, and never
   // when we already have a reportId (Analyze.tsx now saves before navigating,
@@ -209,17 +180,14 @@ const Results = () => {
     if (reportId || existingId || routeReportId) return;
     if (existingSlug || shareSlug) return;
     let cancelled = false;
-    persistUnsavedReport()
+    saveReport(inputs, report)
       .then((d) => {
         if (cancelled) return;
         setShareSlug(d.slug);
         setReportId(d.id);
         setOwnerId(user?.id ?? null);
         // Upgrade the URL to the canonical owner workspace.
-        navigate(`/reports/${d.id}${shareAfterSaveRef.current ? "?share=1" : ""}`, {
-          replace: true,
-          state: { ...location.state, report: d.report, inputs, slug: d.slug, reportId: d.id },
-        });
+        navigate(`/reports/${d.id}`, { replace: true, state: location.state });
       })
       .catch((e) => console.warn("auto-save failed", e));
     return () => { cancelled = true; };
@@ -257,21 +225,6 @@ const Results = () => {
           <div className="mt-5 flex justify-center gap-2">
             <Button variant="outline" onClick={() => navigate("/dashboard")}>My Analyses</Button>
             <Button onClick={() => navigate("/analyze")}>New analysis</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (fetchState === "error") {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center px-6">
-        <div className="max-w-md rounded-xl border border-border bg-card p-8 text-center">
-          <h2 className="font-display text-xl font-medium">Could not load this report</h2>
-          <p className="mt-1 text-sm text-muted-foreground">The database request failed. Retry safely; no report data was changed.</p>
-          <div className="mt-5 flex justify-center gap-2">
-            <Button onClick={() => setFetchRetryKey((value) => value + 1)}>Retry</Button>
-            <Button variant="outline" onClick={() => navigate("/dashboard")}>My Analyses</Button>
           </div>
         </div>
       </div>
@@ -320,21 +273,16 @@ const Results = () => {
     setExporting("pdf");
     setCaptureMounted(true);
     const toastId = toast.loading("Generating PDF report…");
-    console.info(JSON.stringify({ event: "export_started", format: "pdf", reportId: reportId || "unsaved" }));
     try {
-      const { exportReportToPdf } = await import("@/lib/exportPdf");
       await waitForCaptureMount();
       const versionFamily = await fetchVersionFamilySafe();
-      const fileStem = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
       const result = await exportReportToPdf(
         captureRootRef.current,
-        `${fileStem}.pdf`,
+        `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}.pdf`,
         { report, inputs, versionFamily },
       );
-      console.info(JSON.stringify({ event: "export_completed", format: "pdf", reportId: reportId || "unsaved", bytes: result.bytes, pages: result.pageCount }));
       toast.success(`PDF downloaded: ${result.fileName}`, { id: toastId });
     } catch (e: unknown) {
-      console.error(JSON.stringify({ event: "export_failed", format: "pdf", reportId: reportId || "unsaved", category: e instanceof Error ? e.name : "unknown" }));
       const msg = e instanceof Error ? e.message : "PDF export failed.";
       toast.error(msg, { id: toastId });
     } finally {
@@ -346,15 +294,11 @@ const Results = () => {
   const handleExportPptx = async () => {
     setExporting("pptx");
     const id = toast.loading("Generating PowerPoint deck…");
-    console.info(JSON.stringify({ event: "export_started", format: "pptx", reportId: reportId || "unsaved" }));
     try {
-      const { exportReportToPptx } = await import("@/lib/exportPptx");
-      const baseName = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
+      const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
       await exportReportToPptx(report, inputs, `${baseName}.pptx`);
-      console.info(JSON.stringify({ event: "export_completed", format: "pptx", reportId: reportId || "unsaved" }));
       toast.success("Deck downloaded", { id });
     } catch (e: unknown) {
-      console.error(JSON.stringify({ event: "export_failed", format: "pptx", reportId: reportId || "unsaved", category: e instanceof Error ? e.name : "unknown" }));
       toast.error(e instanceof Error ? e.message : "PPTX export failed", { id });
     } finally { setExporting(null); }
   };
@@ -362,45 +306,26 @@ const Results = () => {
   const handleExportXlsx = async () => {
     setExporting("xlsx");
     const id = toast.loading("Generating Excel workbook…");
-    console.info(JSON.stringify({ event: "export_started", format: "xlsx", reportId: reportId || "unsaved" }));
     try {
-      const { exportReportToXlsx } = await import("@/lib/exportXlsx");
-      const baseName = sanitizeFileName(`${report.reportId}_${inputs.projectName || "report"}`);
-      const result = await exportReportToXlsx(report, inputs, `${baseName}.xlsx`);
-      console.info(JSON.stringify({ event: "export_completed", format: "xlsx", reportId: reportId || "unsaved", bytes: result.bytes }));
+      const baseName = `${report.reportId}_${(inputs.projectName || "report").replace(/\s+/g, "_")}`;
+      await exportReportToXlsx(report, inputs, `${baseName}.xlsx`);
       toast.success("Workbook downloaded", { id });
     } catch (e: unknown) {
-      console.error(JSON.stringify({ event: "export_failed", format: "xlsx", reportId: reportId || "unsaved", category: e instanceof Error ? e.name : "unknown" }));
       toast.error(e instanceof Error ? e.message : "XLSX export failed", { id });
     } finally { setExporting(null); }
   };
 
   const handleShare = async () => {
-    let id = reportId;
     let slug = shareSlug;
-    if (!id || !slug) {
-      shareAfterSaveRef.current = true;
+    if (!slug) {
       setSavingShare(true);
-      try {
-        const saved = await persistUnsavedReport();
-        id = saved.id;
-        slug = saved.slug;
-        setReportId(saved.id);
-        setShareSlug(saved.slug);
-        setOwnerId(user?.id ?? null);
-        setIsPublic(false);
-        navigate(`/reports/${saved.id}?share=1`, {
-          replace: true,
-          state: { ...location.state, report: saved.report, inputs, slug: saved.slug, reportId: saved.id },
-        });
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not prepare report sharing");
-        return;
-      } finally {
-        setSavingShare(false);
-      }
+      try { const d = await saveReport(inputs, report); slug = d.slug; setShareSlug(slug); setReportId(d.id); }
+      catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Share failed"); setSavingShare(false); return; }
+      setSavingShare(false);
     }
-    if (id && slug) setShareOpen(true);
+    const url = `${window.location.origin}/r/${slug}`;
+    try { await navigator.clipboard.writeText(url); setCopied(true); toast.success("Share link copied"); setTimeout(() => setCopied(false), 2000); }
+    catch { toast.info(url); }
   };
 
   const handleRestore = async () => {
@@ -423,8 +348,6 @@ const Results = () => {
       {/* Workspace header: breadcrumb, title, status pill, version switcher, + owner actions */}
       <WorkspaceHeader
         title={inputs.projectName || report.reportId || "Untitled report"}
-        breadcrumbHref={isDemo ? "/" : "/dashboard"}
-        breadcrumbLabel={isDemo ? "Concept AI" : "My Analyses"}
         status={reportId ? status : undefined}
         reportId={reportId}
         versionSearch={versionSearch}
@@ -463,12 +386,10 @@ const Results = () => {
             <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
               <ArrowLeft className="h-3.5 w-3.5" /> New
             </Button>
-            {canEdit && (
-              <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
-                {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
-                Share
-              </Button>
-            )}
+            <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
+              {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Share"}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={downloading} className="h-8 gap-1.5">
@@ -495,39 +416,6 @@ const Results = () => {
           </>
         }
       />
-
-      {isDemo && (
-        <section className="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-sm font-semibold text-warning">{report.demo?.label || "Illustrative Demo — Synthetic Data"}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {report.demo?.disclaimer || "Synthetic demonstration — not measured organizational results"}. This public path never writes demo data to the database.
-              </p>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                <div><span className="font-semibold">Guided brief:</span> {inputs.projectName}</div>
-                <div><span className="font-semibold">Industry:</span> {inputs.industry}</div>
-                <div><span className="font-semibold">Budget:</span> {inputs.budgetRange}</div>
-                <div><span className="font-semibold">Timeline:</span> {inputs.timeline}</div>
-              </div>
-            </div>
-            <Button variant="outline" onClick={() => navigate("/decision-room/demo")}>
-              Open 90-Second Judge Mode
-            </Button>
-          </div>
-        </section>
-      )}
-
-      {reportId && shareSlug && canEdit && (
-        <SharingDialog
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          reportId={reportId}
-          slug={shareSlug}
-          isPublic={isPublic}
-          onVisibilityChanged={setIsPublic}
-        />
-      )}
 
       {/* Tabs synced to ?tab= */}
       <Tabs value={tab} onValueChange={setTab} className="no-print">

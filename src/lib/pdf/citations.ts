@@ -83,7 +83,7 @@ const cleanTakeaway = (raw: string): string => {
 const isGarbageTitle = (t: string): boolean => {
   if (!t || t.length < 3) return true;
   if (GARBAGE_TITLES.has(t.toLowerCase())) return true;
-  if (/^[._-]+$/.test(t)) return true;
+  if (/^[\.\-_]+$/.test(t)) return true;
   return false;
 };
 

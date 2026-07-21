@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate, Link, type NavigateFunction } from "react-router-dom";
-import type { User } from "@supabase/supabase-js";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, BarChart3, MessageSquare, Lock, ExternalLink, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -9,6 +8,7 @@ import { getReportBySlug, type ReportRow } from "@/lib/reports";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { CommentsPanel } from "@/components/report/CommentsPanel";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 
@@ -19,37 +19,17 @@ const SharedReport = () => {
   const [row, setRow] = useState<ReportRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
     setLoading(true);
-    setNotFound(false);
-    setLoadError(false);
     getReportBySlug(slug)
-      .then((r) => { if (cancelled) return; if (!r) setNotFound(true); setRow(r); })
-      .catch(() => { if (!cancelled) setLoadError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [slug, retryKey]);
+      .then((r) => { if (!r) setNotFound(true); setRow(r); })
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, [slug]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  }
-  if (loadError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center">
-        <div>
-          <h2 className="font-display text-xl font-medium">Could not load the shared report</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Check your connection and try again. No report data was changed.</p>
-          <div className="mt-4 flex justify-center gap-2">
-            <Button onClick={() => setRetryKey((value) => value + 1)}>Retry</Button>
-            <Button variant="outline" onClick={() => navigate("/")}>Go home</Button>
-          </div>
-        </div>
-      </div>
-    );
   }
   if (notFound || !row) {
     return (
@@ -57,7 +37,7 @@ const SharedReport = () => {
         <div>
           <Lock className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <h2 className="font-display text-xl font-medium">Report not found</h2>
-          <p className="mt-1 text-sm text-muted-foreground">It may be private, revoked, deleted, or the link may be incorrect.</p>
+          <p className="mt-1 text-sm text-muted-foreground">It may have been deleted or the link is wrong.</p>
           <Button onClick={() => navigate("/")} className="mt-4">Go home</Button>
         </div>
       </div>
@@ -67,7 +47,7 @@ const SharedReport = () => {
   return <SharedReportContent row={row} user={user} navigate={navigate} />;
 };
 
-const SharedReportContent = ({ row, user, navigate }: { row: ReportRow; user: User | null; navigate: NavigateFunction }) => {
+const SharedReportContent = ({ row, user, navigate }: any) => {
   const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
 
 

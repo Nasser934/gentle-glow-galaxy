@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -9,12 +9,7 @@ interface AuthCtx {
   signOut: () => Promise<void>;
 }
 
-const Ctx = createContext<AuthCtx>({
-  user: null,
-  session: null,
-  loading: true,
-  signOut: async () => undefined,
-});
+const Ctx = createContext<AuthCtx>({ user: null, session: null, loading: true, signOut: async () => {} });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -22,44 +17,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let active = true;
-
-    const applySession = (nextSession: Session | null) => {
-      if (!active) return;
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      setLoading(false);
-    };
-
-    // Subscribe first so an OAuth/session event cannot be lost between mount
-    // and the initial persisted-session read.
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      applySession(nextSession);
+    // Listener FIRST, then getSession
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
     });
-
-    void supabase.auth.getSession()
-      .then(({ data, error }) => {
-        if (error) {
-          console.warn(JSON.stringify({ event: "auth_session_restore_failed", category: error.name }));
-          applySession(null);
-          return;
-        }
-        applySession(data.session);
-      })
-      .catch(() => {
-        console.warn(JSON.stringify({ event: "auth_session_restore_failed", category: "unexpected" }));
-        applySession(null);
-      });
-
-    return () => {
-      active = false;
-      subscription.subscription.unsubscribe();
-    };
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      setLoading(false);
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await supabase.auth.signOut();
   };
 
   return <Ctx.Provider value={{ user, session, loading, signOut }}>{children}</Ctx.Provider>;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -68,7 +68,6 @@ type Row = {
   created_at: string;
   updated_at: string;
   parent_report_id: string | null;
-  root_report_id: string | null;
   archived_at: string | null;
 };
 
@@ -82,7 +81,7 @@ type Group = {
 function groupRows(rows: Row[]): Group[] {
   const buckets = new Map<string, Row[]>();
   for (const r of rows) {
-    const key = r.root_report_id ?? r.parent_report_id ?? r.id;
+    const key = r.parent_report_id ?? r.id;
     const arr = buckets.get(key) ?? [];
     arr.push(r);
     buckets.set(key, arr);
@@ -118,7 +117,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusKey>("all");
   const [searchParams] = useSearchParams();
@@ -129,16 +127,13 @@ const Dashboard = () => {
   const [scope, setScope] = useState<ReportScope>(initialScope);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pendingArchive, setPendingArchive] = useState<Group | null>(null);
-  const loadSequence = useRef(0);
 
   const load = (s: ReportScope = scope) => {
-    const request = ++loadSequence.current;
     setLoading(true);
-    setLoadError(false);
     listMyReports(s)
-      .then((d) => { if (request === loadSequence.current) setRows(d as Row[]); })
-      .catch(() => { if (request === loadSequence.current) setLoadError(true); })
-      .finally(() => { if (request === loadSequence.current) setLoading(false); });
+      .then((d) => setRows(d as Row[]))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
   };
   useEffect(() => {
     load(scope);
@@ -197,8 +192,8 @@ const Dashboard = () => {
       await archiveReportGroup(g.rootId);
       toast.success(`Archived ${g.versions.length} version${g.versions.length > 1 ? "s" : ""}`);
       load();
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Archive failed");
+    } catch (e: any) {
+      toast.error(e.message);
     } finally {
       setPendingArchive(null);
     }
@@ -209,8 +204,8 @@ const Dashboard = () => {
       await restoreReportGroup(g.rootId);
       toast.success("Restored");
       load();
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Restore failed");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -220,12 +215,18 @@ const Dashboard = () => {
       // Optimistic local update so the chip refreshes immediately.
       setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: s } : r)));
       toast.success(`Status updated: ${statusLabel(s)}`);
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Status update failed");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
-  const openSharing = (reportId: string) => navigate(`/reports/${reportId}?share=1`);
+  const copyShare = (slug: string) => {
+    const url = `${window.location.origin}/r/${slug}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Share link copied"),
+      () => toast.error("Could not copy link"),
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -241,7 +242,7 @@ const Dashboard = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate("/demo")}
+            onClick={() => navigate("/decision-room/demo")}
             className="h-9 gap-2"
           >
             <Sparkles className="h-4 w-4" strokeWidth={1.75} /> Load Demo Case
@@ -268,7 +269,6 @@ const Dashboard = () => {
             <button
               key={s.key}
               onClick={() => setScope(s.key)}
-              aria-pressed={active}
               className={`h-8 flex-1 rounded-md px-3 text-[12px] font-medium transition-colors ${
                 active
                   ? "bg-primary text-primary-foreground"
@@ -286,8 +286,6 @@ const Dashboard = () => {
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
-            id="report-search"
-            aria-label="Search analyses"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search analyses…"
@@ -301,7 +299,6 @@ const Dashboard = () => {
               <button
                 key={f.key}
                 onClick={() => setStatus(f.key)}
-                aria-pressed={active}
                 className={`h-8 rounded-md border px-2.5 text-[12px] font-medium transition-colors ${
                   active
                     ? "border-primary bg-primary text-primary-foreground"
@@ -321,12 +318,6 @@ const Dashboard = () => {
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-14 w-full" />
           ))}
-        </div>
-      ) : loadError ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <h2 className="font-display text-lg font-medium">Could not load your analyses</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Check your connection or session, then retry.</p>
-          <Button className="mt-4" onClick={() => load(scope)}>Retry</Button>
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -367,7 +358,7 @@ const Dashboard = () => {
                       scope={scope}
                       onArchive={() => setPendingArchive(g)}
                       onRestore={() => onRestore(g)}
-                      onCopyShare={() => openSharing(g.latest.id)}
+                      onCopyShare={() => copyShare(g.latest.slug)}
                       onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
                     />
                   );
@@ -387,7 +378,7 @@ const Dashboard = () => {
                 scope={scope}
                 onArchive={() => setPendingArchive(g)}
                 onRestore={() => onRestore(g)}
-                onCopyShare={() => openSharing(g.latest.id)}
+                onCopyShare={() => copyShare(g.latest.slug)}
                 onChangeStatus={(s) => onChangeStatus(g.latest.id, s)}
               />
             ))}
@@ -474,7 +465,7 @@ function RowActions({
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={onCopyShare}>
-          <Link2 className="mr-2 h-4 w-4" /> Manage sharing
+          <Link2 className="mr-2 h-4 w-4" /> Copy share link
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -541,7 +532,7 @@ function DesktopGroup({
       <tr className="hover:bg-background/60">
         <td className="px-2 py-3 text-center">
           {hasMulti ? (
-            <button onClick={onToggle} aria-expanded={expanded} aria-label={expanded ? "Collapse versions" : "Expand versions"} className="text-muted-foreground hover:text-foreground">
+            <button onClick={onToggle} aria-label={expanded ? "Collapse versions" : "Expand versions"} className="text-muted-foreground hover:text-foreground">
               {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           ) : null}
@@ -653,8 +644,6 @@ function MobileCard({
         <>
           <button
             onClick={onToggle}
-            aria-expanded={expanded}
-            aria-label={expanded ? "Hide report versions" : "Show report versions"}
             className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -748,3 +737,5 @@ const StatCard = ({
 };
 
 export default Dashboard;
+
+

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, History, AlertCircle } from "lucide-react";
+import { Loader2, History } from "lucide-react";
 import { statusLabel } from "@/lib/format";
 
 interface StatusEvent {
@@ -10,7 +10,6 @@ interface StatusEvent {
   from_status: string | null;
   to_status: string | null;
   note: string | null;
-  change_source: string;
   created_at: string;
 }
 
@@ -23,34 +22,31 @@ const fmt = (iso: string) =>
     minute: "2-digit",
   });
 
-const pill = (status: string | null) => (
+const pill = (s: string | null) => (
   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-    {status ? statusLabel(status) : "—"}
+    {s ? statusLabel(s) : "—"}
   </span>
 );
 
 /**
- * Activity tab — surfaces the report's status history through an exact-report
- * RPC so public audit rows cannot be enumerated through the table API.
+ * Activity tab — surfaces the report's status history. Read-only.
+ * Falls back to a friendly empty state when there are no events yet.
  */
 export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; refreshKey?: number }) => {
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setLoadError(false);
-    void supabase
-      .rpc("get_report_status_history", { p_report_id: reportId })
-      .then(({ data, error }) => {
+    supabase
+      .from("report_status_history")
+      .select("*")
+      .eq("report_id", reportId)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
         if (cancelled) return;
-        if (error) {
-          setLoadError(true);
-          setLoading(false);
-          return;
-        }
         setEvents((data ?? []) as StatusEvent[]);
         setLoading(false);
       });
@@ -63,16 +59,6 @@ export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; re
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-warning/40 bg-warning/5 p-10 text-center">
-        <AlertCircle className="mb-2 h-5 w-5 text-warning" />
-        <p className="text-sm font-medium text-foreground">Could not load activity.</p>
-        <p className="text-xs text-muted-foreground">Try opening this tab again in a moment.</p>
       </div>
     );
   }
@@ -96,17 +82,17 @@ export const ActivityTab = ({ reportId, refreshKey = 0 }: { reportId: string; re
         </div>
       ) : (
         <ol className="relative space-y-3 border-l border-border pl-5">
-          {events.map((event) => (
-            <li key={event.id} className="relative">
+          {events.map((e) => (
+            <li key={e.id} className="relative">
               <span className="absolute -left-[23px] top-1.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
               <div className="rounded-lg border border-border bg-card/60 p-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  {pill(event.from_status)}
+                  {pill(e.from_status)}
                   <span className="text-xs text-muted-foreground">→</span>
-                  {pill(event.to_status)}
-                  <span className="ml-auto text-[11px] text-muted-foreground">{fmt(event.created_at)}</span>
+                  {pill(e.to_status)}
+                  <span className="ml-auto text-[11px] text-muted-foreground">{fmt(e.created_at)}</span>
                 </div>
-                {event.note && <p className="mt-1.5 text-[13px] text-foreground/90">{event.note}</p>}
+                {e.note && <p className="mt-1.5 text-[13px] text-foreground/90">{e.note}</p>}
               </div>
             </li>
           ))}

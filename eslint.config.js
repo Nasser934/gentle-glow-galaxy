@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "supabase/functions/mcp/**"] },
+  { ignores: ["dist"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -21,26 +21,6 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
-    },
-  },
-  {
-    // These modules intentionally co-locate small styling/context exports with
-    // their components. They are stable modules, not component registries, so
-    // the Fast Refresh rule produces false positives here.
-    files: [
-      "src/components/ThemeToggle.tsx",
-      "src/components/report/EvidenceChips.tsx",
-      "src/components/ui/badge.tsx",
-      "src/components/ui/button.tsx",
-      "src/components/ui/form.tsx",
-      "src/components/ui/navigation-menu.tsx",
-      "src/components/ui/sidebar.tsx",
-      "src/components/ui/sonner.tsx",
-      "src/components/ui/toggle.tsx",
-      "src/contexts/AuthContext.tsx",
-    ],
-    rules: {
-      "react-refresh/only-export-components": "off",
     },
   },
 );

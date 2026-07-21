@@ -5,14 +5,16 @@
 // so the three formats never disagree on verdict, break-even, financial labels,
 // risk counts, or source labels.
 //
-// Reports reach this module after the canonical server/read-time validator has
-// recalculated the score and attached explicit evidence metadata.
+// IMPORTANT: This module does NOT recompute scores, financials, or evidence.
+// It only NORMALIZES presentation of values already produced by the analysis
+// pipeline. No DB, RLS, or report-generation logic is touched here.
 // =============================================================================
 
 import type {
   ConceptInputs,
   FeasibilityReport,
   RiskRow,
+  ResearchCitation,
 } from "@/types/analysis";
 import {
   compactCurrencyString,
@@ -20,9 +22,6 @@ import {
   confidencePercent,
   prettifySource,
 } from "@/lib/format";
-import { extractBreakEvenMonth, formatBreakEvenDisplay } from "@/lib/breakEven";
-
-export { extractBreakEvenMonth } from "@/lib/breakEven";
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -102,18 +101,14 @@ export interface CanonicalEvidenceClaim {
     domain: string;
     url: string;
     sourceType?: string;
-    relationship: "supporting" | "conflicting";
   }>;
   supportsClaimIds: string[];
-  supportStatus: "supported" | "conflicting" | "unsupported" | "ai_inference";
-  provenance: string;
 }
 
 export interface CanonicalEvidence {
   mix: {
     userInputPercent: number;
     webResearchPercent: number;
-    calculationPercent?: number;
     aiAssumptionPercent: number;
   };
   topClaims: CanonicalEvidenceClaim[];
@@ -152,7 +147,48 @@ export function canonicalizeVerdict(raw: string | undefined | null): CanonicalVe
 
 /* ------------------------------- Break-even ------------------------------- */
 
+/** Extract a single canonical break-even month from any free-form string. */
+export function extractBreakEvenMonth(raw: string | undefined | null): number | null {
+  const t = (raw || "").toString();
+  if (!t) return null;
+  // "Month 26", "in month 26", "month-26"
+  let m = t.match(/month[\s-]*(\d{1,3})/i);
+  if (m) return Number(m[1]);
+  // "26 months", "26-28 months" → take low end
+  m = t.match(/(\d{1,3})\s*(?:–|-|to)\s*(\d{1,3})\s*months?/i);
+  if (m) return Number(m[1]);
+  m = t.match(/(\d{1,3})\s*months?\b/i);
+  if (m) return Number(m[1]);
+  // "M26"
+  m = t.match(/\bM(\d{1,3})\b/);
+  if (m) return Number(m[1]);
+  // "Year 3" → 36
+  m = t.match(/year[\s-]*(\d{1,2})/i);
+  if (m) return Number(m[1]) * 12;
+  m = t.match(/\bY(\d{1,2})\b/);
+  if (m) return Number(m[1]) * 12;
+  return null;
+}
+
+function buildBreakEvenDisplay(raw: string | undefined | null, month: number | null): string {
+  const t = (raw || "").toString().trim();
+  if (month != null) {
+    // Prefer Month N when month value exists.
+    if (month > 0 && month % 12 === 0 && /year/i.test(t) && !/month/i.test(t)) {
+      return `Year ${month / 12}`;
+    }
+    return `Month ${month}`;
+  }
+  return t || "Requires validation";
+}
+
 /* ---------------------------- Financial helpers --------------------------- */
+
+const numFromString = (s?: string): number => {
+  if (!s) return 0;
+  const m = s.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+};
 
 function withCurrencyPrefix(value: string, currency: string): string {
   const v = (value || "").trim();
@@ -188,8 +224,8 @@ function canonicalMarketValue(raw: string | undefined | null): string {
   return compactCurrencyString(t) || t;
 }
 
-const riskLevelText = (risk: RiskRow & { severity?: string }): string =>
-  `${risk.severity ?? ""} ${risk.level ?? ""}`.trim();
+const riskLevelText = (r: RiskRow): string =>
+  `${(r as any).severity ?? ""} ${r.level ?? ""}`.trim();
 
 const isHigh = (r: RiskRow): boolean => /\b(high|critical)\b/i.test(riskLevelText(r));
 
@@ -199,57 +235,33 @@ const isMaterial = (r: RiskRow): boolean =>
 /* ------------------------------ Evidence ---------------------------------- */
 
 function buildTopClaims(report: FeasibilityReport): CanonicalEvidenceClaim[] {
-  const explicitSources = report.sources ?? (report.research?.citations || [])
-    .filter((citation) => citation.sourceId)
-    .map((citation) => ({
-      sourceId: citation.sourceId as string,
-      title: citation.title,
-      url: citation.url,
-      domain: citation.domain || "",
-      publisher: citation.publisher || citation.source,
-      accessDate: citation.accessDate || "",
-      sourceType: citation.sourceType || "general",
-      quality: citation.quality || "Unknown" as const,
-    }));
-  const sourceById = new Map(explicitSources.map((source) => [source.sourceId, source]));
-  const claims = report.claims ?? (report.claimEvidenceMap || []).map((claim) => ({
-    claimId: claim.claimId,
-    claimText: claim.claimText,
-    reportSection: claim.reportSection,
-    provenance: claim.provenance ?? "Unknown" as const,
-    supportingSourceIds: claim.supportingSourceIds ?? [],
-    conflictingSourceIds: claim.conflictingSourceIds ?? [],
-    composition: {
-      userInputPercent: claim.userInputPercent,
-      citedSourcePercent: claim.webResearchPercent,
-      calculationPercent: claim.calculationPercent ?? 0,
-      aiInferencePercent: claim.aiAssumptionPercent,
-    },
-    supportStatus: claim.supportStatus ?? "unsupported" as const,
-    displayStatus: claim.displayStatus,
-  }));
-  return claims.slice(0, 5).map((claim) => {
-    const sources = [
-      ...claim.supportingSourceIds.map((sourceId) => ({ sourceId, relationship: "supporting" as const })),
-      ...claim.conflictingSourceIds.map((sourceId) => ({ sourceId, relationship: "conflicting" as const })),
-    ]
-      .map(({ sourceId, relationship }) => ({ source: sourceById.get(sourceId), relationship }))
-      .filter((item): item is { source: NonNullable<typeof item.source>; relationship: "supporting" | "conflicting" } => item.source !== undefined)
-      .map(({ source, relationship }) => ({
-        title: source.title,
-        domain: source.domain || prettifySource({ source: source.publisher, url: source.url }),
-        url: source.url,
-        sourceType: source.sourceType,
-        relationship,
-      }));
+  const claims = (report.claimEvidenceMap || []).slice(0, 5);
+  const citations: ResearchCitation[] = report.research?.citations || [];
+  return claims.map((c, idx) => {
+    const claimId = (c.claimId && /^C-\d{2}$/.test(c.claimId))
+      ? c.claimId
+      : `C-${String(idx + 1).padStart(2, "0")}`;
+    const sourceNames = c.sources || [];
+    const matched = sourceNames
+      .map((name) => citations.find(
+        (cit) => cit.title === name || cit.source === name || cit.url === name,
+      ))
+      .filter((x): x is ResearchCitation => !!x);
+    const sources = (matched.length ? matched : citations.slice(0, 2)).map((cit) => {
+      let domain = "";
+      try { domain = new URL(cit.url).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
+      return {
+        title: cit.title || prettifySource(cit),
+        domain: domain || prettifySource({ source: cit.source, url: cit.url }),
+        url: cit.url,
+      };
+    });
     return {
-      claimId: claim.claimId,
-      claimText: claim.claimText,
-      confidence: claim.supportStatus === "supported" ? "Supported" : claim.supportStatus === "conflicting" ? "Conflicting" : "Requires validation",
+      claimId,
+      claimText: c.claimText,
+      confidence: c.confidence,
       sources,
-      supportsClaimIds: claim.supportingSourceIds.length > 0 ? [claim.claimId] : [],
-      supportStatus: claim.supportStatus,
-      provenance: claim.provenance,
+      supportsClaimIds: [claimId],
     };
   });
 }
@@ -280,8 +292,8 @@ export function buildExportDecisionPack(
 
   // Financial — single source of break-even truth
   const beMonth = extractBreakEvenMonth(fin.breakEvenSummary);
-  const beDisplay = formatBreakEvenDisplay(fin.breakEvenSummary);
-  const beRange = beMonth == null ? beDisplay : (fin.breakEvenSummary || "").trim() || beDisplay;
+  const beDisplay = buildBreakEvenDisplay(fin.breakEvenSummary, beMonth);
+  const beRange = (fin.breakEvenSummary || "").trim() || beDisplay;
 
   const capExMidValue = fin.capExTotal?.mid
     ?? ((fin.capExTotal?.low || 0) + (fin.capExTotal?.high || 0)) / 2;
@@ -329,8 +341,7 @@ export function buildExportDecisionPack(
   const mix = report.evidenceMix || {
     userInputPercent: 0,
     webResearchPercent: 0,
-    calculationPercent: 0,
-    aiAssumptionPercent: 100,
+    aiAssumptionPercent: 0,
   };
 
   // Roadmap — fall back to recommendations / nextSteps splits if not authored.

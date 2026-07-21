@@ -43,23 +43,13 @@ interface WorkspaceHeaderProps {
   actions?: ReactNode;
   /** Preserve current query string, e.g. ?tab=versions, when switching versions. */
   versionSearch?: string;
-  breadcrumbHref?: string;
-  breadcrumbLabel?: string;
 }
 
 /**
  * Owner workspace header — breadcrumb, title, status pill, and version switcher.
  * Purely presentational; status mutations stay in the caller (StatusControl).
  */
-export const WorkspaceHeader = ({
-  title,
-  status,
-  reportId,
-  actions,
-  versionSearch = "",
-  breadcrumbHref = "/dashboard",
-  breadcrumbLabel = "My Analyses",
-}: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ title, status, reportId, actions, versionSearch = "" }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionRow[] | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
@@ -92,7 +82,7 @@ export const WorkspaceHeader = ({
     <div className="mb-5 space-y-3 no-print">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-[12px] text-muted-foreground">
-        <Link to={breadcrumbHref} className="hover:text-foreground transition-colors">{breadcrumbLabel}</Link>
+        <Link to="/dashboard" className="hover:text-foreground transition-colors">My Analyses</Link>
         <ChevronRight className="h-3.5 w-3.5 opacity-50" />
         <span className="truncate text-foreground/80">{title || "Untitled report"}</span>
       </nav>

@@ -92,16 +92,10 @@ export interface ExportPdfPayload {
   versionFamily?: VersionFamilyEntry[];
 }
 
-export interface ExportPdfOptions {
-  /** Disable browser download for deterministic integration tests or server-side inspection. */
-  download?: boolean;
-}
-
 export async function exportReportToPdf(
   captureRootEl: HTMLElement | null,
   fileName: string,
   payload?: ExportPdfPayload,
-  options: ExportPdfOptions = {},
 ) {
   await document.fonts?.ready;
   const data = payload ?? (window as never as { __pdfPayload?: unknown }).__pdfPayload;
@@ -156,8 +150,8 @@ export async function exportReportToPdf(
   );
   const labels = projectLabels(inputs);
   const snapshotKpis: KpiItem[] = [
-    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "Server-validated FMART-O weighted" },
-    { label: "Model-estimated confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
+    { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
+    { label: "Decision confidence", value: pack.score.decisionConfidencePct != null ? `${pack.score.decisionConfidencePct}%` : "Requires validation", sub: mix ? `AI assumptions ${mix.aiAssumptionPercent}%` : undefined },
     { label: "Investment Range", value: pack.financial.investmentRange, sub: report.financials.currency || undefined },
     labels.isInternal
       ? { label: "Payback / Break-even", value: pack.financial.breakEvenDisplay, sub: conciseBreakEvenSub(pack.financial.breakEvenDisplay, pack.financial.breakEvenRange) }
@@ -173,7 +167,7 @@ export async function exportReportToPdf(
         : mix.aiAssumptionPercent > 30
           ? "Medium AI assumption dependency. Validate the key assumptions in the appendix register."
           : "Low AI assumption dependency. Stronger confidence in the analysis.";
-    notice(doc, `Estimated Evidence Composition — User input ${mix.userInputPercent}% · Available external evidence ${mix.webResearchPercent}% · AI inference ${mix.aiAssumptionPercent}%. Heuristic estimate based on input completeness and available sources. ${mixNote}`, mix.aiAssumptionPercent > 40 ? "warn" : "info");
+    notice(doc, `Evidence mix — User input ${mix.userInputPercent}% · Web research ${mix.webResearchPercent}% · AI assumption ${mix.aiAssumptionPercent}%. ${mixNote}`, mix.aiAssumptionPercent > 40 ? "warn" : "info");
   }
 
   /* ===== 3. Feasibility Scorecard ===== */
@@ -274,25 +268,9 @@ export async function exportReportToPdf(
     subTitle(doc, labels.isInternal ? "Savings scenarios" : "Revenue scenarios");
     placeTable(doc, {
       head: [["Scenario", "Probability", labels.customersYr1Label, labels.annualRevenueLabel, "Break-even"]],
-      body: report.financials.scenarios.map((sc) => {
-        const adoption = sc.adoptionRate != null ? `${Math.round(sc.adoptionRate * 100)}%` : "Requires validation";
-        const internalBenefit = sc.annualValueDisplay
-          || (sc.annualFinancialBenefit != null ? `${report.financials.currency} ${sc.annualFinancialBenefit.toLocaleString()}` : "Requires validation");
-        return [
-          s(sc.scenario),
-          s(sc.probability),
-          labels.isInternal ? adoption : s(sc.subscribersYr1),
-          labels.isInternal ? s(internalBenefit) : s(sc.annualRevenue),
-          s(sc.breakEven),
-        ];
-      }),
-      columnStyles: {
-        0: { cellWidth: 80, fontStyle: "bold" },
-        1: { cellWidth: 62, halign: "center" },
-        2: { cellWidth: 95 },
-        3: { cellWidth: 150 },
-        4: { cellWidth: CONTENT_W - 387 },
-      },
+      body: report.financials.scenarios.map((sc) => [
+        s(sc.scenario), s(sc.probability), s(sc.subscribersYr1), s(sc.annualRevenue), s(sc.breakEven),
+      ]),
       styles: { fontSize: 9 },
     });
   }
@@ -339,12 +317,6 @@ export async function exportReportToPdf(
       ["SAM", s(report.market.samLabel), s(report.market.samValue), s(report.market.samCagr)],
       ["SOM", s(report.market.somLabel), s(report.market.somValue), s(report.market.somCagr)],
     ],
-    columnStyles: {
-      0: { cellWidth: 44, fontStyle: "bold" },
-      1: { cellWidth: 185 },
-      2: { cellWidth: 180 },
-      3: { cellWidth: CONTENT_W - 409, halign: "center" },
-    },
     styles: { fontSize: 9 },
   });
 
@@ -509,7 +481,7 @@ export async function exportReportToPdf(
   if (mix) {
     paragraph(
       doc,
-      `Estimated Evidence Composition — User input ${mix.userInputPercent}% · Available external evidence ${mix.webResearchPercent}% · Calculations ${mix.calculationPercent ?? 0}% · AI inference ${mix.aiAssumptionPercent}%. Heuristic estimate based on input completeness and available sources.`,
+      `Evidence mix — User input ${mix.userInputPercent}% · Web research ${mix.webResearchPercent}% · AI assumption ${mix.aiAssumptionPercent}%.`,
       { size: 9.5 },
     );
     if (mix.aiAssumptionPercent > 40) {
@@ -527,7 +499,7 @@ export async function exportReportToPdf(
       body: topClaims.map((c, idx) => {
         const raw = claimsRaw[idx];
         const sourcesText = c.sources.length
-          ? c.sources.map((src) => `${src.relationship === "conflicting" ? "Conflict: " : ""}${src.domain || src.title}`).filter(Boolean).slice(0, 2).join(", ")
+          ? c.sources.map((src) => src.domain || src.title).filter(Boolean).slice(0, 2).join(", ")
           : "—";
         return [
           { content: c.claimId, styles: { fontStyle: "bold" as const, halign: "center" as const } },
@@ -602,7 +574,7 @@ export async function exportReportToPdf(
   ]);
   briefGroup("Market", [
     ["Business model", inputs.businessModel],
-    [labels.isInternal ? "Internal value model" : "Revenue model", inputs.revenueModel],
+    ["Revenue model", inputs.revenueModel],
     ["Competitors", inputs.competitorUrls],
   ]);
   briefGroup("Resources", [
@@ -629,15 +601,13 @@ export async function exportReportToPdf(
     startAppendix(doc, "Assumption Register");
     paragraph(
       doc,
-      labels.isInternal
-        ? "Assumptions are grouped by domain. Internal-project assumptions use savings, adoption, operational benefit, and payback metrics."
-        : "Assumptions are grouped by domain and should be validated before commitment.",
+      "Assumptions are grouped by domain. Internal-project assumptions use savings / payback metrics rather than SaaS LTV : CAC.",
       { size: 9, italic: true, color: C.muted, gap: 8 },
     );
     const groups = new Map<string, AssumptionRow[]>();
     register.forEach((a) => {
       const g = bucketAssumption(`${a.assumption} ${a.riskIfWrong || ""}`);
-      // Drop commercial unit-economics assumptions from legacy internal reports.
+      // Drop LTV/CAC-only assumptions when this is an internal project.
       if (labels.isInternal && /\b(ltv|cac|churn|arr|mrr|subscriber)\b/i.test(a.assumption) && !/saving|payback|department|workflow/i.test(a.assumption)) return;
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(a);
@@ -674,10 +644,10 @@ export async function exportReportToPdf(
   /* Appendix C — Methodology */
   startAppendix(doc, "Methodology");
   paragraph(doc, "FMART-O 6-Dimension Weighted Scoring", { size: 11, color: C.muted, gap: 8 });
-  // Always render the canonical six-dimension methodology copy from this exporter.
+  // Always render our canonical copy; ignore any stale "FMART Framework — 5-Dimension" string from older reports.
   paragraph(
     doc,
-    "FMART-O evaluates Financial, Market, Achievability, Risk, Timing, and Operational feasibility. The server validates all six scores and weights, then calculates the authoritative weighted result.",
+    "FMART-O blends user inputs, web research and analyst-style synthesis across six dimensions. The 'O' is Operational feasibility — added to the traditional FMART (Financial, Market, Achievability, Risk, Timing) framework so cross-functional execution risk is scored explicitly.",
   );
   const weights = report.scores.weights;
   if (weights) {
@@ -696,7 +666,7 @@ export async function exportReportToPdf(
       styles: { fontSize: 9 },
     });
   }
-  subTitle(doc, "Model-estimated confidence definitions");
+  subTitle(doc, "Confidence definitions");
   bulletList(doc, [
     "High — multiple independent sources or direct evidence.",
     "Medium — at least one strong source or analogous benchmark.",
@@ -732,14 +702,8 @@ export async function exportReportToPdf(
   /* ---------- Finalize ---------- */
   finalizeTOC(doc);
   stampPageNumbers(doc);
-  const bytes = doc.pdf.output("arraybuffer").byteLength;
-  if (options.download !== false) doc.pdf.save(fileName);
-  return {
-    fileName,
-    bytes,
-    pageCount: doc.pdf.getNumberOfPages(),
-    textRendering: "native-selectable" as const,
-  };
+  doc.pdf.save(fileName);
+  return { fileName };
 }
 
 /* ----------------------------- helpers ------------------------------------- */

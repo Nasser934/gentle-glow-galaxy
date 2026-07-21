@@ -13,7 +13,6 @@ import { deriveDecisionDrivers, deriveDecisionBlockers } from "../derive";
 import { projectLabels } from "../project";
 import { sanitizeForConsumer } from "@/lib/evidence";
 import type { ExportDecisionPack } from "@/lib/exportDecisionPack";
-import { formatBreakEvenDisplay } from "@/lib/breakEven";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
 
@@ -35,7 +34,11 @@ function trimBullets(items: string[], max: number): string[] {
 function shortenBreakEven(raw: string | undefined): string {
   const t = s(raw).trim();
   if (!t) return "";
-  return formatBreakEvenDisplay(t);
+  const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  // Sentence start clause up to first delimiter
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
 }
 
 function shortenPayback(raw: string | undefined): string {
@@ -86,7 +89,6 @@ function cleanRecommendationLabel(verdict: string, label: string): string {
 export const conciseBreakEvenSub = (main: string, raw: string | undefined | null): string | undefined => {
   const t = (raw || "").toString().trim();
   if (!t || t === main) return undefined;
-  if (formatBreakEvenDisplay(t) === "Requires validation") return undefined;
   const range = t.match(/\b\d{1,3}\s*(?:–|-|to)\s*\d{1,3}\s*months?\b/i)?.[0];
   if (range) return range.replace(/\s+/g, " ");
   if (/expects to reach break-even|projected|based on|depends on/i.test(t)) return undefined;
@@ -208,7 +210,7 @@ export function drawCover(
 
   const kpis: KpiItem[] = [
     { label: "Overall score", value: `${(report.scores.overall ?? 0).toFixed(1)} / 10`, sub: "FMART-O weighted" },
-    { label: "Model-estimated confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
+    { label: "Decision confidence", value: confidencePct ? `${confidencePct}%` : "Requires validation", sub: confidencePct ? confidenceBand(confidencePct) : undefined },
     labels.isInternal
       ? { label: "Investment Range", value: investment, sub: report.financials.currency || undefined }
       : { label: "Break-even", value: beValue, sub: conciseBreakEvenSub(beValue, pack?.financial.breakEvenRange ?? report.financials.breakEvenSummary) },
@@ -268,7 +270,7 @@ export function drawCover(
   setColor(pdf, C.muted);
   pdf.setFont("helvetica", "italic"); pdf.setFontSize(8);
   pdf.text(
-    "AI inference <30%: stronger evidence support  ·  30–40%: validate key inputs  ·  >40%: exploratory — strengthen before decision.",
+    "AI assumption <30%: stronger confidence  ·  30–40%: validate key inputs  ·  >40%: exploratory — strengthen before decision.",
     MARGIN, y,
   );
   y += 10;

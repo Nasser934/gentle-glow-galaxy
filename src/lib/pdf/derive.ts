@@ -8,7 +8,6 @@
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { assessInputQuality, sanitizeForConsumer } from "@/lib/evidence";
-import { formatBreakEvenDisplay } from "@/lib/breakEven";
 import { projectLabels } from "./project";
 
 const s = (v: unknown): string => sanitizeForConsumer(v == null ? "" : String(v));
@@ -116,7 +115,10 @@ export function deriveDecisionBlockers(
 export function shortBreakEven(raw: string | undefined): string {
   const t = s(raw || "").trim();
   if (!t) return "";
-  return formatBreakEvenDisplay(t);
+  const m = t.match(/(month\s*\d+(?:\s*[-–—]\s*\d+)?|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+  if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+  const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+  return head.length > 28 ? head.slice(0, 26) + "…" : head;
 }
 
 export interface MemoSections {
@@ -126,21 +128,6 @@ export interface MemoSections {
   moneyLogic: string[];
   validation: string[];
   next30Days: string[];
-}
-
-function baseCaseDisplay(report: FeasibilityReport, internal: boolean) {
-  const base = report.financials.scenarios?.find((scenario) => /base/i.test(scenario.scenario));
-  if (!base) return { outcome: "", participation: "" };
-  if (internal) {
-    const outcome = s(base.annualValueDisplay || (base.annualFinancialBenefit != null
-      ? `${report.financials.currency} ${base.annualFinancialBenefit.toLocaleString()}`
-      : "Requires validation"));
-    const participation = base.adoptionRate != null
-      ? `${Math.round(base.adoptionRate * 100)}%`
-      : "Requires validation";
-    return { outcome, participation };
-  }
-  return { outcome: s(base.annualRevenue), participation: s(base.subscribersYr1) };
 }
 
 export function deriveMemoSections(
@@ -153,7 +140,7 @@ export function deriveMemoSections(
 
   const recommendation: string[] = [];
   if (verdict) recommendation.push(`Verdict: ${verdict}.`);
-  if (conf != null) recommendation.push(`Model-estimated confidence: ${conf}%.`);
+  if (conf != null) recommendation.push(`Decision confidence: ${conf}%.`);
   if (decision?.nextStepHint) recommendation.push(firstSentence(s(decision.nextStepHint)));
 
   const whyCanWork = deriveDecisionDrivers(report, inputs);
@@ -166,10 +153,8 @@ export function deriveMemoSections(
   const be = shortBreakEven(fin.breakEvenSummary);
   if (be) moneyLogic.push(labels.isInternal ? `Payback: ${be} (operational savings).` : `Break-even: ${be}.`);
   if (!labels.isInternal && fin.ltvCacRatio) moneyLogic.push(`LTV : CAC — ${s(fin.ltvCacRatio)}.`);
-  const baseCase = baseCaseDisplay(report, labels.isInternal);
-  if (baseCase.outcome || baseCase.participation) {
-    moneyLogic.push(labels.baseCaseTemplate(baseCase.outcome, baseCase.participation));
-  }
+  const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
+  if (base) moneyLogic.push(labels.baseCaseTemplate(s(base.annualRevenue), s(base.subscribersYr1)));
   if (!moneyLogic.length) {
     moneyLogic.push("Detailed financial model required before funding approval.");
   }
@@ -220,8 +205,8 @@ export function deriveExecutiveSummary(
     .slice(0, 2)
     .map((r) => s(r.name));
   const be = shortBreakEven(fin.breakEvenSummary);
-  const baseCase = baseCaseDisplay(report, labels.isInternal);
-  const baseRev = baseCase.outcome ? withCurrency(baseCase.outcome, cur) : "";
+  const base = fin.scenarios?.find((sc) => /base/i.test(sc.scenario));
+  const baseRev = base ? withCurrency(s(base.annualRevenue), cur) : "";
 
   const out: string[] = [];
 
@@ -241,14 +226,14 @@ export function deriveExecutiveSummary(
       ? "The signal is positive across the FMART-O dimensions, but execution discipline will determine the outcome."
       : "The current evidence base does not yet support a confident go decision and inputs should be strengthened first.";
   out.push(
-    `Overall FMART-O score is ${overall} / 10${conf != null ? ` with a ${conf}% model-estimated confidence indicator` : ""}, leading to a "${verdict || "—"}" recommendation. ${verdictReason}`,
+    `Overall FMART-O score is ${overall} / 10${conf != null ? ` with ${conf}% decision confidence` : ""}, leading to a "${verdict || "—"}" recommendation. ${verdictReason}`,
   );
 
   // Para 3 — money / value logic
   const bits: string[] = [];
   if (fin.investmentRange) bits.push(`The expected investment is ${withCurrency(s(fin.investmentRange), cur)}`);
   if (be) bits.push(labels.isInternal ? `with payback around ${be} driven by operational savings` : `with break-even around ${be}`);
-  if (baseRev) bits.push(`and a base case of ${baseRev} ${labels.isInternal ? "in annual savings" : "in annual revenue"}${baseCase.participation ? ` at ${baseCase.participation} ${labels.isInternal ? "adoption" : "Year-1 customers"}` : ""}`);
+  if (baseRev) bits.push(`and a base case of ${baseRev} ${labels.isInternal ? "in annual savings" : "in annual revenue"}`);
   out.push(
     bits.length
       ? `${bits.join(", ")}. ${labels.isInternal ? "The value case depends on converting manual effort, duplicated tooling, and governance risk into measurable cost avoidance." : "The value case depends on customer acquisition holding to plan and unit economics improving as the product scales."}`
@@ -376,7 +361,14 @@ export function deriveLegacyFinancialSummary(report: FeasibilityReport): LegacyF
 
   return {
     investmentRange: fin.investmentRange ? withCurrency(fin.investmentRange, cur) : "Requires validation",
-    breakEven: formatBreakEvenDisplay(fin.breakEvenSummary),
+    breakEven: (() => {
+      const t = s(fin.breakEvenSummary || "").trim();
+      if (!t) return "Requires validation";
+      const m = t.match(/(month\s*\d+|m\d+|year\s*\d+|y\d+|q[1-4]\s*y?\d*)/i);
+      if (m) return m[0].replace(/\s+/g, " ").replace(/^(\w)/, (c) => c.toUpperCase());
+      const head = t.split(/[,.;:(]| based| by| with/i)[0].trim();
+      return head.length > 28 ? head.slice(0, 26) + "…" : head;
+    })(),
     ltvCac: s(fin.ltvCacRatio) || "Requires validation",
     capExMid: fin.capExTotal?.mid != null ? `${fin.capExTotal.mid.toLocaleString("en-US")} ${cur}`.trim() : "Requires validation",
     opExMonthly: opExMonthly > 0 ? `${opExMonthly.toLocaleString("en-US")} ${cur}/mo`.trim() : "Requires validation",
