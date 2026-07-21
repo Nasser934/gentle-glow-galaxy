@@ -171,6 +171,22 @@ describe("slim report seed", () => {
     expect(base.fundingMix.map((item: { share: string }) => item.share)).toEqual(["40%", "35%", "25%"]);
   });
 
+  it("falls back when the AI returns an implausible break-even horizon", () => {
+    const base = buildBaseReportFromSeed({
+      seed: { ...seed, financialPlan: { ...seed.financialPlan, scenarios: seed.financialPlan.scenarios.map((scenario, index) => index === 1 ? { ...scenario, breakEvenMonths: 24_000_000 } : scenario) } },
+      inputs,
+      publicResearch,
+      inputIssues: [],
+    });
+    expect(base.financials.breakEvenSummary).toBe("24 months");
+    expect(base.financials.scenarios[1].breakEven).toBe("24 months");
+  });
+
+  it("normalizes AI percentage adoption to the 0-1 report contract", () => {
+    const base = buildBaseReportFromSeed({ seed, inputs, publicResearch, inputIssues: [] });
+    expect(base.financials.scenarios[1].adoptionRate).toBe(0.5);
+  });
+
   it("passes canonical scoring and financial validation without model-owned totals", () => {
     const expanded = buildBaseReportFromSeed({ seed, inputs, publicResearch, inputIssues: [] });
     const canonical = buildCanonicalReport({

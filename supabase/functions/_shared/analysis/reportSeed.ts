@@ -1,4 +1,4 @@
-import { parseUnitAwareNumber } from "./numbers.ts";
+import { MAX_BREAK_EVEN_MONTHS, parseUnitAwareNumber } from "./numbers.ts";
 
 const DIMENSIONS = ["financial", "market", "achievability", "risk", "timing", "operational"] as const;
 type Dimension = typeof DIMENSIONS[number];
@@ -164,7 +164,7 @@ export const REPORT_SEED_SCHEMA = {
               annualValue: { type: "number", description: "Revenue or internal financial benefit in full currency units." },
               adoptionRatePct: { type: "number" },
               volumeAssumption: { type: "string" },
-              breakEvenMonths: { type: "number" },
+              breakEvenMonths: { type: "number", minimum: 0, maximum: MAX_BREAK_EVEN_MONTHS },
               basis: { type: "string", description: "Short assumption basis under 220 characters." },
             },
             required: ["scenario", "probabilityPct", "annualValue", "adoptionRatePct", "volumeAssumption", "breakEvenMonths", "basis"],
@@ -250,6 +250,17 @@ function nonNegative(value: unknown, fallback = 0): number {
 
 function clamp(value: unknown, low: number, high: number, fallback: number): number {
   return Math.max(low, Math.min(high, finite(value, fallback)));
+}
+
+function safeBreakEvenMonths(value: unknown, fallback: number): number {
+  const candidate = Math.round(finite(value, fallback));
+  return candidate >= 0 && candidate <= MAX_BREAK_EVEN_MONTHS ? candidate : fallback;
+}
+
+function normalizedAdoptionRate(value: unknown, fallbackPercent: number): number {
+  const raw = finite(value, fallbackPercent);
+  const ratio = raw > 1 ? raw / 100 : raw;
+  return clamp(ratio, 0, 1, fallbackPercent / 100);
 }
 
 function limitedStrings(value: unknown, limit: number, fallback: string[]): string[] {
@@ -427,12 +438,12 @@ export function buildBaseReportFromSeed(args: {
   const probabilityValues = normalizedPercentages(scenarioRecords.map((scenario) => finite(scenario.probabilityPct)), [25, 50, 25]);
   const scenarios = scenarioRecords.map((scenario, index) => {
     const annualValue = nonNegative(scenario.annualValue);
-    const breakEvenMonths = Math.max(0, Math.round(finite(scenario.breakEvenMonths, [12, 24, 36][index])));
+    const breakEvenMonths = safeBreakEvenMonths(scenario.breakEvenMonths, [12, 24, 36][index]);
     const common = {
       scenario: scenarioOrder[index],
       probability: percentage(probabilityValues[index]),
       breakEven: `${breakEvenMonths} months`,
-      adoptionRate: clamp(scenario.adoptionRatePct, 0, 100, [75, 50, 25][index]),
+      adoptionRate: normalizedAdoptionRate(scenario.adoptionRatePct, [75, 50, 25][index]),
       annualValueDisplay: annualValue > 0 ? money(currency, annualValue) : "Requires validation",
       basis: text(scenario.basis, "AI-estimated assumption — validate with project data."),
     };
@@ -452,7 +463,7 @@ export function buildBaseReportFromSeed(args: {
 
   const investmentLow = capExLow + monthlyOpEx * 6;
   const investmentHigh = capExHigh + monthlyOpEx * 6;
-  const baseBreakEven = parseUnitAwareNumber(scenarios[1]?.breakEven).value ?? 24;
+  const baseBreakEven = safeBreakEvenMonths(scenarioRecords[1]?.breakEvenMonths, 24);
 
   const fundingSeed = asArray(seed.funding).map(asRecord).slice(0, 3);
   while (fundingSeed.length < 3) fundingSeed.push({});

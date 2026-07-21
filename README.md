@@ -60,6 +60,16 @@ Teams often start with a short idea, a presentation, or an incomplete business c
   <img src="./docs/assets/readme/product-overview.svg" alt="Concept AI product experience: guided brief, analysis dashboard, and executive decision room" width="100%" />
 </p>
 
+### The path from idea to decision
+
+<p align="center">
+  <img src="./docs/assets/readme/decision-pipeline-ai.png" alt="AI-generated abstract illustration of Concept AI's path from idea through evidence to a governed decision" width="100%" />
+</p>
+
+<p align="center">
+  <sub>AI-generated concept visual for the README. It is illustrative only, not a product screenshot or a measured-result claim.</sub>
+</p>
+
 ### From brief to board-ready decision
 
 ```mermaid

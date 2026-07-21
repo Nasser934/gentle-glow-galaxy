@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import type { EvidenceSource, ResearchCitation } from "@/types/analysis";
 import { prettifySource } from "@/lib/format";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 /** Resolve citations only through explicit stable source IDs. */
 export function citationsForSourceIds(
@@ -44,11 +45,13 @@ export const EvidenceChips = ({
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {matches.map((source) => {
+        const href = safeExternalUrl(source.url);
+        if (!href) return null;
         const label = source.publisher || prettifySource({ title: source.title, url: source.url });
         return (
           <a
             key={source.sourceId}
-            href={source.url}
+            href={href}
             target="_blank"
             rel="noreferrer"
             title={`${label} — ${source.quality}`}

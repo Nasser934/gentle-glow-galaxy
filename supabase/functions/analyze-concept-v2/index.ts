@@ -21,6 +21,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
 const REPORT_MODEL_ID = "google/gemini-3.5-flash";
 const PROMPT_VERSION = "concept-ai-2026-07-19.4";
 const MODEL_TIMEOUT_MS = 125_000;
+// v2 is a compatibility endpoint. Keep it in the published quota bucket until
+// a dedicated database limit is deployed, so it cannot bypass v1 accounting.
+const ANALYSIS_RATE_LIMIT_BUCKET = "analyze-concept";
 
 function allowedOrigins() {
   const configured = (Deno.env.get("ALLOWED_ORIGINS") || "")
@@ -79,15 +82,6 @@ function jsonResponse(
 
 function errorRecord(error: unknown): Record<string, unknown> {
   return typeof error === "object" && error !== null ? error as Record<string, unknown> : {};
-}
-
-function isMissingUsageControl(error: unknown) {
-  const record = errorRecord(error);
-  const code = String(record.code ?? "");
-  const message = [record.message, record.details, record.hint].map(String).join(" ").toLowerCase();
-  return ["PGRST202", "42883", "42P01"].includes(code)
-    || ((message.includes("begin_analysis_request") || message.includes("complete_analysis_request"))
-      && (message.includes("does not exist") || message.includes("could not find") || message.includes("schema cache")));
 }
 
 serve(async (req) => {
@@ -178,18 +172,13 @@ serve(async (req) => {
     }
 
     const { data: requestRows, error: requestError } = await supabaseAuth.rpc("begin_analysis_request", {
-      p_function_name: "analyze-concept-v2",
+      p_function_name: ANALYSIS_RATE_LIMIT_BUCKET,
       p_idempotency_key: idempotencyKey,
       p_request_hash: `sha256:${inputHash}`,
       p_ip_hash: ipHash,
     });
 
-    if (requestError && isMissingUsageControl(requestError)) {
-      console.warn(JSON.stringify({
-        event: "analysis_usage_control_compatibility_mode",
-        reason: "migration_not_applied",
-      }));
-    } else if (requestError || !requestRows?.length) {
+    if (requestError || !requestRows?.length) {
       console.error(JSON.stringify({
         event: "analysis_usage_control_unavailable",
         code: errorRecord(requestError).code ?? null,

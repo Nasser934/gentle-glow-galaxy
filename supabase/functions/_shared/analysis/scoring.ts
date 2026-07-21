@@ -17,6 +17,7 @@ export interface VerdictGovernance {
   overallConfidencePct: number;
   inputQuality: number;
   hasUnmitigatedCriticalRisk: boolean;
+  hasFinancialValidationBlocker?: boolean;
 }
 
 export class ScoringValidationError extends Error {
@@ -113,6 +114,10 @@ export function deriveAuthoritativeVerdict(score: number, governance: VerdictGov
   if (governance.hasUnmitigatedCriticalRisk) {
     if (verdict === "PROCEED" || verdict === "PROCEED WITH CAUTION") verdict = "REVISE";
     overrideReasons.push("unmitigated_critical_risk");
+  }
+  if (governance.hasFinancialValidationBlocker) {
+    if (verdict !== "DO NOT PROCEED") verdict = "REVISE";
+    overrideReasons.push("financial_validation_required");
   }
 
   return { verdict, baseVerdict, overrideReasons };

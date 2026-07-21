@@ -41,7 +41,8 @@ import { CapExBarChart } from "./CapExBarChart";
 import { SensitivityPanel } from "./SensitivityPanel";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 import { compactCurrencyString, isInternalProject } from "@/lib/format";
-import { numericRange, numericValue } from "@/lib/numbers";
+import { numericValue, safeBreakEvenRange } from "@/lib/numbers";
+import { safeExternalUrl } from "@/lib/safeUrl";
 
 
 const CHART_COLORS = [
@@ -151,18 +152,14 @@ const KpiCard = ({
 
 const extractShortBreakEven = (text?: string | null) => {
   if (!text) return "—";
-  const range = numericRange(text);
-  if (/month/i.test(text) && range) {
-    return range.low === range.high ? `Month ${range.low}` : `Month ${range.low}–${range.high}`;
-  }
-  if (/year/i.test(text) && range) {
-    return range.low === range.high ? `Year ${range.low}` : `Year ${range.low}–${range.high}`;
-  }
-  const monthMatch = text.match(/month\s*(\d+)/i) || text.match(/(\d+)\s*[-–]?\s*month/i);
-  if (monthMatch) return `Month ${monthMatch[1]}`;
-  const yearMatch = text.match(/year\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*year/i);
-  if (yearMatch) return `Year ${yearMatch[1]}`;
-  return "View rationale";
+  const range = safeBreakEvenRange(text);
+  if (!range) return "Requires validation";
+  const isYear = /year/i.test(text) && !/month/i.test(text);
+  const multiplier = isYear ? 12 : 1;
+  const low = isYear ? range.low / multiplier : range.low;
+  const high = isYear ? range.high / multiplier : range.high;
+  const label = isYear ? "Year" : "Month";
+  return low === high ? `${label} ${low}` : `${label} ${low}–${high}`;
 };
 
 const normalizeCurrencyDisplay = (value?: string | null) => compactCurrencyString(value);
@@ -562,8 +559,10 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <Card>
                 <CardHeader><CardTitle className="text-base">Research Citations</CardTitle></CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-2">
-                  {research.citations.slice(0, 8).map((citation) => (
-                    <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
+                  {research.citations.slice(0, 8).map((citation) => {
+                    const href = safeExternalUrl(citation.url);
+                    if (!href) return null;
+                    return <a key={href} href={href} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
                       <div className="flex flex-wrap items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <span>{citation.source}</span>
                         {citation.quality && <Badge variant="outline" className="text-[9px] normal-case">{citation.quality}</Badge>}
@@ -571,8 +570,8 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                       </div>
                       <div className="mt-1 line-clamp-2 font-medium text-foreground">{citation.title}</div>
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{citation.takeaway}</p>
-                    </a>
-                  ))}
+                    </a>;
+                  })}
                 </CardContent>
               </Card>
             </>

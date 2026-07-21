@@ -11,6 +11,13 @@ export interface ParsedUnitAwareNumber {
   unit: NumericUnit | null;
   displayText: string;
 }
+
+/**
+ * A break-even horizon is a planning assumption, not an arbitrary integer.
+ * Keep the bound shared by the server validator and every client/export path
+ * so malformed legacy rows cannot become decision KPIs.
+ */
+export const MAX_BREAK_EVEN_MONTHS = 120;
 const SCALE: Record<string, number> = {
   k: 1_000,
   thousand: 1_000,
@@ -22,7 +29,7 @@ const SCALE: Record<string, number> = {
   trillion: 1_000_000_000_000,
 };
 
-const TOKEN_RE = /-?\d[\d,]*(?:\.\d+)?\s*(?:thousand|million|billion|trillion|[kmbt])?/gi;
+const TOKEN_RE = /-?\d[\d,]*(?:\.\d+)?\s*(?:thousand|million|billion|trillion|[kmbt](?![a-z]))?/gi;
 
 function currencyFromText(text: string): CurrencyCode | null {
   const code = text.match(/\b(SAR|USD|AED|EUR|GBP)\b/i)?.[1]?.toUpperCase();
@@ -34,7 +41,7 @@ function currencyFromText(text: string): CurrencyCode | null {
 }
 
 function tokenParts(token: string): { number: number; scale: number | null } | null {
-  const match = token.trim().match(/^(-?\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|trillion|[kmbt])?$/i);
+  const match = token.trim().match(/^(-?\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|trillion|[kmbt](?![a-z]))?$/i);
   if (!match) return null;
   const number = Number(match[1].replace(/,/g, ""));
   if (!Number.isFinite(number)) return null;
@@ -119,4 +126,15 @@ export function numericRange(raw: unknown): { low: number; high: number } | null
     low: parsed.low ?? parsed.value,
     high: parsed.high ?? parsed.value,
   };
+}
+
+export function safeBreakEvenRange(raw: unknown): { low: number; high: number } | null {
+  const parsed = parseUnitAwareNumber(raw);
+  if (!parsed.valid || parsed.value === null || !["month", "year"].includes(parsed.unit ?? "")) return null;
+
+  const multiplier = parsed.unit === "year" ? 12 : 1;
+  const low = (parsed.low ?? parsed.value) * multiplier;
+  const high = (parsed.high ?? parsed.value) * multiplier;
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high > MAX_BREAK_EVEN_MONTHS) return null;
+  return { low, high };
 }

@@ -20,6 +20,7 @@ import {
   confidencePercent,
   prettifySource,
 } from "@/lib/format";
+import { safeBreakEvenRange } from "@/lib/numbers";
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -151,25 +152,7 @@ export function canonicalizeVerdict(raw: string | undefined | null): CanonicalVe
 
 /** Extract a single canonical break-even month from any free-form string. */
 export function extractBreakEvenMonth(raw: string | undefined | null): number | null {
-  const t = (raw || "").toString();
-  if (!t) return null;
-  // "Month 26", "in month 26", "month-26"
-  let m = t.match(/month[\s-]*(\d{1,3})/i);
-  if (m) return Number(m[1]);
-  // "26 months", "26-28 months" → take low end
-  m = t.match(/(\d{1,3})\s*(?:–|-|to)\s*(\d{1,3})\s*months?/i);
-  if (m) return Number(m[1]);
-  m = t.match(/(\d{1,3})\s*months?\b/i);
-  if (m) return Number(m[1]);
-  // "M26"
-  m = t.match(/\bM(\d{1,3})\b/);
-  if (m) return Number(m[1]);
-  // "Year 3" → 36
-  m = t.match(/year[\s-]*(\d{1,2})/i);
-  if (m) return Number(m[1]) * 12;
-  m = t.match(/\bY(\d{1,2})\b/);
-  if (m) return Number(m[1]) * 12;
-  return null;
+  return safeBreakEvenRange(raw)?.low ?? null;
 }
 
 function buildBreakEvenDisplay(raw: string | undefined | null, month: number | null): string {
@@ -181,7 +164,7 @@ function buildBreakEvenDisplay(raw: string | undefined | null, month: number | n
     }
     return `Month ${month}`;
   }
-  return t || "Requires validation";
+  return "Requires validation";
 }
 
 /* ---------------------------- Financial helpers --------------------------- */

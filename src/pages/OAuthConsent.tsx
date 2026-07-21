@@ -26,6 +26,9 @@ type OAuthApi = {
   denyAuthorization: (id: string) => Promise<OAuthResult<OAuthAuthorizationDetails>>;
 };
 const oauth = (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const text = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
@@ -48,7 +51,7 @@ export default function OAuthConsent() {
         const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
         if (!active) return;
         if (error) return setError(error.message || "Could not load authorization request.");
-        const immediate = data?.redirect_url ?? data?.redirect_to;
+        const immediate = text(data?.redirect_url || data?.redirect_to);
         if (immediate && !data?.client) {
           window.location.href = immediate;
           return;
@@ -73,7 +76,7 @@ export default function OAuthConsent() {
         setBusy(false);
         return setError(error.message);
       }
-      const target = data?.redirect_url ?? data?.redirect_to;
+      const target = text(data?.redirect_url || data?.redirect_to);
       if (!target) {
         setBusy(false);
         return setError("No redirect returned by the authorization server.");
@@ -105,10 +108,12 @@ export default function OAuthConsent() {
     );
   }
 
-  const clientName = details.client?.name ?? details.client?.client_name ?? "an app";
-  const redirect = details.client?.redirect_uris?.[0] ?? details.redirect_url ?? "";
+  const client = asRecord(details.client);
+  const clientName = text(client.name || client.client_name, "an app");
+  const clientRedirects = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
+  const redirect = text(clientRedirects[0] || details.redirect_url);
   const scopes: string[] = Array.isArray(details.scopes)
-    ? details.scopes
+    ? details.scopes.filter((scope): scope is string => typeof scope === "string")
     : typeof details.scope === "string"
       ? details.scope.split(/\s+/).filter(Boolean)
       : [];

@@ -398,16 +398,25 @@ export const ReportFamilyPanel = ({
   const navigate = useNavigate();
   const [rows, setRows] = useState<FamilyRow[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     listReportVersions(reportId)
       .then((data) => { if (!cancelled) setRows((data as FamilyRow[]) || []); })
-      .catch(() => { if (!cancelled) setRows([]); })
+      .catch(() => { if (!cancelled) { setRows(null); setLoadError(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [reportId]);
   if (loading) return null;
+  if (loadError) return (
+    <Card>
+      <CardContent className="flex items-center gap-2 p-4 text-sm text-warning">
+        <AlertCircle className="h-4 w-4 shrink-0" /> Could not load report versions. Try again later.
+      </CardContent>
+    </Card>
+  );
   if (!rows || rows.length <= 1) {
     if (!showEmpty) return null;
     return (

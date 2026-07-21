@@ -68,6 +68,7 @@ type Row = {
   created_at: string;
   updated_at: string;
   parent_report_id: string | null;
+  root_report_id: string | null;
   archived_at: string | null;
 };
 
@@ -81,7 +82,7 @@ type Group = {
 function groupRows(rows: Row[]): Group[] {
   const buckets = new Map<string, Row[]>();
   for (const r of rows) {
-    const key = r.parent_report_id ?? r.id;
+    const key = r.root_report_id ?? r.parent_report_id ?? r.id;
     const arr = buckets.get(key) ?? [];
     arr.push(r);
     buckets.set(key, arr);
@@ -267,6 +268,7 @@ const Dashboard = () => {
             <button
               key={s.key}
               onClick={() => setScope(s.key)}
+              aria-pressed={active}
               className={`h-8 flex-1 rounded-md px-3 text-[12px] font-medium transition-colors ${
                 active
                   ? "bg-primary text-primary-foreground"
@@ -284,6 +286,8 @@ const Dashboard = () => {
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
+            id="report-search"
+            aria-label="Search analyses"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search analyses…"
@@ -297,6 +301,7 @@ const Dashboard = () => {
               <button
                 key={f.key}
                 onClick={() => setStatus(f.key)}
+                aria-pressed={active}
                 className={`h-8 rounded-md border px-2.5 text-[12px] font-medium transition-colors ${
                   active
                     ? "border-primary bg-primary text-primary-foreground"
@@ -536,7 +541,7 @@ function DesktopGroup({
       <tr className="hover:bg-background/60">
         <td className="px-2 py-3 text-center">
           {hasMulti ? (
-            <button onClick={onToggle} aria-label={expanded ? "Collapse versions" : "Expand versions"} className="text-muted-foreground hover:text-foreground">
+            <button onClick={onToggle} aria-expanded={expanded} aria-label={expanded ? "Collapse versions" : "Expand versions"} className="text-muted-foreground hover:text-foreground">
               {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           ) : null}
@@ -648,6 +653,8 @@ function MobileCard({
         <>
           <button
             onClick={onToggle}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide report versions" : "Show report versions"}
             className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
