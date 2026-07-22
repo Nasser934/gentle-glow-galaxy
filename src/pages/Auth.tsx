@@ -29,7 +29,14 @@ const AuthPage = () => {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const redirectTo = (loc.state as any)?.from || "/analyze";
+  // Preserve the caller's intended path from either navigation state OR ?next=.
+  // Required so OAuth consent (/.lovable/oauth/consent?authorization_id=...)
+  // survives sign-in AND social OAuth round-trips.
+  const nextParam = new URLSearchParams(loc.search).get("next");
+  const isSafeNext = (v: string | null | undefined): v is string =>
+    !!v && v.startsWith("/") && !v.startsWith("//");
+  const stateFrom = (loc.state as any)?.from as string | undefined;
+  const redirectTo = isSafeNext(stateFrom) ? stateFrom : isSafeNext(nextParam) ? nextParam : "/analyze";
 
   useEffect(() => {
     if (!authLoading && user) navigate(redirectTo, { replace: true });
@@ -63,7 +70,9 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
+      // Use a stable same-origin URL; the useEffect above navigates to
+      // `redirectTo` (including OAuth consent) once the session hydrates.
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
       if (result.error) throw result.error;
     } catch (e: any) {
       toast.error(e?.message || "Google sign-in failed");
