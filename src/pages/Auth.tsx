@@ -70,7 +70,9 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + redirectTo });
+      // Use a stable same-origin URL; the useEffect above navigates to
+      // `redirectTo` (including OAuth consent) once the session hydrates.
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
       if (result.error) throw result.error;
     } catch (e: any) {
       toast.error(e?.message || "Google sign-in failed");
