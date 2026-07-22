@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "sdk_version": "0.24.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://smjiyjenxbtfiiovxbnq.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "concept-ai-mcp",
+      "version": "0.1.0",
+      "title": "Concept AI"
+    },
+    "tools": [
+      {
+        "name": "list_reports",
+        "title": "List my reports",
+        "description": "List feasibility reports owned by the signed-in user. Returns id, title, industry, status, verdict, and updated_at, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "default": 20,
+              "description": "Maximum reports to return (1-50).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "include_archived": {
+              "default": false,
+              "description": "Include soft-archived reports.",
+              "type": "boolean"
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_report",
+        "title": "Get a report",
+        "description": "Fetch a full feasibility report (inputs, analysis output, verdict) by report id or slug. Only returns reports the signed-in user can access.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Report UUID.",
+              "type": "string"
+            },
+            "slug": {
+              "description": "Public share slug.",
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_comments",
+        "title": "List comments on a report",
+        "description": "List all comments on a report the signed-in user can access.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID."
+            }
+          },
+          "required": [
+            "report_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_comment",
+        "title": "Add a comment to a report",
+        "description": "Post a new comment on a report as the signed-in user.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID."
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "description": "Comment body (plain text or markdown)."
+            },
+            "section": {
+              "description": "Optional section identifier the comment refers to.",
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "required": [
+            "report_id",
+            "body"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "set_report_status",
+        "title": "Change a report's status",
+        "description": "Update the decision status of a report the signed-in user owns. Allowed statuses: draft, in_review, approved, rejected, archived.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "in_review",
+                "approved",
+                "rejected",
+                "archived"
+              ],
+              "description": "New status."
+            },
+            "note": {
+              "description": "Optional note recorded in status history.",
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "report_id",
+            "status"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
