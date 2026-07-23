@@ -207,18 +207,579 @@ var set_report_status_default = defineTool5({
   }
 });
 
+// src/lib/mcp/tools/get_analysis_schema.ts
+import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.24.0";
+
+// src/lib/mcp/shared.ts
+import { createClient as createClient6 } from "npm:@supabase/supabase-js@^2.95.3";
+function sbClient(ctx) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  return createClient6(url, key, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+function err(message) {
+  return { content: [{ type: "text", text: message }], isError: true };
+}
+function ok(text, structured) {
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: structured
+  };
+}
+var MAX_PAYLOAD_BYTES = 256 * 1024;
+var EXTERNAL_ANALYSIS_SCHEMA = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  title: "ConceptAIExternalAnalysis",
+  type: "object",
+  required: ["title", "industry", "inputs", "analysis"],
+  properties: {
+    title: { type: "string", minLength: 3, maxLength: 200 },
+    industry: {
+      type: "string",
+      enum: ["pmo", "it", "telecom", "infrastructure", "government", "real_estate", "other"]
+    },
+    inputs: {
+      type: "object",
+      description: "Project brief: overview, scope, assumptions, risks, financials.",
+      properties: {
+        overview: { type: "string" },
+        scope: { type: "string" },
+        assumptions: { type: "array", items: { type: "string" } },
+        risks: { type: "array", items: { type: "string" } },
+        budget: { type: ["number", "string"] },
+        timeline: { type: "string" },
+        region: { type: "string" }
+      },
+      additionalProperties: true
+    },
+    analysis: {
+      type: "object",
+      required: ["fmarto", "verdict"],
+      properties: {
+        fmarto: {
+          type: "object",
+          description: "Proposed FMART-O scores. Concept AI recomputes canonical values.",
+          properties: {
+            feasibility: { type: "number", minimum: 0, maximum: 100 },
+            market: { type: "number", minimum: 0, maximum: 100 },
+            architecture: { type: "number", minimum: 0, maximum: 100 },
+            risk: { type: "number", minimum: 0, maximum: 100 },
+            timeline: { type: "number", minimum: 0, maximum: 100 },
+            operations: { type: "number", minimum: 0, maximum: 100 },
+            rationale: { type: "object", additionalProperties: { type: "string" } }
+          }
+        },
+        verdict: {
+          type: "object",
+          required: ["recommendation"],
+          properties: {
+            recommendation: {
+              type: "string",
+              enum: ["proceed", "proceed_with_caution", "revise", "do_not_proceed"]
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            summary: { type: "string", maxLength: 2e3 }
+          }
+        },
+        market: {
+          type: "object",
+          properties: {
+            tam: { type: ["string", "number"] },
+            sam: { type: ["string", "number"] },
+            som: { type: ["string", "number"] },
+            cagr: { type: ["string", "number"] },
+            competitors: { type: "array" },
+            signals: { type: "array" }
+          }
+        },
+        financials: {
+          type: "object",
+          description: "Proposed financials. Concept AI recomputes totals & break-even.",
+          properties: {
+            capex: { type: "array" },
+            opex: { type: "array" },
+            revenue: { type: "array" },
+            scenarios: { type: "array" },
+            break_even_months: { type: "number" }
+          }
+        },
+        risks: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["title", "severity"],
+            properties: {
+              title: { type: "string" },
+              severity: { type: "string", enum: ["low", "material", "high"] },
+              likelihood: { type: "string", enum: ["low", "medium", "high"] },
+              mitigation: { type: "string" }
+            }
+          }
+        },
+        recommendations: { type: "array", items: { type: "string" } },
+        next_steps: { type: "array", items: { type: "string" } },
+        claims: {
+          type: "array",
+          description: "Claim-to-source mappings.",
+          items: {
+            type: "object",
+            required: ["id", "text", "sources"],
+            properties: {
+              id: { type: "string" },
+              text: { type: "string" },
+              confidence: { type: "string", enum: ["high", "medium", "low"] },
+              sources: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["url"],
+                  properties: {
+                    url: { type: "string", format: "uri" },
+                    domain: { type: "string" },
+                    title: { type: "string" },
+                    published_at: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        evidence_warnings: { type: "array", items: { type: "string" } }
+      }
+    },
+    agent_metadata: {
+      type: "object",
+      description: "Optional info about the external assistant (model, version).",
+      properties: {
+        model: { type: "string" },
+        model_version: { type: "string" },
+        notes: { type: "string" }
+      }
+    }
+  },
+  additionalProperties: false
+};
+var ALLOWED_INDUSTRIES = /* @__PURE__ */ new Set([
+  "pmo",
+  "it",
+  "telecom",
+  "infrastructure",
+  "government",
+  "real_estate",
+  "other"
+]);
+var ALLOWED_RECOMMENDATIONS = /* @__PURE__ */ new Set([
+  "proceed",
+  "proceed_with_caution",
+  "revise",
+  "do_not_proceed"
+]);
+var ALLOWED_SEVERITIES = /* @__PURE__ */ new Set(["low", "material", "high"]);
+function validateExternalAnalysis(payload) {
+  const issues = [];
+  if (!payload || typeof payload !== "object") {
+    return [{ path: "$", message: "Payload must be an object" }];
+  }
+  const p = payload;
+  if (typeof p.title !== "string" || p.title.trim().length < 3 || p.title.length > 200) {
+    issues.push({ path: "title", message: "title must be a string (3\u2013200 chars)" });
+  }
+  if (typeof p.industry !== "string" || !ALLOWED_INDUSTRIES.has(p.industry)) {
+    issues.push({ path: "industry", message: `industry must be one of: ${[...ALLOWED_INDUSTRIES].join(", ")}` });
+  }
+  if (!p.inputs || typeof p.inputs !== "object") {
+    issues.push({ path: "inputs", message: "inputs object is required" });
+  }
+  if (!p.analysis || typeof p.analysis !== "object") {
+    issues.push({ path: "analysis", message: "analysis object is required" });
+    return issues;
+  }
+  const a = p.analysis;
+  if (!a.fmarto || typeof a.fmarto !== "object") {
+    issues.push({ path: "analysis.fmarto", message: "fmarto scores object is required" });
+  } else {
+    for (const dim of ["feasibility", "market", "architecture", "risk", "timeline", "operations"]) {
+      const v = a.fmarto[dim];
+      if (v !== void 0 && (typeof v !== "number" || v < 0 || v > 100)) {
+        issues.push({ path: `analysis.fmarto.${dim}`, message: "must be a number 0\u2013100" });
+      }
+    }
+  }
+  if (!a.verdict || typeof a.verdict !== "object") {
+    issues.push({ path: "analysis.verdict", message: "verdict object is required" });
+  } else {
+    if (!ALLOWED_RECOMMENDATIONS.has(a.verdict.recommendation)) {
+      issues.push({
+        path: "analysis.verdict.recommendation",
+        message: `must be one of: ${[...ALLOWED_RECOMMENDATIONS].join(", ")}`
+      });
+    }
+    if (a.verdict.confidence !== void 0) {
+      const c = a.verdict.confidence;
+      if (typeof c !== "number" || c < 0 || c > 1) {
+        issues.push({ path: "analysis.verdict.confidence", message: "confidence must be 0\u20131" });
+      }
+    }
+  }
+  if (a.risks && Array.isArray(a.risks)) {
+    a.risks.forEach((r, i) => {
+      if (!r || typeof r !== "object" || typeof r.title !== "string") {
+        issues.push({ path: `analysis.risks[${i}].title`, message: "title required" });
+      }
+      if (!r || !ALLOWED_SEVERITIES.has(r?.severity)) {
+        issues.push({ path: `analysis.risks[${i}].severity`, message: "severity must be low|material|high" });
+      }
+    });
+  }
+  if (a.claims && Array.isArray(a.claims)) {
+    a.claims.forEach((c, i) => {
+      if (!c?.id || typeof c.id !== "string") {
+        issues.push({ path: `analysis.claims[${i}].id`, message: "claim id required" });
+      }
+      if (!Array.isArray(c?.sources) || c.sources.length === 0) {
+        issues.push({ path: `analysis.claims[${i}].sources`, message: "at least one source required" });
+      }
+    });
+  }
+  return issues;
+}
+function normalizeToCanonicalOutput(payload) {
+  const a = payload.analysis ?? {};
+  return {
+    schema_version: "external_agent.v1",
+    source_mode: "external_agent",
+    fmarto_scores: a.fmarto ?? {},
+    verdict: a.verdict ?? {},
+    market: a.market ?? {},
+    financials: a.financials ?? {},
+    risks: Array.isArray(a.risks) ? a.risks : [],
+    recommendations: Array.isArray(a.recommendations) ? a.recommendations : [],
+    next_steps: Array.isArray(a.next_steps) ? a.next_steps : [],
+    claims: Array.isArray(a.claims) ? a.claims : [],
+    evidence_warnings: Array.isArray(a.evidence_warnings) ? a.evidence_warnings : [],
+    agent_metadata: payload.agent_metadata ?? {}
+  };
+}
+var FORBIDDEN_INPUT_KEYS = /* @__PURE__ */ new Set([
+  "user_id",
+  "id",
+  "slug",
+  "display_id",
+  "canonical_validated",
+  "root_report_id",
+  "parent_report_id",
+  "created_at",
+  "updated_at",
+  "is_public",
+  "archived_at"
+]);
+
+// src/lib/mcp/tools/get_analysis_schema.ts
+var get_analysis_schema_default = defineTool6({
+  name: "get_analysis_schema",
+  title: "Get Concept AI external-analysis schema",
+  description: "Return the JSON schema that external assistants must follow when submitting completed feasibility analysis to Concept AI (create_external_analysis / update_external_analysis).",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: () => ok(JSON.stringify(EXTERNAL_ANALYSIS_SCHEMA, null, 2), {
+    schema: EXTERNAL_ANALYSIS_SCHEMA
+  })
+});
+
+// src/lib/mcp/tools/validate_external_analysis.ts
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z6 } from "npm:zod@^4.4.3";
+var validate_external_analysis_default = defineTool7({
+  name: "validate_external_analysis",
+  title: "Validate external analysis payload",
+  description: "Dry-run validation of a proposed external analysis payload against Concept AI's schema. Returns a list of issues (empty = valid). Does not persist anything.",
+  inputSchema: {
+    payload: z6.any().describe("The external analysis JSON payload to validate.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ payload }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const raw = JSON.stringify(payload ?? {});
+    if (raw.length > MAX_PAYLOAD_BYTES) {
+      return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+    }
+    const issues = validateExternalAnalysis(payload);
+    return ok(
+      issues.length === 0 ? "Payload is valid." : `Found ${issues.length} issue(s):
+${issues.map((i) => `- ${i.path}: ${i.message}`).join("\n")}`,
+      { valid: issues.length === 0, issues }
+    );
+  }
+});
+
+// src/lib/mcp/tools/create_external_analysis.ts
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z7 } from "npm:zod@^4.4.3";
+var create_external_analysis_default = defineTool8({
+  name: "create_external_analysis",
+  title: "Create report from external analysis",
+  description: "Create a new Concept AI report from a completed external-assistant analysis. Concept AI validates the payload, stores a canonical report (source_mode=external_agent), and recomputes authoritative FMART-O scores & financial totals. Rejects client-supplied ownership fields.",
+  inputSchema: {
+    idempotency_key: z7.string().min(8).max(128).describe("Unique key per submission to safely retry without duplicates."),
+    payload: z7.any().describe("External analysis JSON matching get_analysis_schema.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  handler: async ({ idempotency_key, payload }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const userId = ctx.getUserId();
+    const raw = JSON.stringify(payload ?? {});
+    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+    if (payload && typeof payload === "object") {
+      for (const k of Object.keys(payload)) {
+        if (FORBIDDEN_INPUT_KEYS.has(k)) delete payload[k];
+      }
+    }
+    const issues = validateExternalAnalysis(payload);
+    if (issues.length > 0) {
+      return {
+        content: [{ type: "text", text: `Validation failed with ${issues.length} issue(s).` }],
+        structuredContent: { valid: false, issues },
+        isError: true
+      };
+    }
+    const sb = sbClient(ctx);
+    const { data: prior } = await sb.from("mcp_write_idempotency").select("report_id, response").eq("user_id", userId).eq("tool_name", "create_external_analysis").eq("idempotency_key", idempotency_key).maybeSingle();
+    if (prior?.report_id) {
+      return ok(`Report already created (idempotent): ${prior.report_id}`, {
+        report_id: prior.report_id,
+        idempotent: true,
+        ...prior.response
+      });
+    }
+    const canonical = normalizeToCanonicalOutput(payload);
+    const insert = {
+      user_id: userId,
+      title: String(payload.title).slice(0, 200),
+      industry: String(payload.industry),
+      inputs: payload.inputs ?? {},
+      output: canonical,
+      source_mode: "external_agent",
+      external_agent_metadata: payload.agent_metadata ?? {},
+      status: "draft"
+    };
+    const { data, error } = await sb.from("reports").insert(insert).select("id, slug, display_id").maybeSingle();
+    if (error) return err(error.message);
+    if (!data) return err("Failed to create report");
+    await sb.from("mcp_write_idempotency").insert({
+      user_id: userId,
+      tool_name: "create_external_analysis",
+      idempotency_key,
+      report_id: data.id,
+      response: { slug: data.slug, display_id: data.display_id }
+    });
+    return ok(`Report ${data.display_id} created (id: ${data.id}). Concept AI will recompute canonical scores.`, {
+      report_id: data.id,
+      slug: data.slug,
+      display_id: data.display_id
+    });
+  }
+});
+
+// src/lib/mcp/tools/update_external_analysis.ts
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z8 } from "npm:zod@^4.4.3";
+var update_external_analysis_default = defineTool9({
+  name: "update_external_analysis",
+  title: "Update an external-agent report",
+  description: "Replace the analysis of an existing external-agent report you own. Concept AI re-validates and recomputes canonical scores. Reports created via the in-app workflow cannot be updated through this tool.",
+  inputSchema: {
+    report_id: z8.string().uuid().describe("Report UUID to update."),
+    idempotency_key: z8.string().min(8).max(128).describe("Unique key per update."),
+    payload: z8.any().describe("Full external analysis JSON (same shape as create).")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  handler: async ({ report_id, idempotency_key, payload }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const userId = ctx.getUserId();
+    const raw = JSON.stringify(payload ?? {});
+    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+    if (payload && typeof payload === "object") {
+      for (const k of Object.keys(payload)) {
+        if (FORBIDDEN_INPUT_KEYS.has(k)) delete payload[k];
+      }
+    }
+    const issues = validateExternalAnalysis(payload);
+    if (issues.length > 0) {
+      return {
+        content: [{ type: "text", text: `Validation failed with ${issues.length} issue(s).` }],
+        structuredContent: { valid: false, issues },
+        isError: true
+      };
+    }
+    const sb = sbClient(ctx);
+    const { data: prior } = await sb.from("mcp_write_idempotency").select("response").eq("user_id", userId).eq("tool_name", "update_external_analysis").eq("idempotency_key", idempotency_key).maybeSingle();
+    if (prior) return ok("Update already applied (idempotent).", { idempotent: true });
+    const { data: current } = await sb.from("reports").select("id, user_id, source_mode").eq("id", report_id).maybeSingle();
+    if (!current) return err("Report not found or not accessible.");
+    if (current.user_id !== userId) return err("Only the report owner can update it.");
+    if (current.source_mode !== "external_agent") {
+      return err("This report was not created by an external assistant; use the in-app workflow to edit it.");
+    }
+    const canonical = normalizeToCanonicalOutput(payload);
+    const { error: updErr } = await sb.from("reports").update({
+      title: String(payload.title).slice(0, 200),
+      industry: String(payload.industry),
+      inputs: payload.inputs ?? {},
+      output: canonical,
+      external_agent_metadata: payload.agent_metadata ?? {}
+    }).eq("id", report_id);
+    if (updErr) return err(updErr.message);
+    await sb.from("mcp_write_idempotency").insert({
+      user_id: userId,
+      tool_name: "update_external_analysis",
+      idempotency_key,
+      report_id,
+      response: {}
+    });
+    return ok(`Report ${report_id} updated.`, { report_id });
+  }
+});
+
+// src/lib/mcp/tools/generate_report_exports.ts
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z9 } from "npm:zod@^4.4.3";
+var FORMATS = ["pdf", "xlsx", "pptx"];
+function siteOrigin() {
+  return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
+}
+var generate_report_exports_default = defineTool10({
+  name: "generate_report_exports",
+  title: "Queue report exports (PDF / XLSX / PPTX)",
+  description: "Queue one or more export jobs for a report you own. Concept AI generates the files with its own templates and export engines \u2014 external assistants must NOT upload pre-generated files. Returns a display URL where the exports are produced and downloaded.",
+  inputSchema: {
+    report_id: z9.string().uuid().describe("Report UUID."),
+    formats: z9.array(z9.enum(FORMATS)).min(1).max(3).describe("Which formats to generate: pdf, xlsx, pptx."),
+    idempotency_key: z9.string().min(8).max(128).describe("Unique key per export request.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  handler: async ({ report_id, formats, idempotency_key }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const userId = ctx.getUserId();
+    const sb = sbClient(ctx);
+    const { data: report } = await sb.from("reports").select("id, user_id, slug").eq("id", report_id).maybeSingle();
+    if (!report) return err("Report not found or not accessible.");
+    if (report.user_id !== userId) return err("Only the report owner can generate exports.");
+    const displayUrl = `${siteOrigin()}/r/${report.slug}?export=1`;
+    const rows = formats.map((format) => ({
+      report_id,
+      user_id: userId,
+      format,
+      status: "queued",
+      display_url: displayUrl,
+      idempotency_key,
+      requested_by: "mcp"
+    }));
+    const { data, error } = await sb.from("report_exports").upsert(rows, { onConflict: "user_id,report_id,format,idempotency_key", ignoreDuplicates: false }).select("id, format, status, display_url");
+    if (error) return err(error.message);
+    return ok(
+      `Queued ${data?.length ?? 0} export(s). Open the display URL to produce the files: ${displayUrl}`,
+      { exports: data ?? [], display_url: displayUrl }
+    );
+  }
+});
+
+// src/lib/mcp/tools/get_export_status.ts
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z10 } from "npm:zod@^4.4.3";
+var get_export_status_default = defineTool11({
+  name: "get_export_status",
+  title: "Get export job status",
+  description: "Fetch the current status of a single export job (queued, ready, or failed).",
+  inputSchema: {
+    export_id: z10.string().uuid().describe("Export job UUID.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ export_id }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const { data, error } = await sbClient(ctx).from("report_exports").select("id, report_id, format, status, display_url, error, created_at, updated_at").eq("id", export_id).maybeSingle();
+    if (error) return err(error.message);
+    if (!data) return err("Export job not found or not accessible.");
+    return ok(`Status: ${data.status}${data.error ? ` \u2014 ${data.error}` : ""}`, { export: data });
+  }
+});
+
+// src/lib/mcp/tools/list_report_exports.ts
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z11 } from "npm:zod@^4.4.3";
+var list_report_exports_default = defineTool12({
+  name: "list_report_exports",
+  title: "List export jobs for a report",
+  description: "List all export jobs (PDF/XLSX/PPTX) for a report you own, newest first.",
+  inputSchema: {
+    report_id: z11.string().uuid().describe("Report UUID."),
+    limit: z11.number().int().min(1).max(50).default(20)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ report_id, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    const { data, error } = await sbClient(ctx).from("report_exports").select("id, format, status, display_url, error, created_at, updated_at").eq("report_id", report_id).order("created_at", { ascending: false }).limit(limit);
+    if (error) return err(error.message);
+    return ok(JSON.stringify(data ?? [], null, 2), { exports: data ?? [] });
+  }
+});
+
+// src/lib/mcp/tools/get_report_display_link.ts
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z12 } from "npm:zod@^4.4.3";
+function siteOrigin2() {
+  return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
+}
+var get_report_display_link_default = defineTool13({
+  name: "get_report_display_link",
+  title: "Get shareable link for a report",
+  description: "Return the shareable Concept AI URL where a report is displayed (dashboard, charts, evidence, exports). Only works for reports the signed-in user can access.",
+  inputSchema: {
+    report_id: z12.string().uuid().optional().describe("Report UUID."),
+    slug: z12.string().optional().describe("Report share slug.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ report_id, slug }, ctx) => {
+    if (!ctx.isAuthenticated()) return err("Not authenticated");
+    if (!report_id && !slug) return err("Provide report_id or slug");
+    const sb = sbClient(ctx);
+    const q = sb.from("reports").select("id, slug, is_public");
+    const { data, error } = report_id ? await q.eq("id", report_id).maybeSingle() : await q.eq("slug", slug).maybeSingle();
+    if (error) return err(error.message);
+    if (!data) return err("Report not found or not accessible.");
+    const url = `${siteOrigin2()}/r/${data.slug}`;
+    return ok(url, { url, slug: data.slug, is_public: data.is_public });
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "smjiyjenxbtfiiovxbnq";
 var mcp_default = defineMcp({
   name: "concept-ai-mcp",
   title: "Concept AI",
-  version: "0.1.0",
-  instructions: "Tools for Concept AI (FMART-O feasibility analysis). Use list_reports to browse the user's reports, get_report to read one in full, list_comments/add_comment to collaborate, and set_report_status to move a report through draft \u2192 in_review \u2192 approved / rejected / archived.",
+  version: "0.2.0",
+  instructions: "Concept AI feasibility analysis (FMART-O). External assistants may research the web and submit completed analysis JSON via create_external_analysis / update_external_analysis (use get_analysis_schema first, then validate_external_analysis). Concept AI owns all validation, canonical FMART-O scoring, financial totals, dashboards, charts, versioning, and export file generation (PDF/XLSX/PPTX). Do NOT generate or upload PDF/Excel/PowerPoint files \u2014 use generate_report_exports to queue Concept AI's export engine and get_report_display_link to point the user to the produced files. Existing tools: list_reports, get_report, list_comments, add_comment, set_report_status.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
-  tools: [list_reports_default, get_report_default, list_comments_default, add_comment_default, set_report_status_default]
+  tools: [
+    list_reports_default,
+    get_report_default,
+    list_comments_default,
+    add_comment_default,
+    set_report_status_default,
+    get_analysis_schema_default,
+    validate_external_analysis_default,
+    create_external_analysis_default,
+    update_external_analysis_default,
+    generate_report_exports_default,
+    get_export_status_default,
+    list_report_exports_default,
+    get_report_display_link_default
+  ]
 });
 
 // lovable-mcp-supabase-entry.ts

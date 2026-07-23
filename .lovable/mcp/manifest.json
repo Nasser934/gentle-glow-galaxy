@@ -12,7 +12,7 @@
   "mcp": {
     "server": {
       "name": "concept-ai-mcp",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "title": "Concept AI"
     },
     "tools": [
@@ -174,6 +174,245 @@
             "report_id",
             "status"
           ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_analysis_schema",
+        "title": "Get Concept AI external-analysis schema",
+        "description": "Return the JSON schema that external assistants must follow when submitting completed feasibility analysis to Concept AI (create_external_analysis / update_external_analysis).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "validate_external_analysis",
+        "title": "Validate external analysis payload",
+        "description": "Dry-run validation of a proposed external analysis payload against Concept AI's schema. Returns a list of issues (empty = valid). Does not persist anything.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "payload": {
+              "description": "The external analysis JSON payload to validate."
+            }
+          },
+          "required": [
+            "payload"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_external_analysis",
+        "title": "Create report from external analysis",
+        "description": "Create a new Concept AI report from a completed external-assistant analysis. Concept AI validates the payload, stores a canonical report (source_mode=external_agent), and recomputes authoritative FMART-O scores & financial totals. Rejects client-supplied ownership fields.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "description": "Unique key per submission to safely retry without duplicates."
+            },
+            "payload": {
+              "description": "External analysis JSON matching get_analysis_schema."
+            }
+          },
+          "required": [
+            "idempotency_key",
+            "payload"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_external_analysis",
+        "title": "Update an external-agent report",
+        "description": "Replace the analysis of an existing external-agent report you own. Concept AI re-validates and recomputes canonical scores. Reports created via the in-app workflow cannot be updated through this tool.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID to update."
+            },
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "description": "Unique key per update."
+            },
+            "payload": {
+              "description": "Full external analysis JSON (same shape as create)."
+            }
+          },
+          "required": [
+            "report_id",
+            "idempotency_key",
+            "payload"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "generate_report_exports",
+        "title": "Queue report exports (PDF / XLSX / PPTX)",
+        "description": "Queue one or more export jobs for a report you own. Concept AI generates the files with its own templates and export engines — external assistants must NOT upload pre-generated files. Returns a display URL where the exports are produced and downloaded.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID."
+            },
+            "formats": {
+              "minItems": 1,
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "pdf",
+                  "xlsx",
+                  "pptx"
+                ]
+              },
+              "description": "Which formats to generate: pdf, xlsx, pptx."
+            },
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "description": "Unique key per export request."
+            }
+          },
+          "required": [
+            "report_id",
+            "formats",
+            "idempotency_key"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_export_status",
+        "title": "Get export job status",
+        "description": "Fetch the current status of a single export job (queued, ready, or failed).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "export_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Export job UUID."
+            }
+          },
+          "required": [
+            "export_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_report_exports",
+        "title": "List export jobs for a report",
+        "description": "List all export jobs (PDF/XLSX/PPTX) for a report you own, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report UUID."
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "report_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_report_display_link",
+        "title": "Get shareable link for a report",
+        "description": "Return the shareable Concept AI URL where a report is displayed (dashboard, charts, evidence, exports). Only works for reports the signed-in user can access.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "description": "Report UUID.",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "slug": {
+              "description": "Report share slug.",
+              "type": "string"
+            }
+          }
         },
         "outputSchema": null
       }
