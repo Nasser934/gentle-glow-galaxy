@@ -154,6 +154,13 @@ const MiniInsight = ({ title, items, citations }: { title: string; items: string
 
 export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityReport; inputs: ConceptInputs }) => {
   const cur = report.financials.currency;
+  const risks = Array.isArray(report.risks) ? report.risks : [];
+  const fundingMix = Array.isArray(report.fundingMix) ? report.fundingMix : [];
+  const competitors = Array.isArray(report.competitors) ? report.competitors : [];
+  const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
+  const nextSteps = Array.isArray(report.nextSteps) ? report.nextSteps : [];
+  const evidenceWarnings = Array.isArray(report.evidenceWarnings) ? report.evidenceWarnings : [];
+  const overallScore = Number.isFinite(report.scores.overall) ? report.scores.overall : 0;
   const scoreData = [
     { name: "Financial", score: report.scores.financial, finding: report.scores.financialFinding },
     { name: "Market", score: report.scores.market, finding: report.scores.marketFinding },
@@ -162,21 +169,21 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
     { name: "Risk", score: report.scores.risk, finding: report.scores.riskFinding },
     { name: "Timing", score: report.scores.timing, finding: report.scores.timingFinding },
   ];
-  const riskData = report.risks.map((risk) => ({
+  const riskData = risks.map((risk) => ({
     name: risk.name,
     exposure: levelScore(risk.probability) * levelScore(risk.impact),
     probability: levelScore(risk.probability),
     impact: levelScore(risk.impact),
     level: risk.level,
   }));
-  const fundingData = report.fundingMix.map((item) => ({ name: item.source, value: toNumber(item.share) || 1 }));
-  const scenarioData = report.financials.scenarios.map((item) => ({
+  const fundingData = fundingMix.map((item) => ({ name: item.source, value: toNumber(item.share) || 1 }));
+  const scenarioData = (report.financials.scenarios ?? []).map((item) => ({
     scenario: item.scenario,
     probability: toNumber(item.probability),
     revenue: toNumber(item.annualRevenue),
     breakEven: toNumber(item.breakEven),
   }));
-  const opExData = report.financials.opEx.map((item) => ({ name: item.category, monthly: item.monthly, annual: item.annual }));
+  const opExData = (report.financials.opEx ?? []).map((item) => ({ name: item.category, monthly: item.monthly, annual: item.annual }));
   const marketShareData = [
     { name: "TAM", value: toNumber(report.market.tamValue) || 100 },
     { name: "SAM", value: toNumber(report.market.samValue) || 35 },
@@ -187,6 +194,26 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
 
   return (
     <div className="space-y-6">
+      {evidenceWarnings.length > 0 && (
+        <section
+          className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3"
+          aria-labelledby="external-evidence-warning"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+            <div>
+              <h2 id="external-evidence-warning" className="text-sm font-semibold text-foreground">
+                Evidence warning
+              </h2>
+              <ul className="mt-1 space-y-1 text-xs leading-relaxed text-muted-foreground">
+                {evidenceWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-2xl font-bold text-foreground">{inputs.projectName} — Live Dashboard</h2>
@@ -201,10 +228,10 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
         <KpiCard
           icon={Target}
           label="Overall Score"
-          value={`${report.scores.overall.toFixed(1)} / 10`}
+          value={`${overallScore.toFixed(1)} / 10`}
           caption="FMART-O weighted"
           insight={report.scores.verdict}
-          fullValue={`${report.scores.overall.toFixed(1)} / 10`}
+          fullValue={`${overallScore.toFixed(1)} / 10`}
         />
         <KpiCard
           icon={DollarSign}
@@ -308,7 +335,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-base">Market Growth — TAM vs SAM</CardTitle></CardHeader>
-              <CardContent><MarketGrowthChart data={report.market.growthChart} currency={report.market.currency} /></CardContent>
+              <CardContent><MarketGrowthChart data={report.market.growthChart ?? []} currency={report.market.currency} /></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-base">TAM / SAM / SOM Funnel</CardTitle></CardHeader>
@@ -347,7 +374,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           <Card>
             <CardHeader><CardTitle className="text-base">Competitor Positioning</CardTitle></CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
-              {report.competitors.map((competitor) => (
+              {competitors.map((competitor) => (
                 <div key={competitor.name} className="rounded-md border border-border p-3">
                   <div className="font-semibold text-foreground">{competitor.name}</div>
                   <div className="mt-1 text-xs text-muted-foreground">{competitor.model}</div>
@@ -365,7 +392,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-base">Startup Costs (CapEx) — {cur}</CardTitle></CardHeader>
-              <CardContent><CapExBarChart data={report.financials.capEx} currency={cur} /></CardContent>
+              <CardContent><CapExBarChart data={report.financials.capEx ?? []} currency={cur} /></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-base">Operating Cost Run Rate</CardTitle></CardHeader>
@@ -487,7 +514,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
             <Card>
               <CardHeader><CardTitle className="text-base">Top Risk Controls</CardTitle></CardHeader>
               <CardContent className="space-y-2">
-                {report.risks.slice(0, 6).map((risk, i) => (
+                {risks.slice(0, 6).map((risk, i) => (
                   <div key={i} className="rounded-md border border-border p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="font-semibold text-foreground">{risk.name}</div>
@@ -546,7 +573,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4 text-primary" /> Strategic Recommendations</CardTitle></CardHeader>
               <CardContent>
                 <ul className="space-y-2 text-sm text-foreground">
-                  {report.recommendations.map((item, i) => (
+                  {recommendations.map((item, i) => (
                     <li key={i} className="flex gap-2"><span className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span><span>{item}</span></li>
                   ))}
                 </ul>
@@ -556,7 +583,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
               <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Route className="h-4 w-4 text-primary" /> Execution Roadmap</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {report.nextSteps.map((step, i) => (
+                  {nextSteps.map((step, i) => (
                     <div key={i} className="grid grid-cols-[2rem_1fr] gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</div>
                       <div className="rounded-md border border-border p-3 text-sm text-foreground">{step}</div>

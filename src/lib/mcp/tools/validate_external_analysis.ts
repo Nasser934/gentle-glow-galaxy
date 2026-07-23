@@ -1,6 +1,11 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-import { MAX_PAYLOAD_BYTES, err, ok, validateExternalAnalysis } from "../shared";
+import {
+  err,
+  ok,
+  prepareExternalAnalysisForSave,
+  validationErrorResult,
+} from "../shared";
 
 export default defineTool({
   name: "validate_external_analysis",
@@ -13,16 +18,15 @@ export default defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) {
-      return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-    }
-    const issues = validateExternalAnalysis(payload);
-    return ok(
-      issues.length === 0
-        ? "Payload is valid."
-        : `Found ${issues.length} issue(s):\n${issues.map((i) => `- ${i.path}: ${i.message}`).join("\n")}`,
-      { valid: issues.length === 0, issues },
-    );
+    const result = prepareExternalAnalysisForSave(payload, {
+      reportId: "EXTERNAL-VALIDATION",
+    });
+    if (!result.valid) return validationErrorResult(result.issues);
+    return ok("Payload is valid and can be saved in the canonical report structure.", {
+      valid: true,
+      issues: [],
+      warnings: result.warnings,
+      authoritative_scores: result.output.scores,
+    });
   },
 });

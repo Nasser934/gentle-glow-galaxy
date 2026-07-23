@@ -20,6 +20,7 @@
 // =============================================================================
 
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { assertCanonicalReportData } from "@/lib/reportContract";
 import {
   ensureEvidenceFields, sanitizeForConsumer, assessInputQuality,
   deriveAssumptionRegister, type AssumptionRow,
@@ -92,6 +93,11 @@ export interface ExportPdfPayload {
   versionFamily?: VersionFamilyEntry[];
 }
 
+export const validatePdfExportData = (
+  report: unknown,
+  inputs: unknown,
+) => assertCanonicalReportData(inputs, report);
+
 export async function exportReportToPdf(
   captureRootEl: HTMLElement | null,
   fileName: string,
@@ -103,6 +109,7 @@ export async function exportReportToPdf(
     throw new Error("Missing report data for PDF export.");
   const { report: rawReport, inputs, versionFamily } = data as ExportPdfPayload;
 
+  validatePdfExportData(rawReport, inputs);
   const baseReport = ensureEvidenceFields(rawReport, inputs);
   // Canonical export pack — single source of truth for verdict, break-even,
   // investment range and risk counts across PDF/PPTX/XLSX.

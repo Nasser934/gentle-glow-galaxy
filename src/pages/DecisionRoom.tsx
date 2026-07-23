@@ -16,6 +16,8 @@ import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
+import { validateCanonicalReportData } from "@/lib/reportContract";
+import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 
 const verdictTone = (v: string) =>
   v === "PROCEED" ? "bg-success text-success-foreground"
@@ -97,7 +99,11 @@ const DecisionRoom = () => {
 
   const { inputs, output: rawReport, title, demo, ownerId, status } = row;
   const canEditStatus = !demo && !!user && !!ownerId && user.id === ownerId;
-  const report = ensureEvidenceFields(rawReport, inputs);
+  const compatibility = validateCanonicalReportData(inputs, rawReport);
+  if (!("output" in compatibility)) {
+    return <ReportCompatibilityPanel reportId={reportId} issues={compatibility.issues} />;
+  }
+  const report = ensureEvidenceFields(compatibility.output, compatibility.inputs);
   const overallConfPct = confidencePercent(
     report.scores.confidence
       ? Object.values(report.scores.confidence).reduce((a, b) => a + (Number(b) || 0), 0) / 6

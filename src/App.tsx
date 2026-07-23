@@ -7,6 +7,8 @@ import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
+import { Loader2 } from "lucide-react";
+import { ReportRouteErrorBoundary } from "@/components/report/ReportRouteErrorBoundary";
 
 // Retry dynamic imports once, then force a hard reload on the second failure.
 // Prevents blank screens when a lazy chunk 404s after a redeploy.
@@ -46,6 +48,17 @@ const Shelled = ({ children }: { children: React.ReactNode }) => (
   <AppShell>{children}</AppShell>
 );
 
+const AppLoadingScreen = () => (
+  <div
+    className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background text-foreground"
+    role="status"
+    aria-live="polite"
+  >
+    <Loader2 className="h-7 w-7 animate-spin text-primary" aria-hidden="true" />
+    <p className="text-sm font-medium">Loading Concept AI…</p>
+  </div>
+);
+
 /**
  * Decision Room is per-report and protected — except for the public demo case,
  * which must remain reachable without auth so anyone can preview Judge Mode.
@@ -63,19 +76,19 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={null}>
+          <Suspense fallback={<AppLoadingScreen />}>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
-              <Route path="/r/:slug" element={<SharedReport />} />
+              <Route path="/r/:slug" element={<ReportRouteErrorBoundary><SharedReport /></ReportRouteErrorBoundary>} />
               <Route path="/analyze" element={<ProtectedRoute><Shelled><Analyze /></Shelled></ProtectedRoute>} />
-              <Route path="/results" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
-              <Route path="/reports/:reportId" element={<ProtectedRoute><Shelled><Results /></Shelled></ProtectedRoute>} />
+              <Route path="/results" element={<ProtectedRoute><ReportRouteErrorBoundary><Shelled><Results /></Shelled></ReportRouteErrorBoundary></ProtectedRoute>} />
+              <Route path="/reports/:reportId" element={<ProtectedRoute><ReportRouteErrorBoundary><Shelled><Results /></Shelled></ReportRouteErrorBoundary></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
               <Route path="/compare" element={<ProtectedRoute><Shelled><Compare /></Shelled></ProtectedRoute>} />
               <Route path="/decision-room" element={<ProtectedRoute><Shelled><DecisionRoomEntry /></Shelled></ProtectedRoute>} />
-              <Route path="/decision-room/:reportId" element={<DemoOrProtected><Shelled><DecisionRoom /></Shelled></DemoOrProtected>} />
+              <Route path="/decision-room/:reportId" element={<DemoOrProtected><ReportRouteErrorBoundary><Shelled><DecisionRoom /></Shelled></ReportRouteErrorBoundary></DemoOrProtected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

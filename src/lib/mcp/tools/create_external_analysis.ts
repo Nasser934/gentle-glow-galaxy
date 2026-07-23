@@ -1,13 +1,12 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import {
-  FORBIDDEN_INPUT_KEYS,
-  MAX_PAYLOAD_BYTES,
   err,
-  normalizeToCanonicalOutput,
+  externalAgentMetadata,
   ok,
+  prepareExternalAnalysisForSave,
   sbClient,
-  validateExternalAnalysis,
+  validationErrorResult,
 } from "../shared";
 
 export default defineTool({
@@ -27,24 +26,10 @@ export default defineTool({
   handler: async ({ idempotency_key, payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-
-    // Strip forbidden ownership/system keys from payload before we touch anything.
-    if (payload && typeof payload === "object") {
-      for (const k of Object.keys(payload)) {
-        if (FORBIDDEN_INPUT_KEYS.has(k)) delete (payload as any)[k];
-      }
-    }
-
-    const issues = validateExternalAnalysis(payload);
-    if (issues.length > 0) {
-      return {
-        content: [{ type: "text" as const, text: `Validation failed with ${issues.length} issue(s).` }],
-        structuredContent: { valid: false, issues },
-        isError: true as const,
-      };
-    }
+    const normalized = prepareExternalAnalysisForSave(payload, {
+      reportId: `EXT-${idempotency_key.slice(0, 20).toUpperCase()}`,
+    });
+    if (!normalized.valid) return validationErrorResult(normalized.issues);
 
     const sb = sbClient(ctx);
 
@@ -64,15 +49,16 @@ export default defineTool({
       });
     }
 
-    const canonical = normalizeToCanonicalOutput(payload);
     const insert = {
       user_id: userId,
-      title: String((payload as any).title).slice(0, 200),
-      industry: String((payload as any).industry),
-      inputs: (payload as any).inputs ?? {},
-      output: canonical,
+      title: normalized.inputs.projectName.slice(0, 200),
+      industry: normalized.inputs.industry,
+      inputs: normalized.inputs,
+      output: normalized.output,
       source_mode: "external_agent",
-      external_agent_metadata: (payload as any).agent_metadata ?? {},
+      external_agent_metadata: externalAgentMetadata(payload, normalized.warnings),
+      canonical_validated: true,
+      is_public: false,
       status: "draft" as const,
     };
     const { data, error } = await sb.from("reports").insert(insert).select("id, slug, display_id").maybeSingle();
@@ -87,10 +73,11 @@ export default defineTool({
       response: { slug: data.slug, display_id: data.display_id },
     });
 
-    return ok(`Report ${data.display_id} created (id: ${data.id}). Concept AI will recompute canonical scores.`, {
+    return ok(`Report ${data.display_id} created with canonical validated data (id: ${data.id}).`, {
       report_id: data.id,
       slug: data.slug,
       display_id: data.display_id,
+      warnings: normalized.warnings,
     });
   },
 });

@@ -212,6 +212,813 @@ import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.24.0";
 
 // src/lib/mcp/shared.ts
 import { createClient as createClient6 } from "npm:@supabase/supabase-js@^2.95.3";
+import { z as z7 } from "npm:zod@^4.4.3";
+
+// src/lib/reportContract.ts
+import { z as z6 } from "npm:zod@^4.4.3";
+var scoreDimensions = [
+  "financial",
+  "market",
+  "achievability",
+  "risk",
+  "timing",
+  "operational"
+];
+var nonEmptyString = z6.string().trim().min(1);
+var requiredString = z6.string();
+var scoreNumber = z6.number().finite().min(0).max(10);
+var nonNegativeNumber = z6.number().finite().min(0);
+var isSafeExternalHttpUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+var externalHttpUrlSchema = z6.string().trim().refine(
+  (value) => value === "" || isSafeExternalHttpUrl(value),
+  "must be empty or an absolute HTTP(S) URL"
+);
+var scoreDimensionRecordSchema = z6.object({
+  financial: z6.number().finite(),
+  market: z6.number().finite(),
+  achievability: z6.number().finite(),
+  risk: z6.number().finite(),
+  timing: z6.number().finite(),
+  operational: z6.number().finite()
+});
+var conceptInputsSchema = z6.object({
+  projectName: requiredString,
+  industry: requiredString,
+  location: requiredString,
+  description: requiredString,
+  strategicObjectives: requiredString,
+  businessModel: requiredString,
+  revenueModel: requiredString,
+  founderExperience: requiredString,
+  budgetRange: requiredString,
+  timeline: requiredString,
+  teamSize: requiredString,
+  dependencies: requiredString,
+  assumptions: requiredString,
+  constraints: requiredString,
+  successFactors: requiredString,
+  knownRisks: requiredString,
+  regulatoryConsiderations: requiredString,
+  technologyReadiness: requiredString,
+  competitorUrls: requiredString
+}).strict();
+var fmartoScoresSchema = z6.object({
+  financial: scoreNumber,
+  market: scoreNumber,
+  achievability: scoreNumber,
+  risk: scoreNumber,
+  timing: scoreNumber,
+  operational: scoreNumber,
+  overall: scoreNumber,
+  verdict: z6.enum(["PROCEED", "PROCEED WITH CAUTION", "REVISE", "DO NOT PROCEED"]),
+  financialFinding: requiredString,
+  marketFinding: requiredString,
+  achievabilityFinding: requiredString,
+  riskFinding: requiredString,
+  timingFinding: requiredString,
+  operationalFinding: requiredString,
+  weights: scoreDimensionRecordSchema.refine(
+    (weights) => scoreDimensions.every((dimension) => weights[dimension] >= 0),
+    "weights cannot be negative"
+  ).optional(),
+  confidence: scoreDimensionRecordSchema.refine(
+    (confidence) => scoreDimensions.every((dimension) => confidence[dimension] >= 0 && confidence[dimension] <= 100),
+    "confidence values must be between 0 and 100"
+  ).optional(),
+  rationale: z6.object({
+    financial: requiredString,
+    market: requiredString,
+    achievability: requiredString,
+    risk: requiredString,
+    timing: requiredString,
+    operational: requiredString
+  }).optional()
+});
+var marketSchema = z6.object({
+  tamLabel: requiredString,
+  tamValue: requiredString,
+  tamCagr: requiredString,
+  samLabel: requiredString,
+  samValue: requiredString,
+  samCagr: requiredString,
+  somLabel: requiredString,
+  somValue: requiredString,
+  somCagr: requiredString,
+  growthChart: z6.array(z6.object({
+    year: requiredString,
+    tam: nonNegativeNumber,
+    sam: nonNegativeNumber
+  })),
+  currency: requiredString
+});
+var customerSchema = z6.object({
+  ageLocation: requiredString,
+  income: requiredString,
+  goals: requiredString,
+  willingnessToPay: requiredString,
+  behavior: requiredString
+});
+var competitorSchema = z6.object({
+  name: requiredString,
+  model: requiredString,
+  weakness: requiredString,
+  edge: requiredString
+});
+var financialsSchema = z6.object({
+  currency: requiredString,
+  capExTotal: z6.object({
+    low: nonNegativeNumber,
+    high: nonNegativeNumber,
+    mid: nonNegativeNumber
+  }),
+  capEx: z6.array(z6.object({
+    category: requiredString,
+    low: nonNegativeNumber,
+    high: nonNegativeNumber,
+    notes: requiredString
+  })),
+  opEx: z6.array(z6.object({
+    category: requiredString,
+    monthly: nonNegativeNumber,
+    annual: nonNegativeNumber
+  })),
+  scenarios: z6.array(z6.object({
+    scenario: z6.enum(["Optimistic", "Base Case", "Pessimistic"]),
+    probability: requiredString,
+    subscribersYr1: requiredString,
+    annualRevenue: requiredString,
+    breakEven: requiredString
+  })),
+  investmentRange: requiredString,
+  breakEvenSummary: requiredString,
+  ltvCacRatio: requiredString.optional()
+});
+var riskSchema = z6.object({
+  name: requiredString,
+  probability: z6.enum(["Low", "Med", "High"]),
+  impact: z6.enum(["Low", "Med", "High"]),
+  level: z6.enum(["Low", "Med", "High"]),
+  mitigation: requiredString
+});
+var fundingSourceSchema = z6.object({
+  source: requiredString,
+  share: requiredString,
+  amount: requiredString,
+  rationale: requiredString
+});
+var researchSchema = z6.object({
+  overview: requiredString,
+  confidence: z6.enum(["High", "Medium", "Low"]),
+  sentiment: z6.enum(["Positive", "Mixed", "Negative", "Insufficient data"]),
+  keySignals: z6.array(requiredString),
+  painPoints: z6.array(requiredString),
+  competitorMentions: z6.array(requiredString),
+  redditSignals: z6.array(requiredString),
+  webSignals: z6.array(requiredString),
+  citations: z6.array(z6.object({
+    title: requiredString,
+    url: externalHttpUrlSchema,
+    source: requiredString,
+    takeaway: requiredString
+  }))
+});
+var inputCompletenessSchema = z6.object({
+  overall: z6.number().finite().min(0).max(100),
+  missingFields: z6.array(requiredString),
+  weakFields: z6.array(requiredString),
+  contradictoryFields: z6.array(requiredString)
+});
+var evidenceMixSchema = z6.object({
+  userInputPercent: z6.number().finite().min(0).max(100),
+  webResearchPercent: z6.number().finite().min(0).max(100),
+  aiAssumptionPercent: z6.number().finite().min(0).max(100)
+});
+var scoreExplanationSchema = z6.object({
+  dimension: z6.enum(scoreDimensions),
+  label: requiredString,
+  score: scoreNumber,
+  positiveDrivers: z6.array(requiredString),
+  negativeDrivers: z6.array(requiredString),
+  missingEvidence: z6.array(requiredString),
+  improvementActions: z6.array(requiredString),
+  decisionImplication: requiredString
+});
+var claimEvidenceSchema = z6.object({
+  claimId: requiredString,
+  claimText: requiredString,
+  reportSection: requiredString,
+  userInputPercent: z6.number().finite().min(0).max(100),
+  webResearchPercent: z6.number().finite().min(0).max(100),
+  aiAssumptionPercent: z6.number().finite().min(0).max(100),
+  confidence: z6.enum(["High", "Medium", "Low"]),
+  sources: z6.array(requiredString),
+  userCanImproveBy: requiredString
+});
+var reportVersionSchema = z6.object({
+  versionId: requiredString,
+  createdAt: requiredString,
+  changedInputs: z6.array(requiredString),
+  previousScore: z6.number().finite(),
+  newScore: z6.number().finite(),
+  scoreDelta: z6.number().finite(),
+  previousConfidence: z6.number().finite(),
+  newConfidence: z6.number().finite(),
+  confidenceDelta: z6.number().finite(),
+  previousAiAssumptionPercent: z6.number().finite(),
+  newAiAssumptionPercent: z6.number().finite(),
+  summary: requiredString
+});
+var decisionSchema = z6.object({
+  verdict: z6.enum([
+    "PROCEED",
+    "CONDITIONAL PROCEED",
+    "CONDITIONAL PROCEED WITH VALIDATION",
+    "IMPROVE INPUTS BEFORE INVESTMENT DECISION",
+    "REVISE",
+    "DO NOT PROCEED"
+  ]),
+  recommendationLabel: requiredString,
+  nextStepHint: requiredString,
+  blockers: z6.array(requiredString),
+  overallConfidencePct: z6.number().finite().min(0).max(100)
+});
+var feasibilityReportSchema = z6.object({
+  reportId: nonEmptyString,
+  dateIssued: nonEmptyString,
+  classification: requiredString,
+  preparedBy: requiredString,
+  methodology: requiredString,
+  executiveSummary: nonEmptyString,
+  scores: fmartoScoresSchema,
+  market: marketSchema,
+  customer: customerSchema,
+  competitors: z6.array(competitorSchema),
+  research: researchSchema.optional(),
+  financials: financialsSchema,
+  risks: z6.array(riskSchema),
+  fundingMix: z6.array(fundingSourceSchema),
+  fundingAdvisory: requiredString,
+  recommendations: z6.array(requiredString),
+  nextSteps: z6.array(requiredString),
+  evidenceWarnings: z6.array(requiredString).optional(),
+  inputQualityScore: z6.number().finite().min(0).max(100).optional(),
+  inputCompleteness: inputCompletenessSchema.optional(),
+  evidenceMix: evidenceMixSchema.optional(),
+  scoreExplanation: z6.array(scoreExplanationSchema).optional(),
+  claimEvidenceMap: z6.array(claimEvidenceSchema).optional(),
+  reportVersions: z6.array(reportVersionSchema).optional(),
+  decision: decisionSchema.optional(),
+  legacyEvidence: z6.boolean().optional()
+}).passthrough();
+var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var record = (value) => isRecord(value) ? value : {};
+var valueAt = (source, ...keys) => {
+  for (const key of keys) {
+    if (source[key] !== void 0 && source[key] !== null) return source[key];
+  }
+  return void 0;
+};
+var text = (value) => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(text).filter(Boolean).join("\n");
+  return "";
+};
+var stringList = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string" || typeof item === "number") return text(item);
+    const itemRecord = record(item);
+    const primary = text(valueAt(
+      itemRecord,
+      "text",
+      "title",
+      "name",
+      "action",
+      "step",
+      "recommendation",
+      "signal",
+      "purpose",
+      "description"
+    ));
+    const implication = text(itemRecord.implication);
+    return primary && implication ? `${primary} \u2014 ${implication}` : primary;
+  }).filter(Boolean);
+};
+var objectArrayLines = (value, primaryKeys, secondaryKeys = []) => {
+  if (!Array.isArray(value)) return "";
+  return value.map((item) => {
+    const row = record(item);
+    const primary = text(valueAt(row, ...primaryKeys));
+    const secondary = text(valueAt(row, ...secondaryKeys));
+    if (primary && secondary) return `${primary}: ${secondary}`;
+    return primary || secondary;
+  }).filter(Boolean).join("\n");
+};
+var numberValue = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return void 0;
+  const normalized = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!normalized) return void 0;
+  const parsed = Number(normalized[0]);
+  return Number.isFinite(parsed) ? parsed : void 0;
+};
+var titleCaseLevel = (value) => {
+  const normalized = text(value).toLowerCase();
+  if (normalized === "high" || normalized === "critical" || normalized === "severe") return "High";
+  if (normalized === "med" || normalized === "medium" || normalized === "material" || normalized === "moderate") return "Med";
+  return "Low";
+};
+var scenarioName = (value) => {
+  const normalized = text(value).toLowerCase();
+  if (normalized.includes("optim") || normalized.includes("upside") || normalized.includes("best")) {
+    return "Optimistic";
+  }
+  if (normalized.includes("pess") || normalized.includes("downside") || normalized.includes("worst")) {
+    return "Pessimistic";
+  }
+  return "Base Case";
+};
+var zodIssues = (prefix, error) => error.issues.map((issue) => ({
+  path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
+  message: issue.message
+}));
+function validateCanonicalReportData(inputs, output) {
+  const inputResult = conceptInputsSchema.safeParse(inputs);
+  const outputResult = feasibilityReportSchema.safeParse(output);
+  const issues = [];
+  if (!inputResult.success) issues.push(...zodIssues("inputs", inputResult.error));
+  if (!outputResult.success) issues.push(...zodIssues("output", outputResult.error));
+  if (issues.length > 0 || !inputResult.success || !outputResult.success) {
+    return { valid: false, issues };
+  }
+  return {
+    valid: true,
+    issues: [],
+    inputs: inputResult.data,
+    output: outputResult.data
+  };
+}
+var normalizeInputs = (payload) => {
+  const candidate = record(payload.inputs);
+  const canonical = conceptInputsSchema.safeParse(candidate);
+  if (canonical.success) return canonical.data;
+  const overview = record(candidate.overview);
+  const scope = record(candidate.scope);
+  const operatingModel = record(valueAt(candidate, "operatingModel", "operating_model"));
+  const businessModelRows = valueAt(candidate, "businessModel", "business_model");
+  return {
+    projectName: text(valueAt(candidate, "projectName", "project_name", "working_name", "title", "name")) || text(valueAt(overview, "projectName", "project_name", "title", "name")) || text(payload.title),
+    industry: text(valueAt(candidate, "industry", "sector")) || text(valueAt(overview, "industry", "sector")) || text(payload.industry),
+    location: text(valueAt(candidate, "location", "region", "geography")) || text(valueAt(overview, "location", "region", "geography")),
+    description: text(valueAt(candidate, "description", "overview", "summary")) || text(valueAt(overview, "description", "summary")) || text(valueAt(scope, "description", "summary")),
+    strategicObjectives: text(valueAt(candidate, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(overview, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(candidate, "value_proposition")),
+    businessModel: text(businessModelRows) || objectArrayLines(businessModelRows, ["offer", "name"], ["pricing_assumption"]),
+    revenueModel: text(valueAt(candidate, "revenueModel", "revenue_model")) || objectArrayLines(businessModelRows, ["offer", "name"], ["pricing_assumption"]),
+    founderExperience: text(valueAt(candidate, "founderExperience", "founder_experience", "sponsor_experience")),
+    budgetRange: text(valueAt(candidate, "budgetRange", "budget_range", "budget")),
+    timeline: text(valueAt(candidate, "timeline", "schedule")),
+    teamSize: text(valueAt(candidate, "teamSize", "team_size", "resources")) || text(valueAt(operatingModel, "core_team", "coreTeam")),
+    dependencies: text(valueAt(candidate, "dependencies")) || text(valueAt(scope, "dependencies")) || text(valueAt(operatingModel, "partners")),
+    assumptions: text(valueAt(candidate, "assumptions")),
+    constraints: text(valueAt(candidate, "constraints", "exclusions")) || text(valueAt(scope, "constraints")),
+    successFactors: text(valueAt(
+      candidate,
+      "successFactors",
+      "success_factors",
+      "success_criteria",
+      "success_metrics"
+    )),
+    knownRisks: text(valueAt(candidate, "knownRisks", "known_risks", "risks")),
+    regulatoryConsiderations: text(
+      valueAt(
+        candidate,
+        "regulatoryConsiderations",
+        "regulatory_considerations",
+        "regulatory",
+        "standards_and_methods"
+      )
+    ),
+    technologyReadiness: text(
+      valueAt(candidate, "technologyReadiness", "technology_readiness", "technical_readiness")
+    ),
+    competitorUrls: text(valueAt(candidate, "competitorUrls", "competitor_urls"))
+  };
+};
+var normalizeWeights = (source) => {
+  const supplied = scoreDimensions.map((dimension) => numberValue(source[dimension]));
+  if (supplied.every((value) => value !== void 0 && value >= 0)) {
+    const total = supplied.reduce((sum, value) => sum + (value ?? 0), 0);
+    if (total > 0) {
+      return Object.fromEntries(
+        scoreDimensions.map((dimension, index) => [dimension, (supplied[index] ?? 0) / total])
+      );
+    }
+  }
+  return {
+    financial: 1 / 6,
+    market: 1 / 6,
+    achievability: 1 / 6,
+    risk: 1 / 6,
+    timing: 1 / 6,
+    operational: 1 / 6
+  };
+};
+var verdictForScore = (overall) => {
+  if (overall >= 7.5) return "PROCEED";
+  if (overall >= 6) return "PROCEED WITH CAUTION";
+  if (overall >= 4.5) return "REVISE";
+  return "DO NOT PROCEED";
+};
+var normalizeScores = (analysis) => {
+  const source = record(
+    valueAt(analysis, "scores", "fmarto_scores", "fmartoScores", "fmarto")
+  );
+  if (Object.keys(source).length === 0) {
+    return {
+      issues: [{
+        path: "analysis.scores",
+        message: "scores (or legacy fmarto_scores/fmarto) are required"
+      }]
+    };
+  }
+  const aliases = {
+    financial: ["financial", "feasibility"],
+    market: ["market"],
+    achievability: ["achievability", "architecture", "technical"],
+    risk: ["risk"],
+    timing: ["timing", "timeline"],
+    operational: ["operational", "operations"]
+  };
+  const rawScores = {};
+  const issues = [];
+  for (const dimension of scoreDimensions) {
+    const rawValue = numberValue(valueAt(source, ...aliases[dimension]));
+    if (rawValue === void 0 || rawValue < 0 || rawValue > 100) {
+      issues.push({
+        path: `analysis.scores.${dimension}`,
+        message: "must resolve to a number between 0 and 100"
+      });
+      continue;
+    }
+    rawScores[dimension] = rawValue > 10 ? rawValue / 10 : rawValue;
+  }
+  if (issues.length > 0) return { issues };
+  const weights = normalizeWeights(record(source.weights));
+  const overall = Number(scoreDimensions.reduce((sum, dimension) => sum + rawScores[dimension] * weights[dimension], 0).toFixed(2));
+  const rationale = record(source.rationale);
+  const verdict = record(analysis.verdict);
+  const confidenceFallback = numberValue(verdict.confidence);
+  const confidenceSource = record(source.confidence);
+  const confidence = Object.fromEntries(scoreDimensions.map((dimension) => {
+    const rawConfidence = numberValue(confidenceSource[dimension]) ?? confidenceFallback ?? 50;
+    const normalized = rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence;
+    return [dimension, Math.max(0, Math.min(100, normalized))];
+  }));
+  const finding = (dimension) => {
+    const legacyAlias = aliases[dimension].find((alias) => rationale[alias] !== void 0);
+    return text(valueAt(
+      source,
+      `${dimension}Finding`,
+      `${dimension}_finding`
+    )) || text(legacyAlias ? rationale[legacyAlias] : rationale[dimension]);
+  };
+  return {
+    issues: [],
+    scores: {
+      ...rawScores,
+      overall,
+      verdict: verdictForScore(overall),
+      financialFinding: finding("financial"),
+      marketFinding: finding("market"),
+      achievabilityFinding: finding("achievability"),
+      riskFinding: finding("risk"),
+      timingFinding: finding("timing"),
+      operationalFinding: finding("operational"),
+      weights,
+      confidence,
+      rationale: {
+        financial: finding("financial"),
+        market: finding("market"),
+        achievability: finding("achievability"),
+        risk: finding("risk"),
+        timing: finding("timing"),
+        operational: finding("operational")
+      }
+    }
+  };
+};
+var normalizeMarket = (analysis, warnings) => {
+  const source = record(analysis.market);
+  const growth = valueAt(source, "growthChart", "growth_chart");
+  const growthChart = Array.isArray(growth) ? growth.map((item) => {
+    const row = record(item);
+    return {
+      year: text(row.year),
+      tam: Math.max(0, numberValue(row.tam) ?? 0),
+      sam: Math.max(0, numberValue(row.sam) ?? 0)
+    };
+  }) : [];
+  const tamValue = text(valueAt(source, "tamValue", "tam_value", "tam"));
+  const samValue = text(valueAt(source, "samValue", "sam_value", "sam"));
+  const somValue = text(valueAt(source, "somValue", "som_value", "som"));
+  if (!tamValue || !samValue || !somValue) {
+    warnings.add("Market sizing is incomplete; unavailable values are shown as empty.");
+  }
+  return {
+    tamLabel: text(valueAt(source, "tamLabel", "tam_label")),
+    tamValue,
+    tamCagr: text(valueAt(source, "tamCagr", "tam_cagr", "cagr")),
+    samLabel: text(valueAt(source, "samLabel", "sam_label")),
+    samValue,
+    samCagr: text(valueAt(source, "samCagr", "sam_cagr", "cagr")),
+    somLabel: text(valueAt(source, "somLabel", "som_label")),
+    somValue,
+    somCagr: text(valueAt(source, "somCagr", "som_cagr", "cagr")),
+    growthChart,
+    currency: text(valueAt(source, "currency"))
+  };
+};
+var normalizeCustomer = (analysis, warnings) => {
+  const source = record(analysis.customer);
+  if (Object.keys(source).length === 0) {
+    warnings.add("Customer profile evidence was not supplied by the external analysis.");
+  }
+  return {
+    ageLocation: text(valueAt(source, "ageLocation", "age_location", "segment", "profile")),
+    income: text(valueAt(source, "income", "budget")),
+    goals: text(valueAt(source, "goals", "needs")),
+    willingnessToPay: text(valueAt(source, "willingnessToPay", "willingness_to_pay")),
+    behavior: text(valueAt(source, "behavior", "behaviour"))
+  };
+};
+var normalizeCompetitors = (analysis, warnings) => {
+  const market = record(analysis.market);
+  const source = valueAt(analysis, "competitors") ?? market.competitors;
+  if (!Array.isArray(source)) {
+    warnings.add("Competitor evidence was not supplied by the external analysis.");
+    return [];
+  }
+  return source.map((item) => {
+    const row = record(item);
+    const model = text(valueAt(row, "model", "business_model", "positioning", "category"));
+    const strengths = text(valueAt(row, "strengths", "strength"));
+    return {
+      name: text(valueAt(row, "name", "title")),
+      model: model && strengths ? `${model} \u2014 Strengths: ${strengths}` : model || strengths,
+      weakness: text(valueAt(row, "weakness", "weaknesses", "gap")),
+      edge: text(valueAt(row, "edge", "advantage", "differentiator", "gap_or_opening"))
+    };
+  });
+};
+var normalizeFinancials = (analysis, warnings) => {
+  const source = record(analysis.financials);
+  const currency = text(valueAt(source, "currency"));
+  const rawCapEx = valueAt(source, "capEx", "capex", "cap_ex");
+  const capEx = (Array.isArray(rawCapEx) ? rawCapEx : []).map((item) => {
+    const row = record(item);
+    const category = text(valueAt(row, "category", "item", "name", "title"));
+    const amount = Math.max(0, numberValue(valueAt(row, "amount", "value")) ?? 0);
+    const low2 = Math.max(0, numberValue(valueAt(row, "low", "min", "minimum")) ?? amount);
+    const high2 = Math.max(0, numberValue(valueAt(row, "high", "max", "maximum")) ?? amount);
+    return {
+      category,
+      low: Math.min(low2, high2),
+      high: Math.max(low2, high2),
+      notes: text(valueAt(row, "notes", "note", "description"))
+    };
+  }).filter((item) => item.category && !/\btotal\b/i.test(item.category));
+  const low = capEx.reduce((sum, item) => sum + item.low, 0);
+  const high = capEx.reduce((sum, item) => sum + item.high, 0);
+  const rawOpEx = valueAt(source, "opEx", "opex", "op_ex");
+  const opEx = (Array.isArray(rawOpEx) ? rawOpEx : []).map((item) => {
+    const row = record(item);
+    const category = text(valueAt(row, "category", "item", "name", "title"));
+    const year = numberValue(row.year);
+    if (/\btotal\b/i.test(category) || year !== void 0 && year !== 1) return null;
+    const annual = Math.max(
+      0,
+      numberValue(valueAt(row, "annual", "annual_amount", "amount", "year1", "year_1")) ?? 0
+    );
+    const monthly = Math.max(
+      0,
+      numberValue(valueAt(row, "monthly", "monthly_amount")) ?? (annual > 0 ? annual / 12 : 0)
+    );
+    return {
+      category,
+      monthly: Number(monthly.toFixed(2)),
+      annual: Number((annual || monthly * 12).toFixed(2))
+    };
+  }).filter((item) => item !== null);
+  const rawScenarios = valueAt(source, "scenarios", "revenue");
+  const scenarios = (Array.isArray(rawScenarios) ? rawScenarios : []).map((item) => {
+    const row = record(item);
+    const revenueSource = valueAt(row, "annualRevenue", "annual_revenue", "revenue", "year_3_revenue");
+    const revenueText = text(revenueSource);
+    const annualRevenue = typeof revenueSource === "number" && currency ? `${currency} ${revenueText}` : revenueText;
+    return {
+      scenario: scenarioName(valueAt(row, "scenario", "name", "case")),
+      probability: text(valueAt(row, "probability", "probability_pct")),
+      subscribersYr1: text(valueAt(row, "subscribersYr1", "subscribers_yr1", "units", "customers")),
+      annualRevenue,
+      breakEven: text(valueAt(
+        row,
+        "breakEven",
+        "break_even",
+        "estimated_cumulative_cash_break_even",
+        "estimated_operating_break_even",
+        "estimated_cumulative_break_even"
+      ))
+    };
+  });
+  if (capEx.length === 0 || opEx.length === 0 || scenarios.length === 0) {
+    warnings.add("Financial detail is incomplete; unavailable rows are shown as empty.");
+  }
+  const breakEvenMonths = numberValue(valueAt(source, "break_even_months"));
+  const investmentRange = text(valueAt(source, "investmentRange", "investment_range")) || (capEx.length > 0 ? `${low}\u2013${high}${currency ? ` ${currency}` : ""}` : "");
+  const breakEvenSummary = text(valueAt(source, "breakEvenSummary", "break_even_summary")) || (breakEvenMonths !== void 0 ? `Month ${breakEvenMonths}` : "");
+  return {
+    currency,
+    capExTotal: { low, high, mid: Number(((low + high) / 2).toFixed(2)) },
+    capEx,
+    opEx,
+    scenarios,
+    investmentRange,
+    breakEvenSummary,
+    ltvCacRatio: text(valueAt(source, "ltvCacRatio", "ltv_cac_ratio"))
+  };
+};
+var normalizeRisks = (analysis, warnings) => {
+  if (!Array.isArray(analysis.risks)) {
+    warnings.add("Risk register details were not supplied by the external analysis.");
+    return [];
+  }
+  return analysis.risks.map((item) => {
+    const row = record(item);
+    const impact = titleCaseLevel(valueAt(row, "impact", "severity", "level"));
+    const probability = titleCaseLevel(valueAt(row, "probability", "likelihood"));
+    return {
+      name: text(valueAt(row, "name", "title", "risk")),
+      probability,
+      impact,
+      level: titleCaseLevel(valueAt(row, "level", "severity", "impact")),
+      mitigation: text(valueAt(row, "mitigation", "response", "treatment"))
+    };
+  });
+};
+var normalizeFundingMix = (analysis, warnings) => {
+  const source = valueAt(analysis, "fundingMix", "funding_mix");
+  if (!Array.isArray(source)) {
+    warnings.add("Funding mix was not supplied by the external analysis.");
+    return [];
+  }
+  return source.map((item) => {
+    const row = record(item);
+    return {
+      source: text(valueAt(row, "source", "name", "type")),
+      share: text(valueAt(row, "share", "percentage", "percent")),
+      amount: text(valueAt(row, "amount", "value")),
+      rationale: text(valueAt(row, "rationale", "reason", "notes"))
+    };
+  });
+};
+var normalizeResearch = (analysis) => {
+  const source = record(analysis.research);
+  const claims = Array.isArray(analysis.claims) ? analysis.claims : [];
+  if (Object.keys(source).length === 0 && claims.length === 0) return void 0;
+  if (Object.keys(source).length === 0) {
+    const confidenceValues = claims.map((claim) => text(record(claim).confidence).toLowerCase());
+    const highShare = confidenceValues.length > 0 ? confidenceValues.filter((value) => value === "high").length / confidenceValues.length : 0;
+    const citations = claims.flatMap((claim) => {
+      const claimRecord = record(claim);
+      const sources = Array.isArray(claimRecord.sources) ? claimRecord.sources : [];
+      return sources.map((claimSource) => {
+        const sourceRecord = record(claimSource);
+        return {
+          title: text(sourceRecord.title),
+          url: text(sourceRecord.url),
+          source: text(valueAt(sourceRecord, "source", "domain")),
+          takeaway: text(valueAt(claimRecord, "text", "claim"))
+        };
+      });
+    });
+    const market = record(analysis.market);
+    return {
+      overview: `External analysis supplied ${claims.length} sourced evidence claim${claims.length === 1 ? "" : "s"}.`,
+      confidence: highShare >= 0.7 ? "High" : highShare >= 0.4 ? "Medium" : "Low",
+      sentiment: "Mixed",
+      keySignals: stringList(market.signals),
+      painPoints: [],
+      competitorMentions: Array.isArray(market.competitors) ? market.competitors.map((item) => text(record(item).name)).filter(Boolean) : [],
+      redditSignals: [],
+      webSignals: claims.map((claim) => text(valueAt(record(claim), "text", "claim"))).filter(Boolean),
+      citations
+    };
+  }
+  const confidenceValue = text(source.confidence).toLowerCase();
+  const sentimentValue = text(source.sentiment).toLowerCase();
+  const rawCitations = Array.isArray(source.citations) ? source.citations : [];
+  return {
+    overview: text(source.overview),
+    confidence: confidenceValue === "high" ? "High" : confidenceValue === "medium" ? "Medium" : "Low",
+    sentiment: sentimentValue === "positive" ? "Positive" : sentimentValue === "mixed" ? "Mixed" : sentimentValue === "negative" ? "Negative" : "Insufficient data",
+    keySignals: stringList(valueAt(source, "keySignals", "key_signals")),
+    painPoints: stringList(valueAt(source, "painPoints", "pain_points")),
+    competitorMentions: stringList(valueAt(source, "competitorMentions", "competitor_mentions")),
+    redditSignals: stringList(valueAt(source, "redditSignals", "reddit_signals")),
+    webSignals: stringList(valueAt(source, "webSignals", "web_signals")),
+    citations: rawCitations.map((item) => {
+      const row = record(item);
+      return {
+        title: text(row.title),
+        url: text(row.url),
+        source: text(row.source),
+        takeaway: text(row.takeaway)
+      };
+    })
+  };
+};
+function normalizeExternalAnalysis(payload, options = {}) {
+  if (!isRecord(payload)) {
+    return { valid: false, issues: [{ path: "$", message: "payload must be an object" }] };
+  }
+  const analysis = record(valueAt(payload, "analysis", "output", "report"));
+  if (Object.keys(analysis).length === 0) {
+    return {
+      valid: false,
+      issues: [{ path: "analysis", message: "analysis object is required" }]
+    };
+  }
+  const inputs = normalizeInputs(payload);
+  const scoreResult = normalizeScores(analysis);
+  if (!scoreResult.scores) return { valid: false, issues: scoreResult.issues };
+  const summary = text(valueAt(analysis, "executiveSummary", "executive_summary")) || text(record(analysis.verdict).summary);
+  if (!summary) {
+    return {
+      valid: false,
+      issues: [{
+        path: "analysis.executiveSummary",
+        message: "executiveSummary (or legacy executive_summary/verdict.summary) is required"
+      }]
+    };
+  }
+  const warnings = /* @__PURE__ */ new Set([
+    ...stringList(valueAt(analysis, "evidenceWarnings", "evidence_warnings"))
+  ]);
+  const reportId = options.reportId || text(valueAt(analysis, "reportId", "report_id")) || text(valueAt(payload, "reportId", "report_id")) || "EXTERNAL-PENDING";
+  const output = {
+    reportId,
+    dateIssued: options.dateIssued || text(valueAt(analysis, "dateIssued", "date_issued")) || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+    classification: text(analysis.classification) || "Confidential",
+    preparedBy: text(valueAt(analysis, "preparedBy", "prepared_by")) || "Concept AI External Analysis",
+    methodology: text(analysis.methodology) || "FMART-O 6-Dimension Weighted Scoring",
+    executiveSummary: summary,
+    scores: scoreResult.scores,
+    market: normalizeMarket(analysis, warnings),
+    customer: normalizeCustomer(analysis, warnings),
+    competitors: normalizeCompetitors(analysis, warnings),
+    research: normalizeResearch(analysis),
+    financials: normalizeFinancials(analysis, warnings),
+    risks: normalizeRisks(analysis, warnings),
+    fundingMix: normalizeFundingMix(analysis, warnings),
+    fundingAdvisory: text(valueAt(analysis, "fundingAdvisory", "funding_advisory")),
+    recommendations: stringList(analysis.recommendations),
+    nextSteps: stringList(valueAt(analysis, "nextSteps", "next_steps")),
+    evidenceWarnings: [...warnings]
+  };
+  const optionalEvidenceFields = [
+    "inputQualityScore",
+    "inputCompleteness",
+    "evidenceMix",
+    "scoreExplanation",
+    "claimEvidenceMap",
+    "reportVersions",
+    "decision",
+    "legacyEvidence"
+  ];
+  const outputRecord = output;
+  for (const field of optionalEvidenceFields) {
+    if (analysis[field] !== void 0) outputRecord[field] = analysis[field];
+  }
+  const validated = validateCanonicalReportData(inputs, output);
+  if (!("output" in validated)) return { valid: false, issues: validated.issues };
+  return {
+    valid: true,
+    issues: [],
+    inputs: validated.inputs,
+    output: validated.output,
+    warnings: [...warnings]
+  };
+}
+
+// src/lib/mcp/shared.ts
 function sbClient(ctx) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
@@ -223,246 +1030,46 @@ function sbClient(ctx) {
 function err(message) {
   return { content: [{ type: "text", text: message }], isError: true };
 }
-function ok(text, structured) {
+function ok(text2, structured) {
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: text2 }],
     structuredContent: structured
   };
 }
 var MAX_PAYLOAD_BYTES = 256 * 1024;
+var MAX_AGENT_METADATA_BYTES = 32 * 1024;
 var EXTERNAL_ANALYSIS_SCHEMA = {
   $schema: "http://json-schema.org/draft-07/schema#",
-  title: "ConceptAIExternalAnalysis",
+  title: "ConceptAICanonicalExternalAnalysis",
   type: "object",
-  required: ["title", "industry", "inputs", "analysis"],
+  required: ["inputs", "analysis"],
   properties: {
-    title: { type: "string", minLength: 3, maxLength: 200 },
+    title: {
+      type: "string",
+      description: "Optional compatibility alias for inputs.projectName."
+    },
     industry: {
       type: "string",
-      enum: ["pmo", "it", "telecom", "infrastructure", "government", "real_estate", "other"]
+      description: "Optional compatibility alias for inputs.industry."
     },
-    inputs: {
-      type: "object",
-      description: "Project brief: overview, scope, assumptions, risks, financials.",
-      properties: {
-        overview: { type: "string" },
-        scope: { type: "string" },
-        assumptions: { type: "array", items: { type: "string" } },
-        risks: { type: "array", items: { type: "string" } },
-        budget: { type: ["number", "string"] },
-        timeline: { type: "string" },
-        region: { type: "string" }
-      },
-      additionalProperties: true
-    },
-    analysis: {
-      type: "object",
-      required: ["fmarto", "verdict"],
-      properties: {
-        fmarto: {
-          type: "object",
-          description: "Proposed FMART-O scores. Concept AI recomputes canonical values.",
-          properties: {
-            feasibility: { type: "number", minimum: 0, maximum: 100 },
-            market: { type: "number", minimum: 0, maximum: 100 },
-            architecture: { type: "number", minimum: 0, maximum: 100 },
-            risk: { type: "number", minimum: 0, maximum: 100 },
-            timeline: { type: "number", minimum: 0, maximum: 100 },
-            operations: { type: "number", minimum: 0, maximum: 100 },
-            rationale: { type: "object", additionalProperties: { type: "string" } }
-          }
-        },
-        verdict: {
-          type: "object",
-          required: ["recommendation"],
-          properties: {
-            recommendation: {
-              type: "string",
-              enum: ["proceed", "proceed_with_caution", "revise", "do_not_proceed"]
-            },
-            confidence: { type: "number", minimum: 0, maximum: 1 },
-            summary: { type: "string", maxLength: 2e3 }
-          }
-        },
-        market: {
-          type: "object",
-          properties: {
-            tam: { type: ["string", "number"] },
-            sam: { type: ["string", "number"] },
-            som: { type: ["string", "number"] },
-            cagr: { type: ["string", "number"] },
-            competitors: { type: "array" },
-            signals: { type: "array" }
-          }
-        },
-        financials: {
-          type: "object",
-          description: "Proposed financials. Concept AI recomputes totals & break-even.",
-          properties: {
-            capex: { type: "array" },
-            opex: { type: "array" },
-            revenue: { type: "array" },
-            scenarios: { type: "array" },
-            break_even_months: { type: "number" }
-          }
-        },
-        risks: {
-          type: "array",
-          items: {
-            type: "object",
-            required: ["title", "severity"],
-            properties: {
-              title: { type: "string" },
-              severity: { type: "string", enum: ["low", "material", "high"] },
-              likelihood: { type: "string", enum: ["low", "medium", "high"] },
-              mitigation: { type: "string" }
-            }
-          }
-        },
-        recommendations: { type: "array", items: { type: "string" } },
-        next_steps: { type: "array", items: { type: "string" } },
-        claims: {
-          type: "array",
-          description: "Claim-to-source mappings.",
-          items: {
-            type: "object",
-            required: ["id", "text", "sources"],
-            properties: {
-              id: { type: "string" },
-              text: { type: "string" },
-              confidence: { type: "string", enum: ["high", "medium", "low"] },
-              sources: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["url"],
-                  properties: {
-                    url: { type: "string", format: "uri" },
-                    domain: { type: "string" },
-                    title: { type: "string" },
-                    published_at: { type: "string" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        evidence_warnings: { type: "array", items: { type: "string" } }
-      }
-    },
+    inputs: z7.toJSONSchema(conceptInputsSchema, { target: "draft-7" }),
+    analysis: z7.toJSONSchema(feasibilityReportSchema, { target: "draft-7" }),
     agent_metadata: {
       type: "object",
-      description: "Optional info about the external assistant (model, version).",
-      properties: {
-        model: { type: "string" },
-        model_version: { type: "string" },
-        notes: { type: "string" }
-      }
+      additionalProperties: true,
+      description: "Optional external assistant model/version metadata."
     }
   },
-  additionalProperties: false
+  additionalProperties: false,
+  "x-accepted-legacy-aliases": {
+    "analysis.fmarto_scores": "analysis.scores",
+    "analysis.fmarto": "analysis.scores",
+    "analysis.next_steps": "analysis.nextSteps",
+    "analysis.executive_summary": "analysis.executiveSummary",
+    "analysis.funding_mix": "analysis.fundingMix",
+    "analysis.funding_advisory": "analysis.fundingAdvisory"
+  }
 };
-var ALLOWED_INDUSTRIES = /* @__PURE__ */ new Set([
-  "pmo",
-  "it",
-  "telecom",
-  "infrastructure",
-  "government",
-  "real_estate",
-  "other"
-]);
-var ALLOWED_RECOMMENDATIONS = /* @__PURE__ */ new Set([
-  "proceed",
-  "proceed_with_caution",
-  "revise",
-  "do_not_proceed"
-]);
-var ALLOWED_SEVERITIES = /* @__PURE__ */ new Set(["low", "material", "high"]);
-function validateExternalAnalysis(payload) {
-  const issues = [];
-  if (!payload || typeof payload !== "object") {
-    return [{ path: "$", message: "Payload must be an object" }];
-  }
-  const p = payload;
-  if (typeof p.title !== "string" || p.title.trim().length < 3 || p.title.length > 200) {
-    issues.push({ path: "title", message: "title must be a string (3\u2013200 chars)" });
-  }
-  if (typeof p.industry !== "string" || !ALLOWED_INDUSTRIES.has(p.industry)) {
-    issues.push({ path: "industry", message: `industry must be one of: ${[...ALLOWED_INDUSTRIES].join(", ")}` });
-  }
-  if (!p.inputs || typeof p.inputs !== "object") {
-    issues.push({ path: "inputs", message: "inputs object is required" });
-  }
-  if (!p.analysis || typeof p.analysis !== "object") {
-    issues.push({ path: "analysis", message: "analysis object is required" });
-    return issues;
-  }
-  const a = p.analysis;
-  if (!a.fmarto || typeof a.fmarto !== "object") {
-    issues.push({ path: "analysis.fmarto", message: "fmarto scores object is required" });
-  } else {
-    for (const dim of ["feasibility", "market", "architecture", "risk", "timeline", "operations"]) {
-      const v = a.fmarto[dim];
-      if (v !== void 0 && (typeof v !== "number" || v < 0 || v > 100)) {
-        issues.push({ path: `analysis.fmarto.${dim}`, message: "must be a number 0\u2013100" });
-      }
-    }
-  }
-  if (!a.verdict || typeof a.verdict !== "object") {
-    issues.push({ path: "analysis.verdict", message: "verdict object is required" });
-  } else {
-    if (!ALLOWED_RECOMMENDATIONS.has(a.verdict.recommendation)) {
-      issues.push({
-        path: "analysis.verdict.recommendation",
-        message: `must be one of: ${[...ALLOWED_RECOMMENDATIONS].join(", ")}`
-      });
-    }
-    if (a.verdict.confidence !== void 0) {
-      const c = a.verdict.confidence;
-      if (typeof c !== "number" || c < 0 || c > 1) {
-        issues.push({ path: "analysis.verdict.confidence", message: "confidence must be 0\u20131" });
-      }
-    }
-  }
-  if (a.risks && Array.isArray(a.risks)) {
-    a.risks.forEach((r, i) => {
-      if (!r || typeof r !== "object" || typeof r.title !== "string") {
-        issues.push({ path: `analysis.risks[${i}].title`, message: "title required" });
-      }
-      if (!r || !ALLOWED_SEVERITIES.has(r?.severity)) {
-        issues.push({ path: `analysis.risks[${i}].severity`, message: "severity must be low|material|high" });
-      }
-    });
-  }
-  if (a.claims && Array.isArray(a.claims)) {
-    a.claims.forEach((c, i) => {
-      if (!c?.id || typeof c.id !== "string") {
-        issues.push({ path: `analysis.claims[${i}].id`, message: "claim id required" });
-      }
-      if (!Array.isArray(c?.sources) || c.sources.length === 0) {
-        issues.push({ path: `analysis.claims[${i}].sources`, message: "at least one source required" });
-      }
-    });
-  }
-  return issues;
-}
-function normalizeToCanonicalOutput(payload) {
-  const a = payload.analysis ?? {};
-  return {
-    schema_version: "external_agent.v1",
-    source_mode: "external_agent",
-    fmarto_scores: a.fmarto ?? {},
-    verdict: a.verdict ?? {},
-    market: a.market ?? {},
-    financials: a.financials ?? {},
-    risks: Array.isArray(a.risks) ? a.risks : [],
-    recommendations: Array.isArray(a.recommendations) ? a.recommendations : [],
-    next_steps: Array.isArray(a.next_steps) ? a.next_steps : [],
-    claims: Array.isArray(a.claims) ? a.claims : [],
-    evidence_warnings: Array.isArray(a.evidence_warnings) ? a.evidence_warnings : [],
-    agent_metadata: payload.agent_metadata ?? {}
-  };
-}
 var FORBIDDEN_INPUT_KEYS = /* @__PURE__ */ new Set([
   "user_id",
   "id",
@@ -476,6 +1083,91 @@ var FORBIDDEN_INPUT_KEYS = /* @__PURE__ */ new Set([
   "is_public",
   "archived_at"
 ]);
+var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function sanitizeExternalPayload(payload) {
+  if (!isRecord2(payload)) return payload;
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key))
+  );
+}
+function validatePayloadSize(payload) {
+  let serialized;
+  try {
+    serialized = JSON.stringify(payload ?? {});
+  } catch {
+    return [{ path: "$", message: "payload must be JSON-serializable" }];
+  }
+  return new TextEncoder().encode(serialized).length > MAX_PAYLOAD_BYTES ? [{ path: "$", message: `payload exceeds ${MAX_PAYLOAD_BYTES} bytes` }] : [];
+}
+function validateAgentMetadataSize(payload) {
+  if (!isRecord2(payload) || payload.agent_metadata === void 0) return [];
+  if (!isRecord2(payload.agent_metadata)) {
+    return [{ path: "agent_metadata", message: "agent_metadata must be an object" }];
+  }
+  const serialized = JSON.stringify(payload.agent_metadata);
+  return new TextEncoder().encode(serialized).length > MAX_AGENT_METADATA_BYTES ? [{
+    path: "agent_metadata",
+    message: `agent_metadata exceeds ${MAX_AGENT_METADATA_BYTES} bytes`
+  }] : [];
+}
+function prepareExternalAnalysisForSave(payload, options = {}) {
+  const sizeIssues = validatePayloadSize(payload);
+  if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
+  const metadataIssues = validateAgentMetadataSize(payload);
+  if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
+  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
+}
+function validationErrorResult(issues) {
+  return {
+    content: [{
+      type: "text",
+      text: `Validation failed with ${issues.length} issue(s):
+${issues.map((issue) => `- ${issue.path}: ${issue.message}`).join("\n")}`
+    }],
+    structuredContent: { valid: false, issues },
+    isError: true
+  };
+}
+function externalAgentMetadata(payload, warnings, existing = {}) {
+  const clean = sanitizeExternalPayload(payload);
+  const payloadRecord = isRecord2(clean) ? clean : {};
+  const existingRecord = isRecord2(existing) ? existing : {};
+  const reservedKeys = /* @__PURE__ */ new Set([
+    "legacy_snapshot",
+    "legacy_agent_metadata",
+    "canonical_schema_version",
+    "normalized_at",
+    "normalization_warnings",
+    "backfilled_at",
+    "canonical_repair_failed_at",
+    "canonical_repair_errors",
+    "source_payload"
+  ]);
+  const supplied = isRecord2(payloadRecord.agent_metadata) ? Object.fromEntries(
+    Object.entries(payloadRecord.agent_metadata).filter(([key]) => !reservedKeys.has(key))
+  ) : {};
+  const preserved = Object.fromEntries(
+    Object.entries(existingRecord).filter(([key]) => reservedKeys.has(key) && key !== "source_payload")
+  );
+  const existingAgentMetadata = isRecord2(existingRecord.agent_metadata) ? existingRecord.agent_metadata : {};
+  const legacyTopLevelMetadata = Object.fromEntries(
+    Object.entries(existingRecord).filter(([key]) => !reservedKeys.has(key) && key !== "agent_metadata")
+  );
+  const legacyAgentMetadata = isRecord2(existingRecord.legacy_agent_metadata) ? existingRecord.legacy_agent_metadata : legacyTopLevelMetadata;
+  const agentMetadata = Object.keys(supplied).length > 0 ? supplied : existingAgentMetadata;
+  return {
+    ...preserved,
+    ...Object.keys(legacyAgentMetadata).length > 0 ? { legacy_agent_metadata: legacyAgentMetadata } : {},
+    agent_metadata: agentMetadata,
+    canonical_schema_version: "feasibility-report.v1",
+    normalized_at: (/* @__PURE__ */ new Date()).toISOString(),
+    normalization_warnings: warnings
+  };
+}
+function reportDisplayPath(report) {
+  if (report.is_public === true && report.slug) return `/r/${report.slug}`;
+  return `/reports/${report.id}`;
+}
 
 // src/lib/mcp/tools/get_analysis_schema.ts
 var get_analysis_schema_default = defineTool6({
@@ -491,60 +1183,49 @@ var get_analysis_schema_default = defineTool6({
 
 // src/lib/mcp/tools/validate_external_analysis.ts
 import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z6 } from "npm:zod@^4.4.3";
+import { z as z8 } from "npm:zod@^4.4.3";
 var validate_external_analysis_default = defineTool7({
   name: "validate_external_analysis",
   title: "Validate external analysis payload",
   description: "Dry-run validation of a proposed external analysis payload against Concept AI's schema. Returns a list of issues (empty = valid). Does not persist anything.",
   inputSchema: {
-    payload: z6.any().describe("The external analysis JSON payload to validate.")
+    payload: z8.any().describe("The external analysis JSON payload to validate.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) {
-      return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-    }
-    const issues = validateExternalAnalysis(payload);
-    return ok(
-      issues.length === 0 ? "Payload is valid." : `Found ${issues.length} issue(s):
-${issues.map((i) => `- ${i.path}: ${i.message}`).join("\n")}`,
-      { valid: issues.length === 0, issues }
-    );
+    const result = prepareExternalAnalysisForSave(payload, {
+      reportId: "EXTERNAL-VALIDATION"
+    });
+    if (!result.valid) return validationErrorResult(result.issues);
+    return ok("Payload is valid and can be saved in the canonical report structure.", {
+      valid: true,
+      issues: [],
+      warnings: result.warnings,
+      authoritative_scores: result.output.scores
+    });
   }
 });
 
 // src/lib/mcp/tools/create_external_analysis.ts
 import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z7 } from "npm:zod@^4.4.3";
+import { z as z9 } from "npm:zod@^4.4.3";
 var create_external_analysis_default = defineTool8({
   name: "create_external_analysis",
   title: "Create report from external analysis",
   description: "Create a new Concept AI report from a completed external-assistant analysis. Concept AI validates the payload, stores a canonical report (source_mode=external_agent), and recomputes authoritative FMART-O scores & financial totals. Rejects client-supplied ownership fields.",
   inputSchema: {
-    idempotency_key: z7.string().min(8).max(128).describe("Unique key per submission to safely retry without duplicates."),
-    payload: z7.any().describe("External analysis JSON matching get_analysis_schema.")
+    idempotency_key: z9.string().min(8).max(128).describe("Unique key per submission to safely retry without duplicates."),
+    payload: z9.any().describe("External analysis JSON matching get_analysis_schema.")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async ({ idempotency_key, payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-    if (payload && typeof payload === "object") {
-      for (const k of Object.keys(payload)) {
-        if (FORBIDDEN_INPUT_KEYS.has(k)) delete payload[k];
-      }
-    }
-    const issues = validateExternalAnalysis(payload);
-    if (issues.length > 0) {
-      return {
-        content: [{ type: "text", text: `Validation failed with ${issues.length} issue(s).` }],
-        structuredContent: { valid: false, issues },
-        isError: true
-      };
-    }
+    const normalized = prepareExternalAnalysisForSave(payload, {
+      reportId: `EXT-${idempotency_key.slice(0, 20).toUpperCase()}`
+    });
+    if (!normalized.valid) return validationErrorResult(normalized.issues);
     const sb = sbClient(ctx);
     const { data: prior } = await sb.from("mcp_write_idempotency").select("report_id, response").eq("user_id", userId).eq("tool_name", "create_external_analysis").eq("idempotency_key", idempotency_key).maybeSingle();
     if (prior?.report_id) {
@@ -554,15 +1235,16 @@ var create_external_analysis_default = defineTool8({
         ...prior.response
       });
     }
-    const canonical = normalizeToCanonicalOutput(payload);
     const insert = {
       user_id: userId,
-      title: String(payload.title).slice(0, 200),
-      industry: String(payload.industry),
-      inputs: payload.inputs ?? {},
-      output: canonical,
+      title: normalized.inputs.projectName.slice(0, 200),
+      industry: normalized.inputs.industry,
+      inputs: normalized.inputs,
+      output: normalized.output,
       source_mode: "external_agent",
-      external_agent_metadata: payload.agent_metadata ?? {},
+      external_agent_metadata: externalAgentMetadata(payload, normalized.warnings),
+      canonical_validated: true,
+      is_public: false,
       status: "draft"
     };
     const { data, error } = await sb.from("reports").insert(insert).select("id, slug, display_id").maybeSingle();
@@ -575,62 +1257,57 @@ var create_external_analysis_default = defineTool8({
       report_id: data.id,
       response: { slug: data.slug, display_id: data.display_id }
     });
-    return ok(`Report ${data.display_id} created (id: ${data.id}). Concept AI will recompute canonical scores.`, {
+    return ok(`Report ${data.display_id} created with canonical validated data (id: ${data.id}).`, {
       report_id: data.id,
       slug: data.slug,
-      display_id: data.display_id
+      display_id: data.display_id,
+      warnings: normalized.warnings
     });
   }
 });
 
 // src/lib/mcp/tools/update_external_analysis.ts
 import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z8 } from "npm:zod@^4.4.3";
+import { z as z10 } from "npm:zod@^4.4.3";
 var update_external_analysis_default = defineTool9({
   name: "update_external_analysis",
   title: "Update an external-agent report",
   description: "Replace the analysis of an existing external-agent report you own. Concept AI re-validates and recomputes canonical scores. Reports created via the in-app workflow cannot be updated through this tool.",
   inputSchema: {
-    report_id: z8.string().uuid().describe("Report UUID to update."),
-    idempotency_key: z8.string().min(8).max(128).describe("Unique key per update."),
-    payload: z8.any().describe("Full external analysis JSON (same shape as create).")
+    report_id: z10.string().uuid().describe("Report UUID to update."),
+    idempotency_key: z10.string().min(8).max(128).describe("Unique key per update."),
+    payload: z10.any().describe("Full external analysis JSON (same shape as create).")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async ({ report_id, idempotency_key, payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-    if (payload && typeof payload === "object") {
-      for (const k of Object.keys(payload)) {
-        if (FORBIDDEN_INPUT_KEYS.has(k)) delete payload[k];
-      }
-    }
-    const issues = validateExternalAnalysis(payload);
-    if (issues.length > 0) {
-      return {
-        content: [{ type: "text", text: `Validation failed with ${issues.length} issue(s).` }],
-        structuredContent: { valid: false, issues },
-        isError: true
-      };
-    }
     const sb = sbClient(ctx);
     const { data: prior } = await sb.from("mcp_write_idempotency").select("response").eq("user_id", userId).eq("tool_name", "update_external_analysis").eq("idempotency_key", idempotency_key).maybeSingle();
     if (prior) return ok("Update already applied (idempotent).", { idempotent: true });
-    const { data: current } = await sb.from("reports").select("id, user_id, source_mode").eq("id", report_id).maybeSingle();
+    const { data: current } = await sb.from("reports").select("id, user_id, source_mode, display_id, output, external_agent_metadata").eq("id", report_id).maybeSingle();
     if (!current) return err("Report not found or not accessible.");
     if (current.user_id !== userId) return err("Only the report owner can update it.");
     if (current.source_mode !== "external_agent") {
       return err("This report was not created by an external assistant; use the in-app workflow to edit it.");
     }
-    const canonical = normalizeToCanonicalOutput(payload);
+    const currentOutput = current.output && typeof current.output === "object" && !Array.isArray(current.output) ? current.output : {};
+    const normalized = prepareExternalAnalysisForSave(payload, {
+      reportId: typeof currentOutput.reportId === "string" ? currentOutput.reportId : current.display_id
+    });
+    if (!normalized.valid) return validationErrorResult(normalized.issues);
     const { error: updErr } = await sb.from("reports").update({
-      title: String(payload.title).slice(0, 200),
-      industry: String(payload.industry),
-      inputs: payload.inputs ?? {},
-      output: canonical,
-      external_agent_metadata: payload.agent_metadata ?? {}
-    }).eq("id", report_id);
+      title: normalized.inputs.projectName.slice(0, 200),
+      industry: normalized.inputs.industry,
+      inputs: normalized.inputs,
+      output: normalized.output,
+      external_agent_metadata: externalAgentMetadata(
+        payload,
+        normalized.warnings,
+        current.external_agent_metadata
+      ),
+      canonical_validated: true
+    }).eq("id", report_id).eq("user_id", userId);
     if (updErr) return err(updErr.message);
     await sb.from("mcp_write_idempotency").insert({
       user_id: userId,
@@ -639,14 +1316,27 @@ var update_external_analysis_default = defineTool9({
       report_id,
       response: {}
     });
-    return ok(`Report ${report_id} updated.`, { report_id });
+    return ok(`Report ${report_id} updated with canonical validated data.`, {
+      report_id,
+      warnings: normalized.warnings
+    });
   }
 });
 
 // src/lib/mcp/tools/generate_report_exports.ts
 import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z9 } from "npm:zod@^4.4.3";
+import { z as z11 } from "npm:zod@^4.4.3";
 var FORMATS = ["pdf", "xlsx", "pptx"];
+var MAX_EXPORT_REPORT_BYTES = 512 * 1024;
+var exportPreflightSchema = z11.object({
+  id: z11.string().uuid(),
+  user_id: z11.string().uuid(),
+  slug: z11.string().nullable(),
+  is_public: z11.boolean(),
+  source_mode: z11.enum(["in_app", "external_agent"]),
+  canonical_validated: z11.boolean(),
+  payload_bytes: z11.union([z11.number(), z11.string()])
+});
 function siteOrigin() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
@@ -655,19 +1345,37 @@ var generate_report_exports_default = defineTool10({
   title: "Queue report exports (PDF / XLSX / PPTX)",
   description: "Queue one or more export jobs for a report you own. Concept AI generates the files with its own templates and export engines \u2014 external assistants must NOT upload pre-generated files. Returns a display URL where the exports are produced and downloaded.",
   inputSchema: {
-    report_id: z9.string().uuid().describe("Report UUID."),
-    formats: z9.array(z9.enum(FORMATS)).min(1).max(3).describe("Which formats to generate: pdf, xlsx, pptx."),
-    idempotency_key: z9.string().min(8).max(128).describe("Unique key per export request.")
+    report_id: z11.string().uuid().describe("Report UUID."),
+    formats: z11.array(z11.enum(FORMATS)).min(1).max(3).describe("Which formats to generate: pdf, xlsx, pptx."),
+    idempotency_key: z11.string().min(8).max(128).describe("Unique key per export request.")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async ({ report_id, formats, idempotency_key }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
     const sb = sbClient(ctx);
-    const { data: report } = await sb.from("reports").select("id, user_id, slug").eq("id", report_id).maybeSingle();
+    const { data: preflightData, error: preflightError } = await sb.rpc("get_report_export_preflight", { _report_id: report_id }).maybeSingle();
+    if (preflightError) return err(preflightError.message);
+    if (!preflightData) return err("Report not found or not accessible.");
+    const parsedPreflight = exportPreflightSchema.safeParse(preflightData);
+    if (!parsedPreflight.success) return err("Report export preflight returned invalid data.");
+    const preflight = parsedPreflight.data;
+    if (preflight.user_id !== userId) return err("Only the report owner can generate exports.");
+    if (preflight.source_mode === "external_agent" && preflight.canonical_validated !== true) {
+      return err("Report data is incompatible: canonical validation is required.");
+    }
+    const payloadBytes = Number(preflight.payload_bytes);
+    if (!Number.isFinite(payloadBytes) || payloadBytes > MAX_EXPORT_REPORT_BYTES) {
+      return err(
+        `Report data is incompatible: stored payload exceeds ${MAX_EXPORT_REPORT_BYTES} bytes.`
+      );
+    }
+    const { data: report, error: reportError } = await sb.from("reports").select("inputs, output").eq("id", report_id).eq("user_id", userId).maybeSingle();
+    if (reportError) return err(reportError.message);
     if (!report) return err("Report not found or not accessible.");
-    if (report.user_id !== userId) return err("Only the report owner can generate exports.");
-    const displayUrl = `${siteOrigin()}/r/${report.slug}?export=1`;
+    const compatibility = validateCanonicalReportData(report.inputs, report.output);
+    if (!compatibility.valid) return validationErrorResult(compatibility.issues);
+    const displayUrl = `${siteOrigin()}${reportDisplayPath(preflight)}?export=1`;
     const rows = formats.map((format) => ({
       report_id,
       user_id: userId,
@@ -688,13 +1396,13 @@ var generate_report_exports_default = defineTool10({
 
 // src/lib/mcp/tools/get_export_status.ts
 import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z10 } from "npm:zod@^4.4.3";
+import { z as z12 } from "npm:zod@^4.4.3";
 var get_export_status_default = defineTool11({
   name: "get_export_status",
   title: "Get export job status",
   description: "Fetch the current status of a single export job (queued, ready, or failed).",
   inputSchema: {
-    export_id: z10.string().uuid().describe("Export job UUID.")
+    export_id: z12.string().uuid().describe("Export job UUID.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ export_id }, ctx) => {
@@ -708,14 +1416,14 @@ var get_export_status_default = defineTool11({
 
 // src/lib/mcp/tools/list_report_exports.ts
 import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z11 } from "npm:zod@^4.4.3";
+import { z as z13 } from "npm:zod@^4.4.3";
 var list_report_exports_default = defineTool12({
   name: "list_report_exports",
   title: "List export jobs for a report",
   description: "List all export jobs (PDF/XLSX/PPTX) for a report you own, newest first.",
   inputSchema: {
-    report_id: z11.string().uuid().describe("Report UUID."),
-    limit: z11.number().int().min(1).max(50).default(20)
+    report_id: z13.string().uuid().describe("Report UUID."),
+    limit: z13.number().int().min(1).max(50).default(20)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ report_id, limit }, ctx) => {
@@ -728,7 +1436,7 @@ var list_report_exports_default = defineTool12({
 
 // src/lib/mcp/tools/get_report_display_link.ts
 import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z12 } from "npm:zod@^4.4.3";
+import { z as z14 } from "npm:zod@^4.4.3";
 function siteOrigin2() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
@@ -737,8 +1445,8 @@ var get_report_display_link_default = defineTool13({
   title: "Get shareable link for a report",
   description: "Return the shareable Concept AI URL where a report is displayed (dashboard, charts, evidence, exports). Only works for reports the signed-in user can access.",
   inputSchema: {
-    report_id: z12.string().uuid().optional().describe("Report UUID."),
-    slug: z12.string().optional().describe("Report share slug.")
+    report_id: z14.string().uuid().optional().describe("Report UUID."),
+    slug: z14.string().optional().describe("Report share slug.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ report_id, slug }, ctx) => {
@@ -749,8 +1457,15 @@ var get_report_display_link_default = defineTool13({
     const { data, error } = report_id ? await q.eq("id", report_id).maybeSingle() : await q.eq("slug", slug).maybeSingle();
     if (error) return err(error.message);
     if (!data) return err("Report not found or not accessible.");
-    const url = `${siteOrigin2()}/r/${data.slug}`;
-    return ok(url, { url, slug: data.slug, is_public: data.is_public });
+    const path = reportDisplayPath(data);
+    const url = `${siteOrigin2()}${path}`;
+    return ok(url, {
+      url,
+      path,
+      report_id: data.id,
+      slug: data.slug,
+      is_public: data.is_public
+    });
   }
 });
 
