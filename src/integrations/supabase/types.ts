@@ -116,6 +116,44 @@ export type Database = {
         }
         Relationships: []
       }
+      mcp_write_idempotency: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          report_id: string | null
+          response: Json
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          report_id?: string | null
+          response?: Json
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          report_id?: string | null
+          response?: Json
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_write_idempotency_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_id: string | null
@@ -225,6 +263,56 @@ export type Database = {
           },
         ]
       }
+      report_exports: {
+        Row: {
+          created_at: string
+          display_url: string | null
+          error: string | null
+          format: string
+          id: string
+          idempotency_key: string | null
+          report_id: string
+          requested_by: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_url?: string | null
+          error?: string | null
+          format: string
+          id?: string
+          idempotency_key?: string | null
+          report_id: string
+          requested_by?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_url?: string | null
+          error?: string | null
+          format?: string
+          id?: string
+          idempotency_key?: string | null
+          report_id?: string
+          requested_by?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_exports_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_slug_aliases: {
         Row: {
           migrated_at: string
@@ -295,6 +383,7 @@ export type Database = {
           canonical_validated: boolean
           created_at: string
           display_id: string
+          external_agent_metadata: Json
           generation_seed: number | null
           generation_timestamp: string | null
           id: string
@@ -313,6 +402,7 @@ export type Database = {
           save_operation_key: string | null
           scoring_engine_version: string | null
           slug: string
+          source_mode: string
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
           title: string
@@ -324,6 +414,7 @@ export type Database = {
           canonical_validated?: boolean
           created_at?: string
           display_id?: string
+          external_agent_metadata?: Json
           generation_seed?: number | null
           generation_timestamp?: string | null
           id?: string
@@ -342,6 +433,7 @@ export type Database = {
           save_operation_key?: string | null
           scoring_engine_version?: string | null
           slug?: string
+          source_mode?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
           title: string
@@ -353,6 +445,7 @@ export type Database = {
           canonical_validated?: boolean
           created_at?: string
           display_id?: string
+          external_agent_metadata?: Json
           generation_seed?: number | null
           generation_timestamp?: string | null
           id?: string
@@ -371,6 +464,7 @@ export type Database = {
           save_operation_key?: string | null
           scoring_engine_version?: string | null
           slug?: string
+          source_mode?: string
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
           title?: string
@@ -456,6 +550,7 @@ export type Database = {
           canonical_validated: boolean
           created_at: string
           display_id: string
+          external_agent_metadata: Json
           generation_seed: number | null
           generation_timestamp: string | null
           id: string
@@ -474,6 +569,7 @@ export type Database = {
           save_operation_key: string | null
           scoring_engine_version: string | null
           slug: string
+          source_mode: string
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
           title: string
