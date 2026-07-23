@@ -8,6 +8,7 @@
 
 import pptxgen from "pptxgenjs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { assertCanonicalReportData } from "@/lib/reportContract";
 import {
   buildExportDecisionPack,
   applyCanonicalToReport,
@@ -40,11 +41,17 @@ const num = (s?: string) => {
 
 const truncate = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
 
+export const validatePptxExportData = (
+  report: unknown,
+  inputs: unknown,
+) => assertCanonicalReportData(inputs, report);
+
 export async function exportReportToPptx(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
   fileName: string,
 ) {
+  validatePptxExportData(rawReport, inputs);
   const pack = buildExportDecisionPack(rawReport, inputs);
   const report = applyCanonicalToReport(rawReport, pack);
 

@@ -18,6 +18,8 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
+import { validateCanonicalReportData } from "@/lib/reportContract";
+import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { WorkspaceHeader } from "@/components/report/workspace/WorkspaceHeader";
@@ -35,6 +37,7 @@ const Results = () => {
   const navigate = useNavigate();
   const { reportId: routeReportId } = useParams();
   const { user } = useAuth();
+  const userId = user?.id;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const rawTab = searchParams.get("tab") as WorkspaceTab | null;
@@ -69,11 +72,26 @@ const Results = () => {
     routeReportId && !stateReport ? "loading" : "idle",
   );
 
-  const rawReport: FeasibilityReport | undefined = stateReport ?? (fetched?.output as FeasibilityReport | undefined);
-  const inputs: ConceptInputs | undefined = stateInputs ?? (fetched?.inputs as ConceptInputs | undefined);
+  const rawReport: unknown = stateReport ?? fetched?.output;
+  const rawInputs: unknown = stateInputs ?? fetched?.inputs;
+  const compatibility = useMemo(
+    () => (
+      rawReport !== undefined && rawInputs !== undefined
+        ? validateCanonicalReportData(rawInputs, rawReport)
+        : null
+    ),
+    [rawReport, rawInputs],
+  );
+  const inputs: ConceptInputs | undefined = compatibility && "output" in compatibility
+    ? compatibility.inputs
+    : undefined;
   const report = useMemo(
-    () => (rawReport && inputs ? ensureEvidenceFields(rawReport, inputs) : rawReport),
-    [rawReport, inputs],
+    () => (
+      compatibility && "output" in compatibility
+        ? ensureEvidenceFields(compatibility.output, compatibility.inputs)
+        : undefined
+    ),
+    [compatibility],
   );
 
   // Refresh-safe ownership: trust the DB, not just route state.
@@ -121,11 +139,8 @@ const Results = () => {
       // Freshly-saved owner path: Analyze.tsx just saved this report as the
       // current user, so trust user.id locally for canEdit. We still verify
       // ownership against the DB in the background below.
-      if (stateOwnerId && !ownerId) {
-        setOwnerId(stateOwnerId);
-      } else if (!ownerId && user) {
-        setOwnerId(user.id);
-      }
+      if (stateOwnerId) setOwnerId((current) => current || stateOwnerId);
+      else if (userId) setOwnerId((current) => current || userId);
       // Background verification — corrects ownerId if the row is not actually
       // owned by this user (e.g. crafted navigation state). RLS still protects
       // writes server-side, but this keeps UI honest.
@@ -133,8 +148,8 @@ const Results = () => {
       getReportById(routeReportId)
         .then((row) => {
           if (cancelled || !row) return;
-          if (row.user_id !== ownerId) setOwnerId(row.user_id);
-          if (row.slug && !shareSlug) setShareSlug(row.slug);
+          setOwnerId((current) => current === row.user_id ? current : row.user_id);
+          if (row.slug) setShareSlug((current) => current || row.slug);
           setArchivedAt(row.archived_at ?? null);
           if (row.status) setStatus(row.status);
         })
@@ -148,7 +163,7 @@ const Results = () => {
         if (cancelled) return;
         if (!row) { setFetchState("not_found"); return; }
         // Non-owner: only redirect to /r/:slug when both slug and public flag are safe.
-        if (user && row.user_id !== user.id) {
+        if (userId && row.user_id !== userId) {
           if (row.is_public && row.slug) {
             navigate(`/r/${row.slug}`, { replace: true });
             return;
@@ -166,7 +181,7 @@ const Results = () => {
       })
       .catch(() => { if (!cancelled) setFetchState("not_found"); });
     return () => { cancelled = true; };
-  }, [routeReportId, stateReport, stateOwnerId, user, navigate, ownerId, shareSlug]);
+  }, [routeReportId, stateReport, stateOwnerId, userId, navigate]);
 
   const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
 
@@ -228,6 +243,21 @@ const Results = () => {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (compatibility && !("output" in compatibility)) {
+    const storedReportId = (
+      rawReport
+      && typeof rawReport === "object"
+      && !Array.isArray(rawReport)
+      && typeof (rawReport as Record<string, unknown>).reportId === "string"
+    ) ? (rawReport as Record<string, unknown>).reportId as string : null;
+    return (
+      <ReportCompatibilityPanel
+        reportId={fetched?.display_id || storedReportId || routeReportId || reportId}
+        issues={compatibility.issues}
+      />
     );
   }
 

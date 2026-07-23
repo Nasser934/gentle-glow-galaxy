@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { validateCanonicalReportData } from "@/lib/reportContract";
+import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 
 const SharedReport = () => {
   const { slug = "" } = useParams();
@@ -47,9 +49,36 @@ const SharedReport = () => {
   return <SharedReportContent row={row} user={user} navigate={navigate} />;
 };
 
-const SharedReportContent = ({ row, user, navigate }: any) => {
-  const enrichedReport = useMemo(() => ensureEvidenceFields(row.output, row.inputs), [row.output, row.inputs]);
+const SharedReportContent = ({
+  row,
+  user,
+  navigate,
+}: {
+  row: ReportRow;
+  user: { id: string } | null;
+  navigate: ReturnType<typeof useNavigate>;
+}) => {
+  const compatibility = useMemo(
+    () => validateCanonicalReportData(row.inputs, row.output),
+    [row.output, row.inputs],
+  );
+  const enrichedReport = useMemo(
+    () => (
+      "output" in compatibility
+        ? ensureEvidenceFields(compatibility.output, compatibility.inputs)
+        : undefined
+    ),
+    [compatibility],
+  );
 
+  if (!("output" in compatibility) || !enrichedReport) {
+    return (
+      <ReportCompatibilityPanel
+        reportId={row.display_id || row.output?.reportId || row.id}
+        issues={compatibility.issues}
+      />
+    );
+  }
 
 
 
@@ -93,7 +122,7 @@ const SharedReportContent = ({ row, user, navigate }: any) => {
           This shared view is for review only. Only the owner can edit status, inputs, or evidence.
         </div>
 
-        <InteractiveDashboard report={enrichedReport} inputs={row.inputs} />
+        <InteractiveDashboard report={enrichedReport} inputs={compatibility.inputs} />
 
         <div className="mt-8">
           {/* Shared/public view is strictly read-only — no edit, no re-run, no owner controls. */}

@@ -3,6 +3,7 @@ import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
 
 export interface ReportRow {
   id: string;
+  display_id?: string | null;
   slug: string;
   user_id: string;
   title: string;
@@ -15,7 +16,27 @@ export interface ReportRow {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+  source_mode?: "in_app" | "external_agent";
+  external_agent_metadata?: Record<string, unknown>;
 }
+
+const REPORT_ROW_COLUMNS = [
+  "id",
+  "display_id",
+  "slug",
+  "user_id",
+  "title",
+  "industry",
+  "inputs",
+  "output",
+  "status",
+  "is_public",
+  "parent_report_id",
+  "archived_at",
+  "created_at",
+  "updated_at",
+  "source_mode",
+].join(", ");
 
 export async function saveReport(inputs: ConceptInputs, output: FeasibilityReport) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -79,14 +100,14 @@ export async function saveReportVersion(inputs: ConceptInputs, output: Feasibili
 
 export async function getReportBySlug(slug: string) {
   const { data, error } = await supabase
-    .from("reports").select("*").eq("slug", slug).maybeSingle();
+    .from("reports").select(REPORT_ROW_COLUMNS).eq("slug", slug).maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
 }
 
 export async function getReportById(id: string) {
   const { data, error } = await supabase
-    .from("reports").select("*").eq("id", id).maybeSingle();
+    .from("reports").select(REPORT_ROW_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw error;
   return (data as unknown) as ReportRow | null;
 }

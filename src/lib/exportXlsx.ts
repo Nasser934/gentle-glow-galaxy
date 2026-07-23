@@ -8,6 +8,7 @@
 
 import ExcelJS from "exceljs";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import { assertCanonicalReportData } from "@/lib/reportContract";
 import { formatConfidence } from "@/lib/format";
 import { buildExportDecisionPack, applyCanonicalToReport } from "@/lib/exportDecisionPack";
 import { deriveAssumptionRegister } from "@/lib/evidence";
@@ -81,12 +82,17 @@ const sourceConfidenceLabel = (value: unknown): string => {
   return "—";
 };
 
+export const validateXlsxExportData = (
+  report: unknown,
+  inputs: unknown,
+) => assertCanonicalReportData(inputs, report);
 
 export async function exportReportToXlsx(
   rawReport: FeasibilityReport,
   inputs: ConceptInputs,
   fileName: string,
 ) {
+  validateXlsxExportData(rawReport, inputs);
   const pack = buildExportDecisionPack(rawReport, inputs);
   const report = applyCanonicalToReport(rawReport, pack);
 

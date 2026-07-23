@@ -1,13 +1,12 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import {
-  FORBIDDEN_INPUT_KEYS,
-  MAX_PAYLOAD_BYTES,
   err,
-  normalizeToCanonicalOutput,
+  externalAgentMetadata,
   ok,
+  prepareExternalAnalysisForSave,
   sbClient,
-  validateExternalAnalysis,
+  validationErrorResult,
 } from "../shared";
 
 export default defineTool({
@@ -24,24 +23,6 @@ export default defineTool({
   handler: async ({ report_id, idempotency_key, payload }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const raw = JSON.stringify(payload ?? {});
-    if (raw.length > MAX_PAYLOAD_BYTES) return err(`Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
-
-    if (payload && typeof payload === "object") {
-      for (const k of Object.keys(payload)) {
-        if (FORBIDDEN_INPUT_KEYS.has(k)) delete (payload as any)[k];
-      }
-    }
-
-    const issues = validateExternalAnalysis(payload);
-    if (issues.length > 0) {
-      return {
-        content: [{ type: "text" as const, text: `Validation failed with ${issues.length} issue(s).` }],
-        structuredContent: { valid: false, issues },
-        isError: true as const,
-      };
-    }
-
     const sb = sbClient(ctx);
 
     const { data: prior } = await sb
@@ -55,7 +36,7 @@ export default defineTool({
 
     const { data: current } = await sb
       .from("reports")
-      .select("id, user_id, source_mode")
+      .select("id, user_id, source_mode, display_id, output, external_agent_metadata")
       .eq("id", report_id)
       .maybeSingle();
     if (!current) return err("Report not found or not accessible.");
@@ -64,17 +45,34 @@ export default defineTool({
       return err("This report was not created by an external assistant; use the in-app workflow to edit it.");
     }
 
-    const canonical = normalizeToCanonicalOutput(payload);
+    const currentOutput = (
+      current.output
+      && typeof current.output === "object"
+      && !Array.isArray(current.output)
+    ) ? current.output as Record<string, unknown> : {};
+    const normalized = prepareExternalAnalysisForSave(payload, {
+      reportId: typeof currentOutput.reportId === "string"
+        ? currentOutput.reportId
+        : current.display_id,
+    });
+    if (!normalized.valid) return validationErrorResult(normalized.issues);
+
     const { error: updErr } = await sb
       .from("reports")
       .update({
-        title: String((payload as any).title).slice(0, 200),
-        industry: String((payload as any).industry),
-        inputs: (payload as any).inputs ?? {},
-        output: canonical,
-        external_agent_metadata: (payload as any).agent_metadata ?? {},
+        title: normalized.inputs.projectName.slice(0, 200),
+        industry: normalized.inputs.industry,
+        inputs: normalized.inputs,
+        output: normalized.output,
+        external_agent_metadata: externalAgentMetadata(
+          payload,
+          normalized.warnings,
+          current.external_agent_metadata,
+        ),
+        canonical_validated: true,
       })
-      .eq("id", report_id);
+      .eq("id", report_id)
+      .eq("user_id", userId);
     if (updErr) return err(updErr.message);
 
     await sb.from("mcp_write_idempotency").insert({
@@ -85,6 +83,9 @@ export default defineTool({
       response: {},
     });
 
-    return ok(`Report ${report_id} updated.`, { report_id });
+    return ok(`Report ${report_id} updated with canonical validated data.`, {
+      report_id,
+      warnings: normalized.warnings,
+    });
   },
 });

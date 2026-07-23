@@ -1,5 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import type { ToolContext } from "@lovable.dev/mcp-js";
+import { z } from "zod";
+import {
+  conceptInputsSchema,
+  feasibilityReportSchema,
+  normalizeExternalAnalysis,
+  type ExternalNormalizationOptions,
+  type ExternalNormalizationResult,
+  type ReportValidationIssue,
+} from "../reportContract";
+
+type UnknownRecord = Record<string, unknown>;
 
 export function sbClient(ctx: ToolContext) {
   const url = process.env.SUPABASE_URL!;
@@ -23,258 +34,195 @@ export function ok(text: string, structured?: Record<string, unknown>) {
 
 // Max serialized payload size for external analysis submissions (~256 KB).
 export const MAX_PAYLOAD_BYTES = 256 * 1024;
+export const MAX_AGENT_METADATA_BYTES = 32 * 1024;
 
 /**
- * Concept AI External Analysis JSON schema (public contract for MCP callers).
- * Kept lightweight — Concept AI still owns authoritative scoring and financial
- * totals; external agents propose, Concept AI validates & recomputes.
+ * Generated from the exact same schemas used to validate the dashboard and
+ * exporters. Legacy aliases are accepted by the normalizer, but callers should
+ * submit these canonical camelCase structures.
  */
 export const EXTERNAL_ANALYSIS_SCHEMA = {
   $schema: "http://json-schema.org/draft-07/schema#",
-  title: "ConceptAIExternalAnalysis",
+  title: "ConceptAICanonicalExternalAnalysis",
   type: "object",
-  required: ["title", "industry", "inputs", "analysis"],
+  required: ["inputs", "analysis"],
   properties: {
-    title: { type: "string", minLength: 3, maxLength: 200 },
+    title: {
+      type: "string",
+      description: "Optional compatibility alias for inputs.projectName.",
+    },
     industry: {
       type: "string",
-      enum: ["pmo", "it", "telecom", "infrastructure", "government", "real_estate", "other"],
+      description: "Optional compatibility alias for inputs.industry.",
     },
-    inputs: {
-      type: "object",
-      description: "Project brief: overview, scope, assumptions, risks, financials.",
-      properties: {
-        overview: { type: "string" },
-        scope: { type: "string" },
-        assumptions: { type: "array", items: { type: "string" } },
-        risks: { type: "array", items: { type: "string" } },
-        budget: { type: ["number", "string"] },
-        timeline: { type: "string" },
-        region: { type: "string" },
-      },
-      additionalProperties: true,
-    },
-    analysis: {
-      type: "object",
-      required: ["fmarto", "verdict"],
-      properties: {
-        fmarto: {
-          type: "object",
-          description: "Proposed FMART-O scores. Concept AI recomputes canonical values.",
-          properties: {
-            feasibility: { type: "number", minimum: 0, maximum: 100 },
-            market: { type: "number", minimum: 0, maximum: 100 },
-            architecture: { type: "number", minimum: 0, maximum: 100 },
-            risk: { type: "number", minimum: 0, maximum: 100 },
-            timeline: { type: "number", minimum: 0, maximum: 100 },
-            operations: { type: "number", minimum: 0, maximum: 100 },
-            rationale: { type: "object", additionalProperties: { type: "string" } },
-          },
-        },
-        verdict: {
-          type: "object",
-          required: ["recommendation"],
-          properties: {
-            recommendation: {
-              type: "string",
-              enum: ["proceed", "proceed_with_caution", "revise", "do_not_proceed"],
-            },
-            confidence: { type: "number", minimum: 0, maximum: 1 },
-            summary: { type: "string", maxLength: 2000 },
-          },
-        },
-        market: {
-          type: "object",
-          properties: {
-            tam: { type: ["string", "number"] },
-            sam: { type: ["string", "number"] },
-            som: { type: ["string", "number"] },
-            cagr: { type: ["string", "number"] },
-            competitors: { type: "array" },
-            signals: { type: "array" },
-          },
-        },
-        financials: {
-          type: "object",
-          description: "Proposed financials. Concept AI recomputes totals & break-even.",
-          properties: {
-            capex: { type: "array" },
-            opex: { type: "array" },
-            revenue: { type: "array" },
-            scenarios: { type: "array" },
-            break_even_months: { type: "number" },
-          },
-        },
-        risks: {
-          type: "array",
-          items: {
-            type: "object",
-            required: ["title", "severity"],
-            properties: {
-              title: { type: "string" },
-              severity: { type: "string", enum: ["low", "material", "high"] },
-              likelihood: { type: "string", enum: ["low", "medium", "high"] },
-              mitigation: { type: "string" },
-            },
-          },
-        },
-        recommendations: { type: "array", items: { type: "string" } },
-        next_steps: { type: "array", items: { type: "string" } },
-        claims: {
-          type: "array",
-          description: "Claim-to-source mappings.",
-          items: {
-            type: "object",
-            required: ["id", "text", "sources"],
-            properties: {
-              id: { type: "string" },
-              text: { type: "string" },
-              confidence: { type: "string", enum: ["high", "medium", "low"] },
-              sources: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["url"],
-                  properties: {
-                    url: { type: "string", format: "uri" },
-                    domain: { type: "string" },
-                    title: { type: "string" },
-                    published_at: { type: "string" },
-                  },
-                },
-              },
-            },
-          },
-        },
-        evidence_warnings: { type: "array", items: { type: "string" } },
-      },
-    },
+    inputs: z.toJSONSchema(conceptInputsSchema, { target: "draft-7" }),
+    analysis: z.toJSONSchema(feasibilityReportSchema, { target: "draft-7" }),
     agent_metadata: {
       type: "object",
-      description: "Optional info about the external assistant (model, version).",
-      properties: {
-        model: { type: "string" },
-        model_version: { type: "string" },
-        notes: { type: "string" },
-      },
+      additionalProperties: true,
+      description: "Optional external assistant model/version metadata.",
     },
   },
   additionalProperties: false,
+  "x-accepted-legacy-aliases": {
+    "analysis.fmarto_scores": "analysis.scores",
+    "analysis.fmarto": "analysis.scores",
+    "analysis.next_steps": "analysis.nextSteps",
+    "analysis.executive_summary": "analysis.executiveSummary",
+    "analysis.funding_mix": "analysis.fundingMix",
+    "analysis.funding_advisory": "analysis.fundingAdvisory",
+  },
 } as const;
 
-const ALLOWED_INDUSTRIES = new Set([
-  "pmo", "it", "telecom", "infrastructure", "government", "real_estate", "other",
+/** Strip fields callers must never control, without mutating the caller object. */
+export const FORBIDDEN_INPUT_KEYS = new Set([
+  "user_id",
+  "id",
+  "slug",
+  "display_id",
+  "canonical_validated",
+  "root_report_id",
+  "parent_report_id",
+  "created_at",
+  "updated_at",
+  "is_public",
+  "archived_at",
 ]);
-const ALLOWED_RECOMMENDATIONS = new Set([
-  "proceed", "proceed_with_caution", "revise", "do_not_proceed",
-]);
-const ALLOWED_SEVERITIES = new Set(["low", "material", "high"]);
 
-export interface ValidationIssue {
-  path: string;
-  message: string;
+const isRecord = (value: unknown): value is UnknownRecord => (
+  typeof value === "object" && value !== null && !Array.isArray(value)
+);
+
+export function sanitizeExternalPayload(payload: unknown): unknown {
+  if (!isRecord(payload)) return payload;
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key)),
+  );
+}
+
+export function validatePayloadSize(payload: unknown): ReportValidationIssue[] {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(payload ?? {});
+  } catch {
+    return [{ path: "$", message: "payload must be JSON-serializable" }];
+  }
+  return new TextEncoder().encode(serialized).length > MAX_PAYLOAD_BYTES
+    ? [{ path: "$", message: `payload exceeds ${MAX_PAYLOAD_BYTES} bytes` }]
+    : [];
+}
+
+export function validateAgentMetadataSize(payload: unknown): ReportValidationIssue[] {
+  if (!isRecord(payload) || payload.agent_metadata === undefined) return [];
+  if (!isRecord(payload.agent_metadata)) {
+    return [{ path: "agent_metadata", message: "agent_metadata must be an object" }];
+  }
+  const serialized = JSON.stringify(payload.agent_metadata);
+  return new TextEncoder().encode(serialized).length > MAX_AGENT_METADATA_BYTES
+    ? [{
+        path: "agent_metadata",
+        message: `agent_metadata exceeds ${MAX_AGENT_METADATA_BYTES} bytes`,
+      }]
+    : [];
 }
 
 /**
- * Lightweight validator — validates structure without pulling in ajv.
- * Returns issues list. Empty = valid.
+ * Single pre-save gate used by validate/create/update. A successful result is
+ * guaranteed to satisfy the same canonical contract used by React and exports.
  */
-export function validateExternalAnalysis(payload: unknown): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-  if (!payload || typeof payload !== "object") {
-    return [{ path: "$", message: "Payload must be an object" }];
-  }
-  const p = payload as Record<string, any>;
-
-  if (typeof p.title !== "string" || p.title.trim().length < 3 || p.title.length > 200) {
-    issues.push({ path: "title", message: "title must be a string (3–200 chars)" });
-  }
-  if (typeof p.industry !== "string" || !ALLOWED_INDUSTRIES.has(p.industry)) {
-    issues.push({ path: "industry", message: `industry must be one of: ${[...ALLOWED_INDUSTRIES].join(", ")}` });
-  }
-  if (!p.inputs || typeof p.inputs !== "object") {
-    issues.push({ path: "inputs", message: "inputs object is required" });
-  }
-  if (!p.analysis || typeof p.analysis !== "object") {
-    issues.push({ path: "analysis", message: "analysis object is required" });
-    return issues;
-  }
-  const a = p.analysis;
-  if (!a.fmarto || typeof a.fmarto !== "object") {
-    issues.push({ path: "analysis.fmarto", message: "fmarto scores object is required" });
-  } else {
-    for (const dim of ["feasibility", "market", "architecture", "risk", "timeline", "operations"]) {
-      const v = a.fmarto[dim];
-      if (v !== undefined && (typeof v !== "number" || v < 0 || v > 100)) {
-        issues.push({ path: `analysis.fmarto.${dim}`, message: "must be a number 0–100" });
-      }
-    }
-  }
-  if (!a.verdict || typeof a.verdict !== "object") {
-    issues.push({ path: "analysis.verdict", message: "verdict object is required" });
-  } else {
-    if (!ALLOWED_RECOMMENDATIONS.has(a.verdict.recommendation)) {
-      issues.push({
-        path: "analysis.verdict.recommendation",
-        message: `must be one of: ${[...ALLOWED_RECOMMENDATIONS].join(", ")}`,
-      });
-    }
-    if (a.verdict.confidence !== undefined) {
-      const c = a.verdict.confidence;
-      if (typeof c !== "number" || c < 0 || c > 1) {
-        issues.push({ path: "analysis.verdict.confidence", message: "confidence must be 0–1" });
-      }
-    }
-  }
-  if (a.risks && Array.isArray(a.risks)) {
-    a.risks.forEach((r: any, i: number) => {
-      if (!r || typeof r !== "object" || typeof r.title !== "string") {
-        issues.push({ path: `analysis.risks[${i}].title`, message: "title required" });
-      }
-      if (!r || !ALLOWED_SEVERITIES.has(r?.severity)) {
-        issues.push({ path: `analysis.risks[${i}].severity`, message: "severity must be low|material|high" });
-      }
-    });
-  }
-  if (a.claims && Array.isArray(a.claims)) {
-    a.claims.forEach((c: any, i: number) => {
-      if (!c?.id || typeof c.id !== "string") {
-        issues.push({ path: `analysis.claims[${i}].id`, message: "claim id required" });
-      }
-      if (!Array.isArray(c?.sources) || c.sources.length === 0) {
-        issues.push({ path: `analysis.claims[${i}].sources`, message: "at least one source required" });
-      }
-    });
-  }
-  return issues;
+export function prepareExternalAnalysisForSave(
+  payload: unknown,
+  options: ExternalNormalizationOptions = {},
+): ExternalNormalizationResult {
+  const sizeIssues = validatePayloadSize(payload);
+  if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
+  const metadataIssues = validateAgentMetadataSize(payload);
+  if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
+  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
 }
 
-/**
- * Normalize an external analysis payload into a canonical Concept AI report
- * object stored in `reports.output`. Concept AI's export/dashboard/scoring
- * engines then compute authoritative FMART-O and financial totals from this.
- */
-export function normalizeToCanonicalOutput(payload: any) {
-  const a = payload.analysis ?? {};
+/** Backwards-compatible named validator for MCP callers and focused tests. */
+export function validateExternalAnalysis(payload: unknown): ReportValidationIssue[] {
+  const result = prepareExternalAnalysisForSave(payload, { reportId: "EXTERNAL-VALIDATION" });
+  return result.valid ? [] : result.issues;
+}
+
+export function validationErrorResult(issues: ReportValidationIssue[]) {
   return {
-    schema_version: "external_agent.v1",
-    source_mode: "external_agent",
-    fmarto_scores: a.fmarto ?? {},
-    verdict: a.verdict ?? {},
-    market: a.market ?? {},
-    financials: a.financials ?? {},
-    risks: Array.isArray(a.risks) ? a.risks : [],
-    recommendations: Array.isArray(a.recommendations) ? a.recommendations : [],
-    next_steps: Array.isArray(a.next_steps) ? a.next_steps : [],
-    claims: Array.isArray(a.claims) ? a.claims : [],
-    evidence_warnings: Array.isArray(a.evidence_warnings) ? a.evidence_warnings : [],
-    agent_metadata: payload.agent_metadata ?? {},
+    content: [{
+      type: "text" as const,
+      text: `Validation failed with ${issues.length} issue(s):\n${issues
+        .map((issue) => `- ${issue.path}: ${issue.message}`)
+        .join("\n")}`,
+    }],
+    structuredContent: { valid: false, issues },
+    isError: true as const,
   };
 }
 
-/** Strip fields callers should never set (ownership, canonical validation, etc.). */
-export const FORBIDDEN_INPUT_KEYS = new Set([
-  "user_id", "id", "slug", "display_id", "canonical_validated",
-  "root_report_id", "parent_report_id", "created_at", "updated_at",
-  "is_public", "archived_at",
-]);
+export function externalAgentMetadata(
+  payload: unknown,
+  warnings: string[],
+  existing: unknown = {},
+): UnknownRecord {
+  const clean = sanitizeExternalPayload(payload);
+  const payloadRecord = isRecord(clean) ? clean : {};
+  const existingRecord = isRecord(existing) ? existing : {};
+  const reservedKeys = new Set([
+    "legacy_snapshot",
+    "legacy_agent_metadata",
+    "canonical_schema_version",
+    "normalized_at",
+    "normalization_warnings",
+    "backfilled_at",
+    "canonical_repair_failed_at",
+    "canonical_repair_errors",
+    "source_payload",
+  ]);
+  const supplied = isRecord(payloadRecord.agent_metadata)
+    ? Object.fromEntries(
+        Object.entries(payloadRecord.agent_metadata)
+          .filter(([key]) => !reservedKeys.has(key)),
+      )
+    : {};
+  const preserved = Object.fromEntries(
+    Object.entries(existingRecord).filter(([key]) => (
+      reservedKeys.has(key) && key !== "source_payload"
+    )),
+  );
+  const existingAgentMetadata = isRecord(existingRecord.agent_metadata)
+    ? existingRecord.agent_metadata
+    : {};
+  const legacyTopLevelMetadata = Object.fromEntries(
+    Object.entries(existingRecord).filter(([key]) => (
+      !reservedKeys.has(key) && key !== "agent_metadata"
+    )),
+  );
+  const legacyAgentMetadata = isRecord(existingRecord.legacy_agent_metadata)
+    ? existingRecord.legacy_agent_metadata
+    : legacyTopLevelMetadata;
+  const agentMetadata = Object.keys(supplied).length > 0
+    ? supplied
+    : existingAgentMetadata;
+  return {
+    ...preserved,
+    ...(Object.keys(legacyAgentMetadata).length > 0
+      ? { legacy_agent_metadata: legacyAgentMetadata }
+      : {}),
+    agent_metadata: agentMetadata,
+    canonical_schema_version: "feasibility-report.v1",
+    normalized_at: new Date().toISOString(),
+    normalization_warnings: warnings,
+  };
+}
+
+export interface DisplayPathReport {
+  id: string;
+  slug?: string | null;
+  is_public?: boolean | null;
+}
+
+export function reportDisplayPath(report: DisplayPathReport): string {
+  if (report.is_public === true && report.slug) return `/r/${report.slug}`;
+  return `/reports/${report.id}`;
+}

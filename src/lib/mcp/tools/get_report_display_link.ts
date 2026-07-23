@@ -1,6 +1,6 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-import { err, ok, sbClient } from "../shared";
+import { err, ok, reportDisplayPath, sbClient } from "../shared";
 
 function siteOrigin(): string {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
@@ -26,7 +26,14 @@ export default defineTool({
       : await q.eq("slug", slug!).maybeSingle();
     if (error) return err(error.message);
     if (!data) return err("Report not found or not accessible.");
-    const url = `${siteOrigin()}/r/${data.slug}`;
-    return ok(url, { url, slug: data.slug, is_public: data.is_public });
+    const path = reportDisplayPath(data);
+    const url = `${siteOrigin()}${path}`;
+    return ok(url, {
+      url,
+      path,
+      report_id: data.id,
+      slug: data.slug,
+      is_public: data.is_public,
+    });
   },
 });

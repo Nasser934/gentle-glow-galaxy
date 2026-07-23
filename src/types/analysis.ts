@@ -219,6 +219,8 @@ export interface FeasibilityReport {
 
   recommendations: string[];     // strategic recommendations bullets
   nextSteps: string[];
+  /** Visible notices added when optional source evidence was unavailable. */
+  evidenceWarnings?: string[];
 
   // ----------------------------------------------------------
   // Consumer Evidence & Improvement Layer (all optional — added
