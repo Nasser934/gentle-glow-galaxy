@@ -46,6 +46,7 @@ describe("canonical read-path resolver", () => {
     if (result.valid) throw new Error("expected unusable data to fail");
     expect(result.issues.length).toBeGreaterThan(0);
     expect(result.issues.every((issue) => typeof issue.path === "string")).toBe(true);
+
   });
 
   it("publishes stable schema versions used by the persistence columns", () => {
