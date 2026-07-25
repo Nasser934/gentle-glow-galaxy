@@ -18,7 +18,7 @@ import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
 import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { validateCanonicalReportData } from "@/lib/reportContract";
+import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
@@ -77,7 +77,7 @@ const Results = () => {
   const compatibility = useMemo(
     () => (
       rawReport !== undefined && rawInputs !== undefined
-        ? validateCanonicalReportData(rawInputs, rawReport)
+        ? resolveCanonicalReportData(rawInputs, rawReport)
         : null
     ),
     [rawReport, rawInputs],

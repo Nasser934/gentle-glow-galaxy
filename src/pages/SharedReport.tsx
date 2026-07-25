@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
-import { validateCanonicalReportData } from "@/lib/reportContract";
+import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 
 const SharedReport = () => {
@@ -59,7 +59,7 @@ const SharedReportContent = ({
   navigate: ReturnType<typeof useNavigate>;
 }) => {
   const compatibility = useMemo(
-    () => validateCanonicalReportData(row.inputs, row.output),
+    () => resolveCanonicalReportData(row.inputs, row.output),
     [row.output, row.inputs],
   );
   const enrichedReport = useMemo(
