@@ -380,6 +380,7 @@ export type Database = {
       reports: {
         Row: {
           archived_at: string | null
+          canonical_schema_version: string | null
           canonical_validated: boolean
           created_at: string
           display_id: string
@@ -393,6 +394,9 @@ export type Database = {
           is_public: boolean
           legacy_report_id: string | null
           model_id: string | null
+          normalization_timestamp: string | null
+          normalization_warnings: Json
+          original_payload: Json | null
           output: Json
           parent_report_id: string | null
           prompt_version: string | null
@@ -403,6 +407,7 @@ export type Database = {
           scoring_engine_version: string | null
           slug: string
           source_mode: string
+          source_schema_version: string | null
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
           title: string
@@ -411,6 +416,7 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          canonical_schema_version?: string | null
           canonical_validated?: boolean
           created_at?: string
           display_id?: string
@@ -424,6 +430,9 @@ export type Database = {
           is_public?: boolean
           legacy_report_id?: string | null
           model_id?: string | null
+          normalization_timestamp?: string | null
+          normalization_warnings?: Json
+          original_payload?: Json | null
           output: Json
           parent_report_id?: string | null
           prompt_version?: string | null
@@ -434,6 +443,7 @@ export type Database = {
           scoring_engine_version?: string | null
           slug?: string
           source_mode?: string
+          source_schema_version?: string | null
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
           title: string
@@ -442,6 +452,7 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          canonical_schema_version?: string | null
           canonical_validated?: boolean
           created_at?: string
           display_id?: string
@@ -455,6 +466,9 @@ export type Database = {
           is_public?: boolean
           legacy_report_id?: string | null
           model_id?: string | null
+          normalization_timestamp?: string | null
+          normalization_warnings?: Json
+          original_payload?: Json | null
           output?: Json
           parent_report_id?: string | null
           prompt_version?: string | null
@@ -465,6 +479,7 @@ export type Database = {
           scoring_engine_version?: string | null
           slug?: string
           source_mode?: string
+          source_schema_version?: string | null
           source_snapshot_metadata?: Json
           status?: Database["public"]["Enums"]["report_status"]
           title?: string
@@ -547,6 +562,7 @@ export type Database = {
         Args: { p_slug: string }
         Returns: {
           archived_at: string | null
+          canonical_schema_version: string | null
           canonical_validated: boolean
           created_at: string
           display_id: string
@@ -560,6 +576,9 @@ export type Database = {
           is_public: boolean
           legacy_report_id: string | null
           model_id: string | null
+          normalization_timestamp: string | null
+          normalization_warnings: Json
+          original_payload: Json | null
           output: Json
           parent_report_id: string | null
           prompt_version: string | null
@@ -570,6 +589,7 @@ export type Database = {
           scoring_engine_version: string | null
           slug: string
           source_mode: string
+          source_schema_version: string | null
           source_snapshot_metadata: Json
           status: Database["public"]["Enums"]["report_status"]
           title: string
