@@ -305,10 +305,21 @@ export const feasibilityReportSchema = z.object({
   legacyEvidence: z.boolean().optional(),
 }).passthrough();
 
+/** Schema versions exchanged with external assistants and stored on reports. */
+export const SOURCE_SCHEMA_VERSION = "external_agent.v1";
+export const CANONICAL_SCHEMA_VERSION = "canonical_report.v2";
+
 export interface ReportValidationIssue {
   path: string;
   message: string;
+  /** Machine-readable reason so an assistant can self-correct and resend. */
+  code?: string;
+  /** Expected type/shape, e.g. "number", "string", "array<object>". */
+  expected?: string;
+  /** A concrete valid example value for this path. */
+  example?: unknown;
 }
+
 
 export type CanonicalValidationResult =
   | {
