@@ -8,6 +8,7 @@ import {
   sbClient,
   validationErrorResult,
 } from "../shared";
+import { CANONICAL_SCHEMA_VERSION, SOURCE_SCHEMA_VERSION } from "../../reportContract";
 
 export default defineTool({
   name: "create_external_analysis",
@@ -58,6 +59,10 @@ export default defineTool({
       source_mode: "external_agent",
       external_agent_metadata: externalAgentMetadata(payload, normalized.warnings),
       canonical_validated: true,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: new Date().toISOString(),
       is_public: false,
       status: "draft" as const,
     };
@@ -78,6 +83,9 @@ export default defineTool({
       slug: data.slug,
       display_id: data.display_id,
       warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings,
     });
   },
 });

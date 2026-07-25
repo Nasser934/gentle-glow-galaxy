@@ -477,6 +477,8 @@ var feasibilityReportSchema = z6.object({
   decision: decisionSchema.optional(),
   legacyEvidence: z6.boolean().optional()
 }).passthrough();
+var SOURCE_SCHEMA_VERSION = "external_agent.v1";
+var CANONICAL_SCHEMA_VERSION = "canonical_report.v2";
 var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var record = (value) => isRecord(value) ? value : {};
 var valueAt = (source, ...keys) => {
@@ -546,10 +548,17 @@ var scenarioName = (value) => {
   }
   return "Base Case";
 };
-var zodIssues = (prefix, error) => error.issues.map((issue) => ({
-  path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
-  message: issue.message
-}));
+var zodIssues = (prefix, error) => error.issues.map((issue) => {
+  const anyIssue = issue;
+  const received = issue.received;
+  const missing = anyIssue.code === "invalid_type" && received === "undefined";
+  return {
+    path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
+    message: issue.message,
+    code: missing ? "missing_required_field" : anyIssue.code ?? "invalid_value",
+    expected: typeof anyIssue.expected === "string" ? anyIssue.expected : void 0
+  };
+});
 function validateCanonicalReportData(inputs, output) {
   const inputResult = conceptInputsSchema.safeParse(inputs);
   const outputResult = feasibilityReportSchema.safeParse(output);
@@ -566,8 +575,8 @@ function validateCanonicalReportData(inputs, output) {
     output: outputResult.data
   };
 }
-var normalizeInputs = (payload) => {
-  const candidate = record(payload.inputs);
+var normalizeInputs = (payload2) => {
+  const candidate = record(payload2.inputs);
   const canonical = conceptInputsSchema.safeParse(candidate);
   if (canonical.success) return canonical.data;
   const overview = record(candidate.overview);
@@ -575,8 +584,8 @@ var normalizeInputs = (payload) => {
   const operatingModel = record(valueAt(candidate, "operatingModel", "operating_model"));
   const businessModelRows = valueAt(candidate, "businessModel", "business_model");
   return {
-    projectName: text(valueAt(candidate, "projectName", "project_name", "working_name", "title", "name")) || text(valueAt(overview, "projectName", "project_name", "title", "name")) || text(payload.title),
-    industry: text(valueAt(candidate, "industry", "sector")) || text(valueAt(overview, "industry", "sector")) || text(payload.industry),
+    projectName: text(valueAt(candidate, "projectName", "project_name", "working_name", "title", "name")) || text(valueAt(overview, "projectName", "project_name", "title", "name")) || text(payload2.title),
+    industry: text(valueAt(candidate, "industry", "sector")) || text(valueAt(overview, "industry", "sector")) || text(payload2.industry),
     location: text(valueAt(candidate, "location", "region", "geography")) || text(valueAt(overview, "location", "region", "geography")),
     description: text(valueAt(candidate, "description", "overview", "summary")) || text(valueAt(overview, "description", "summary")) || text(valueAt(scope, "description", "summary")),
     strategicObjectives: text(valueAt(candidate, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(overview, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(candidate, "value_proposition")),
@@ -645,7 +654,10 @@ var normalizeScores = (analysis) => {
     return {
       issues: [{
         path: "analysis.scores",
-        message: "scores (or legacy fmarto_scores/fmarto) are required"
+        message: "scores (or legacy fmarto_scores/fmarto) are required",
+        code: "missing_required_field",
+        expected: "object",
+        example: { financial: 6.5, market: 7, achievability: 6, risk: 5.5, timing: 7, operational: 6 }
       }]
     };
   }
@@ -664,7 +676,10 @@ var normalizeScores = (analysis) => {
     if (rawValue === void 0 || rawValue < 0 || rawValue > 100) {
       issues.push({
         path: `analysis.scores.${dimension}`,
-        message: "must resolve to a number between 0 and 100"
+        message: "must resolve to a number between 0 and 100 (0-10 scale preferred)",
+        code: "missing_required_field",
+        expected: "number",
+        example: 6.5
       });
       continue;
     }
@@ -945,18 +960,23 @@ var normalizeResearch = (analysis) => {
     })
   };
 };
-function normalizeExternalAnalysis(payload, options = {}) {
-  if (!isRecord(payload)) {
-    return { valid: false, issues: [{ path: "$", message: "payload must be an object" }] };
+function normalizeExternalAnalysis(payload2, options = {}) {
+  if (!isRecord(payload2)) {
+    return { valid: false, issues: [{ path: "$", message: "payload must be an object", code: "invalid_type", expected: "object" }] };
   }
-  const analysis = record(valueAt(payload, "analysis", "output", "report"));
+  const analysis = record(valueAt(payload2, "analysis", "output", "report"));
   if (Object.keys(analysis).length === 0) {
     return {
       valid: false,
-      issues: [{ path: "analysis", message: "analysis object is required" }]
+      issues: [{
+        path: "analysis",
+        message: "analysis object is required",
+        code: "missing_required_field",
+        expected: "object"
+      }]
     };
   }
-  const inputs = normalizeInputs(payload);
+  const inputs = normalizeInputs(payload2);
   const scoreResult = normalizeScores(analysis);
   if (!scoreResult.scores) return { valid: false, issues: scoreResult.issues };
   const summary = text(valueAt(analysis, "executiveSummary", "executive_summary")) || text(record(analysis.verdict).summary);
@@ -965,14 +985,17 @@ function normalizeExternalAnalysis(payload, options = {}) {
       valid: false,
       issues: [{
         path: "analysis.executiveSummary",
-        message: "executiveSummary (or legacy executive_summary/verdict.summary) is required"
+        message: "executiveSummary (or legacy executive_summary/verdict.summary) is required",
+        code: "missing_required_field",
+        expected: "string",
+        example: "This concept is viable subject to licensing and anchor-client validation."
       }]
     };
   }
   const warnings = /* @__PURE__ */ new Set([
     ...stringList(valueAt(analysis, "evidenceWarnings", "evidence_warnings"))
   ]);
-  const reportId = options.reportId || text(valueAt(analysis, "reportId", "report_id")) || text(valueAt(payload, "reportId", "report_id")) || "EXTERNAL-PENDING";
+  const reportId = options.reportId || text(valueAt(analysis, "reportId", "report_id")) || text(valueAt(payload2, "reportId", "report_id")) || "EXTERNAL-PENDING";
   const output = {
     reportId,
     dateIssued: options.dateIssued || text(valueAt(analysis, "dateIssued", "date_issued")) || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
@@ -1017,6 +1040,39 @@ function normalizeExternalAnalysis(payload, options = {}) {
     warnings: [...warnings]
   };
 }
+function detectExternalSchemaVersion(payload2) {
+  if (!isRecord(payload2)) return SOURCE_SCHEMA_VERSION;
+  const declared = text(valueAt(payload2, "schema_version", "schemaVersion")) || text(valueAt(record(valueAt(payload2, "analysis", "output", "report")), "schema_version", "schemaVersion"));
+  return declared || SOURCE_SCHEMA_VERSION;
+}
+function normalizeExternalAnalysisToCanonicalReport(payload2, options = {}) {
+  const sourceSchemaVersion = detectExternalSchemaVersion(payload2);
+  if (sourceSchemaVersion !== SOURCE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      sourceSchemaVersion,
+      issues: [{
+        path: "schema_version",
+        message: `unsupported schema_version "${sourceSchemaVersion}"; expected "${SOURCE_SCHEMA_VERSION}"`,
+        code: "unsupported_schema_version",
+        expected: "string",
+        example: SOURCE_SCHEMA_VERSION
+      }]
+    };
+  }
+  const result = normalizeExternalAnalysis(payload2, options);
+  if (!result.valid) return { valid: false, sourceSchemaVersion, issues: result.issues };
+  return {
+    valid: true,
+    sourceSchemaVersion,
+    canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+    normalizationTimestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    issues: []
+  };
+}
 
 // src/lib/mcp/shared.ts
 function sbClient(ctx) {
@@ -1044,6 +1100,11 @@ var EXTERNAL_ANALYSIS_SCHEMA = {
   type: "object",
   required: ["inputs", "analysis"],
   properties: {
+    schema_version: {
+      type: "string",
+      enum: [SOURCE_SCHEMA_VERSION],
+      description: `External submission schema version. Defaults to ${SOURCE_SCHEMA_VERSION}.`
+    },
     title: {
       type: "string",
       description: "Optional compatibility alias for inputs.projectName."
@@ -1084,38 +1145,49 @@ var FORBIDDEN_INPUT_KEYS = /* @__PURE__ */ new Set([
   "archived_at"
 ]);
 var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function sanitizeExternalPayload(payload) {
-  if (!isRecord2(payload)) return payload;
+function sanitizeExternalPayload(payload2) {
+  if (!isRecord2(payload2)) return payload2;
   return Object.fromEntries(
-    Object.entries(payload).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key))
+    Object.entries(payload2).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key))
   );
 }
-function validatePayloadSize(payload) {
+function validatePayloadSize(payload2) {
   let serialized;
   try {
-    serialized = JSON.stringify(payload ?? {});
+    serialized = JSON.stringify(payload2 ?? {});
   } catch {
     return [{ path: "$", message: "payload must be JSON-serializable" }];
   }
   return new TextEncoder().encode(serialized).length > MAX_PAYLOAD_BYTES ? [{ path: "$", message: `payload exceeds ${MAX_PAYLOAD_BYTES} bytes` }] : [];
 }
-function validateAgentMetadataSize(payload) {
-  if (!isRecord2(payload) || payload.agent_metadata === void 0) return [];
-  if (!isRecord2(payload.agent_metadata)) {
+function validateAgentMetadataSize(payload2) {
+  if (!isRecord2(payload2) || payload2.agent_metadata === void 0) return [];
+  if (!isRecord2(payload2.agent_metadata)) {
     return [{ path: "agent_metadata", message: "agent_metadata must be an object" }];
   }
-  const serialized = JSON.stringify(payload.agent_metadata);
+  const serialized = JSON.stringify(payload2.agent_metadata);
   return new TextEncoder().encode(serialized).length > MAX_AGENT_METADATA_BYTES ? [{
     path: "agent_metadata",
     message: `agent_metadata exceeds ${MAX_AGENT_METADATA_BYTES} bytes`
   }] : [];
 }
-function prepareExternalAnalysisForSave(payload, options = {}) {
-  const sizeIssues = validatePayloadSize(payload);
+function prepareExternalAnalysisForSave(payload2, options = {}) {
+  const sizeIssues = validatePayloadSize(payload2);
   if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
-  const metadataIssues = validateAgentMetadataSize(payload);
+  const metadataIssues = validateAgentMetadataSize(payload2);
   if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
-  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
+  const result = normalizeExternalAnalysisToCanonicalReport(
+    sanitizeExternalPayload(payload2),
+    options
+  );
+  if (!result.valid) return { valid: false, issues: result.issues };
+  return {
+    valid: true,
+    issues: [],
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings
+  };
 }
 function validationErrorResult(issues) {
   return {
@@ -1128,8 +1200,8 @@ ${issues.map((issue) => `- ${issue.path}: ${issue.message}`).join("\n")}`
     isError: true
   };
 }
-function externalAgentMetadata(payload, warnings, existing = {}) {
-  const clean = sanitizeExternalPayload(payload);
+function externalAgentMetadata(payload2, warnings, existing = {}) {
+  const clean = sanitizeExternalPayload(payload2);
   const payloadRecord = isRecord2(clean) ? clean : {};
   const existingRecord = isRecord2(existing) ? existing : {};
   const reservedKeys = /* @__PURE__ */ new Set([
@@ -1141,13 +1213,16 @@ function externalAgentMetadata(payload, warnings, existing = {}) {
     "backfilled_at",
     "canonical_repair_failed_at",
     "canonical_repair_errors",
-    "source_payload"
+    "source_payload",
+    "original_payload",
+    "source_schema_version",
+    "normalization_timestamp"
   ]);
   const supplied = isRecord2(payloadRecord.agent_metadata) ? Object.fromEntries(
     Object.entries(payloadRecord.agent_metadata).filter(([key]) => !reservedKeys.has(key))
   ) : {};
   const preserved = Object.fromEntries(
-    Object.entries(existingRecord).filter(([key]) => reservedKeys.has(key) && key !== "source_payload")
+    Object.entries(existingRecord).filter(([key]) => reservedKeys.has(key) && key !== "source_payload" && key !== "original_payload")
   );
   const existingAgentMetadata = isRecord2(existingRecord.agent_metadata) ? existingRecord.agent_metadata : {};
   const legacyTopLevelMetadata = Object.fromEntries(
@@ -1159,9 +1234,12 @@ function externalAgentMetadata(payload, warnings, existing = {}) {
     ...preserved,
     ...Object.keys(legacyAgentMetadata).length > 0 ? { legacy_agent_metadata: legacyAgentMetadata } : {},
     agent_metadata: agentMetadata,
-    canonical_schema_version: "feasibility-report.v1",
+    source_schema_version: SOURCE_SCHEMA_VERSION,
+    canonical_schema_version: CANONICAL_SCHEMA_VERSION,
     normalized_at: (/* @__PURE__ */ new Date()).toISOString(),
-    normalization_warnings: warnings
+    normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    normalization_warnings: warnings,
+    original_payload: clean
   };
 }
 function reportDisplayPath(report) {
@@ -1169,22 +1247,240 @@ function reportDisplayPath(report) {
   return `/reports/${report.id}`;
 }
 
+// src/lib/mcp/submissionContract.ts
+var VALID_SUBMISSION_EXAMPLE = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  title: "Riyadh Data Center Advisory Consultancy",
+  industry: "Information Technology",
+  inputs: {
+    projectName: "Riyadh Data Center Advisory Consultancy",
+    industry: "Information Technology",
+    location: "Riyadh, Saudi Arabia",
+    description: "Owner-side advisory for data-center investors and operators.",
+    strategicObjectives: "Win two anchor framework agreements in year one.",
+    businessModel: "Professional Services",
+    revenueModel: "Project / milestone billing",
+    founderExperience: "",
+    budgetRange: "SAR 4,500,000 \u2013 7,500,000",
+    timeline: "12 months",
+    teamSize: "6 \u2013 15",
+    dependencies: "Saudi Council of Engineers licensing pathway.",
+    assumptions: "Riyadh HQ; asset-light associate network.",
+    constraints: "No stamped engineering design until licensed.",
+    successFactors: "One anchor client converted to a framework agreement.",
+    knownRisks: "Licensing, long sales cycles, specialist scarcity.",
+    regulatoryConsiderations: "Saudi Council of Engineers registration required.",
+    technologyReadiness: "Proven / Mature",
+    competitorUrls: ""
+  },
+  analysis: {
+    executiveSummary: "Viable advisory concept subject to licensing and anchor-client validation.",
+    scores: {
+      financial: 6.2,
+      market: 7.4,
+      achievability: 6.8,
+      risk: 5.5,
+      timing: 7,
+      operational: 6.1,
+      rationale: {
+        financial: "Planning-grade cost model only.",
+        market: "Strong announced capacity pipeline.",
+        achievability: "Asset-light model is deliverable.",
+        risk: "Licensing and liability exposure.",
+        timing: "Demand is building now.",
+        operational: "Depends on associate network depth."
+      }
+    },
+    market: {
+      tamLabel: "Saudi data-center advisory spend",
+      tamValue: "",
+      tamCagr: "",
+      samLabel: "",
+      samValue: "",
+      samCagr: "",
+      somLabel: "",
+      somValue: "",
+      somCagr: "",
+      growthChart: [],
+      currency: "SAR"
+    },
+    financials: {
+      currency: "SAR",
+      capEx: [
+        { category: "Systems & tooling", low: 25e4, high: 4e5, notes: "Planning assumption" }
+      ],
+      opEx: [{ category: "Core salaries", monthly: 35e4, annual: 42e5 }],
+      scenarios: [
+        {
+          scenario: "Base Case",
+          probability: "50%",
+          subscribersYr1: "4 engagements",
+          annualRevenue: "SAR 6,000,000",
+          breakEven: "Month 16"
+        }
+      ],
+      investmentRange: "SAR 4,500,000 \u2013 7,500,000",
+      breakEvenSummary: "Month 14 \u2013 18"
+    },
+    risks: [
+      {
+        name: "Engineering licensing scope",
+        probability: "Med",
+        impact: "High",
+        level: "High",
+        mitigation: "Obtain formal legal guidance before offering regulated services."
+      }
+    ],
+    competitors: [],
+    recommendations: ["Secure the licensing pathway before signing regulated scope."],
+    next_steps: ["Obtain written Saudi Council of Engineers guidance."],
+    claims: [
+      {
+        text: "Saudi Arabia announced multi-gigawatt data-center investment programmes.",
+        confidence: "High",
+        sources: [{ title: "Official announcement", url: "https://example.gov.sa/news", source: "example.gov.sa" }]
+      }
+    ],
+    evidence_warnings: ["No licensed market dataset was used; TAM/SAM/CAGR are intentionally empty."]
+  },
+  agent_metadata: { model: "external-assistant", model_version: "2026-07" }
+};
+var INVALID_SUBMISSION_EXAMPLE = {
+  payload: {
+    title: "Some Project",
+    inputs: { region: "Riyadh", budget: 45e5 },
+    output: {
+      fmarto_scores: { financial: "high", market: 7 },
+      financials: { scenarios: [{ scenario: "base", revenue: "6m" }] }
+    }
+  },
+  why_invalid: [
+    "`output` must be named `analysis`; `output` is only accepted as a legacy alias and should not be used for new submissions.",
+    '`fmarto_scores.financial` is the string "high"; every FMART-O dimension must be a number from 0 to 10.',
+    "Score dimensions achievability, risk, timing and operational are missing \u2014 all six are required.",
+    "`analysis.executiveSummary` is missing.",
+    "`financials.scenarios[0].scenario` must be exactly Optimistic, Base Case or Pessimistic.",
+    "Prose written outside the JSON object is rejected \u2014 send JSON only."
+  ]
+};
+var SUBMISSION_FIELD_RULES = {
+  never_infer: [
+    "founderExperience",
+    "regulatoryConsiderations",
+    "market.tamValue / samValue / somValue / any CAGR",
+    "market.growthChart points",
+    "financials.scenarios[].probability and subscribersYr1",
+    "fundingMix",
+    "customer profile fields",
+    "citation URLs"
+  ],
+  optional_sections: [
+    "analysis.customer",
+    "analysis.competitors",
+    "analysis.fundingMix",
+    "analysis.research",
+    "analysis.claims",
+    "analysis.market growth points"
+  ],
+  numbers: "Send raw numbers (not formatted strings) for capEx.low/high, opEx.monthly/annual and growthChart tam/sam. Score dimensions are numbers 0\u201310. Display-only fields (investmentRange, annualRevenue, probability, breakEvenSummary) are strings.",
+  currency: "Use SAR for this workspace unless another currency is explicitly provided in the inputs. Set financials.currency and market.currency to the ISO code.",
+  dates: "ISO 8601 (YYYY-MM-DD) for dateIssued and any date field. Never guess a date.",
+  risks: "risks[] = { name, probability, impact, level, mitigation }. probability/impact/level must be Low | Med | High (high/medium/critical/material are normalized).",
+  scenarios: 'financials.scenarios[] = { scenario: Optimistic|Base Case|Pessimistic, probability, subscribersYr1, annualRevenue, breakEven }. Leave a field as "" when unknown \u2014 never invent it.',
+  market: 'market = { tamLabel, tamValue, tamCagr, samLabel, samValue, samCagr, somLabel, somValue, somCagr, growthChart[], currency }. Leave values as "" and growthChart as [] when no licensed dataset was used.',
+  citations: "claims[] = { text, confidence: High|Medium|Low, sources: [{ title, url, source }] }. Preserve the original absolute http(s) URLs exactly.",
+  totals: "Do not send capExTotal or the overall score. Concept AI recomputes capEx totals, weighted FMART-O overall and the verdict deterministically."
+};
+var SUBMISSION_ENUMS = {
+  "scores.verdict": ["PROCEED", "PROCEED WITH CAUTION", "REVISE", "DO NOT PROCEED"],
+  "risks[].probability|impact|level": ["Low", "Med", "High"],
+  "financials.scenarios[].scenario": ["Optimistic", "Base Case", "Pessimistic"],
+  "research.confidence|claims[].confidence": ["High", "Medium", "Low"],
+  "research.sentiment": ["Positive", "Mixed", "Negative", "Insufficient data"]
+};
+var SUBMISSION_RULES = [
+  "Do not rename fields.",
+  "Do not add unsupported field names.",
+  "Do not submit prose outside the JSON object \u2014 the payload must be a single JSON object.",
+  "Do not invent missing facts.",
+  "Use an empty string, an empty array, or omit an optional field only where the schema allows it.",
+  "Use SAR for this report unless another currency is explicitly provided.",
+  "Use ISO 8601 dates.",
+  "Send numeric values as numbers, not formatted strings, except where the schema requires display text.",
+  "Preserve source URLs and claim-level citations exactly as found.",
+  "Call validate_external_analysis on the full payload before create_external_analysis.",
+  "If validation returns issues, fix each issue.path using issue.code/expected/example and resend."
+];
+var SUBMISSION_CONTRACT = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+  supported_report_types: ["feasibility_analysis"],
+  json_schema: EXTERNAL_ANALYSIS_SCHEMA,
+  required_top_level_fields: ["inputs", "analysis"],
+  optional_top_level_fields: ["schema_version", "title", "industry", "agent_metadata"],
+  field_rules: SUBMISSION_FIELD_RULES,
+  enums: SUBMISSION_ENUMS,
+  rules: SUBMISSION_RULES,
+  examples: {
+    valid: VALID_SUBMISSION_EXAMPLE,
+    invalid: INVALID_SUBMISSION_EXAMPLE
+  },
+  validation_guidance: {
+    workflow: [
+      "get_submission_contract",
+      "build payload",
+      "validate_external_analysis",
+      "fix reported issues",
+      "create_external_analysis (or update_external_analysis)"
+    ],
+    error_shape: {
+      valid: false,
+      issues: [{
+        path: "analysis.financials.scenarios[0].probability",
+        code: "missing_required_field",
+        message: "Probability is required.",
+        expected: "string",
+        example: "35%"
+      }]
+    }
+  }
+};
+
 // src/lib/mcp/tools/get_analysis_schema.ts
+var payload = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+  schema: EXTERNAL_ANALYSIS_SCHEMA,
+  field_rules: SUBMISSION_FIELD_RULES,
+  note: "This is the exact schema the Concept AI dashboard, charts and exporters render. Call get_submission_contract for enums, examples and validation guidance."
+};
 var get_analysis_schema_default = defineTool6({
   name: "get_analysis_schema",
   title: "Get Concept AI external-analysis schema",
-  description: "Return the JSON schema that external assistants must follow when submitting completed feasibility analysis to Concept AI (create_external_analysis / update_external_analysis).",
+  description: "Return the JSON schema (external_agent.v1) that external assistants must follow when submitting completed feasibility analysis to Concept AI. Mirrors exactly what the application can render.",
   inputSchema: {},
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: () => ok(JSON.stringify(EXTERNAL_ANALYSIS_SCHEMA, null, 2), {
-    schema: EXTERNAL_ANALYSIS_SCHEMA
+  handler: () => ok(JSON.stringify(payload, null, 2), payload)
+});
+
+// src/lib/mcp/tools/get_submission_contract.ts
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+var get_submission_contract_default = defineTool7({
+  name: "get_submission_contract",
+  title: "Get Concept AI submission contract",
+  description: "Return the complete external-analysis submission contract: schema_version, JSON schema, human-readable field rules, enums, valid and invalid examples, validation guidance and supported report types. Call this BEFORE building any payload for create_external_analysis or update_external_analysis.",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: () => ({
+    content: [{ type: "text", text: JSON.stringify(SUBMISSION_CONTRACT, null, 2) }],
+    structuredContent: { contract: SUBMISSION_CONTRACT }
   })
 });
 
 // src/lib/mcp/tools/validate_external_analysis.ts
-import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z8 } from "npm:zod@^4.4.3";
-var validate_external_analysis_default = defineTool7({
+var validate_external_analysis_default = defineTool8({
   name: "validate_external_analysis",
   title: "Validate external analysis payload",
   description: "Dry-run validation of a proposed external analysis payload against Concept AI's schema. Returns a list of issues (empty = valid). Does not persist anything.",
@@ -1192,9 +1488,9 @@ var validate_external_analysis_default = defineTool7({
     payload: z8.any().describe("The external analysis JSON payload to validate.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ payload }, ctx) => {
+  handler: async ({ payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
-    const result = prepareExternalAnalysisForSave(payload, {
+    const result = prepareExternalAnalysisForSave(payload2, {
       reportId: "EXTERNAL-VALIDATION"
     });
     if (!result.valid) return validationErrorResult(result.issues);
@@ -1208,9 +1504,9 @@ var validate_external_analysis_default = defineTool7({
 });
 
 // src/lib/mcp/tools/create_external_analysis.ts
-import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z9 } from "npm:zod@^4.4.3";
-var create_external_analysis_default = defineTool8({
+var create_external_analysis_default = defineTool9({
   name: "create_external_analysis",
   title: "Create report from external analysis",
   description: "Create a new Concept AI report from a completed external-assistant analysis. Concept AI validates the payload, stores a canonical report (source_mode=external_agent), and recomputes authoritative FMART-O scores & financial totals. Rejects client-supplied ownership fields.",
@@ -1219,10 +1515,10 @@ var create_external_analysis_default = defineTool8({
     payload: z9.any().describe("External analysis JSON matching get_analysis_schema.")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-  handler: async ({ idempotency_key, payload }, ctx) => {
+  handler: async ({ idempotency_key, payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const normalized = prepareExternalAnalysisForSave(payload, {
+    const normalized = prepareExternalAnalysisForSave(payload2, {
       reportId: `EXT-${idempotency_key.slice(0, 20).toUpperCase()}`
     });
     if (!normalized.valid) return validationErrorResult(normalized.issues);
@@ -1242,8 +1538,12 @@ var create_external_analysis_default = defineTool8({
       inputs: normalized.inputs,
       output: normalized.output,
       source_mode: "external_agent",
-      external_agent_metadata: externalAgentMetadata(payload, normalized.warnings),
+      external_agent_metadata: externalAgentMetadata(payload2, normalized.warnings),
       canonical_validated: true,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       is_public: false,
       status: "draft"
     };
@@ -1261,15 +1561,18 @@ var create_external_analysis_default = defineTool8({
       report_id: data.id,
       slug: data.slug,
       display_id: data.display_id,
-      warnings: normalized.warnings
+      warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings
     });
   }
 });
 
 // src/lib/mcp/tools/update_external_analysis.ts
-import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z10 } from "npm:zod@^4.4.3";
-var update_external_analysis_default = defineTool9({
+var update_external_analysis_default = defineTool10({
   name: "update_external_analysis",
   title: "Update an external-agent report",
   description: "Replace the analysis of an existing external-agent report you own. Concept AI re-validates and recomputes canonical scores. Reports created via the in-app workflow cannot be updated through this tool.",
@@ -1279,7 +1582,7 @@ var update_external_analysis_default = defineTool9({
     payload: z10.any().describe("Full external analysis JSON (same shape as create).")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-  handler: async ({ report_id, idempotency_key, payload }, ctx) => {
+  handler: async ({ report_id, idempotency_key, payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
     const sb = sbClient(ctx);
@@ -1292,7 +1595,7 @@ var update_external_analysis_default = defineTool9({
       return err("This report was not created by an external assistant; use the in-app workflow to edit it.");
     }
     const currentOutput = current.output && typeof current.output === "object" && !Array.isArray(current.output) ? current.output : {};
-    const normalized = prepareExternalAnalysisForSave(payload, {
+    const normalized = prepareExternalAnalysisForSave(payload2, {
       reportId: typeof currentOutput.reportId === "string" ? currentOutput.reportId : current.display_id
     });
     if (!normalized.valid) return validationErrorResult(normalized.issues);
@@ -1302,11 +1605,15 @@ var update_external_analysis_default = defineTool9({
       inputs: normalized.inputs,
       output: normalized.output,
       external_agent_metadata: externalAgentMetadata(
-        payload,
+        payload2,
         normalized.warnings,
         current.external_agent_metadata
       ),
-      canonical_validated: true
+      canonical_validated: true,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString()
     }).eq("id", report_id).eq("user_id", userId);
     if (updErr) return err(updErr.message);
     await sb.from("mcp_write_idempotency").insert({
@@ -1318,13 +1625,16 @@ var update_external_analysis_default = defineTool9({
     });
     return ok(`Report ${report_id} updated with canonical validated data.`, {
       report_id,
-      warnings: normalized.warnings
+      warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings
     });
   }
 });
 
 // src/lib/mcp/tools/generate_report_exports.ts
-import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z11 } from "npm:zod@^4.4.3";
 var FORMATS = ["pdf", "xlsx", "pptx"];
 var MAX_EXPORT_REPORT_BYTES = 512 * 1024;
@@ -1340,7 +1650,7 @@ var exportPreflightSchema = z11.object({
 function siteOrigin() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
-var generate_report_exports_default = defineTool10({
+var generate_report_exports_default = defineTool11({
   name: "generate_report_exports",
   title: "Queue report exports (PDF / XLSX / PPTX)",
   description: "Queue one or more export jobs for a report you own. Concept AI generates the files with its own templates and export engines \u2014 external assistants must NOT upload pre-generated files. Returns a display URL where the exports are produced and downloaded.",
@@ -1395,9 +1705,9 @@ var generate_report_exports_default = defineTool10({
 });
 
 // src/lib/mcp/tools/get_export_status.ts
-import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z12 } from "npm:zod@^4.4.3";
-var get_export_status_default = defineTool11({
+var get_export_status_default = defineTool12({
   name: "get_export_status",
   title: "Get export job status",
   description: "Fetch the current status of a single export job (queued, ready, or failed).",
@@ -1415,9 +1725,9 @@ var get_export_status_default = defineTool11({
 });
 
 // src/lib/mcp/tools/list_report_exports.ts
-import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z13 } from "npm:zod@^4.4.3";
-var list_report_exports_default = defineTool12({
+var list_report_exports_default = defineTool13({
   name: "list_report_exports",
   title: "List export jobs for a report",
   description: "List all export jobs (PDF/XLSX/PPTX) for a report you own, newest first.",
@@ -1435,12 +1745,12 @@ var list_report_exports_default = defineTool12({
 });
 
 // src/lib/mcp/tools/get_report_display_link.ts
-import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z14 } from "npm:zod@^4.4.3";
 function siteOrigin2() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
-var get_report_display_link_default = defineTool13({
+var get_report_display_link_default = defineTool14({
   name: "get_report_display_link",
   title: "Get shareable link for a report",
   description: "Return the shareable Concept AI URL where a report is displayed (dashboard, charts, evidence, exports). Only works for reports the signed-in user can access.",
@@ -1474,8 +1784,8 @@ var projectRef = "smjiyjenxbtfiiovxbnq";
 var mcp_default = defineMcp({
   name: "concept-ai-mcp",
   title: "Concept AI",
-  version: "0.2.0",
-  instructions: "Concept AI feasibility analysis (FMART-O). External assistants may research the web and submit completed analysis JSON via create_external_analysis / update_external_analysis (use get_analysis_schema first, then validate_external_analysis). Concept AI owns all validation, canonical FMART-O scoring, financial totals, dashboards, charts, versioning, and export file generation (PDF/XLSX/PPTX). Do NOT generate or upload PDF/Excel/PowerPoint files \u2014 use generate_report_exports to queue Concept AI's export engine and get_report_display_link to point the user to the produced files. Existing tools: list_reports, get_report, list_comments, add_comment, set_report_status.",
+  version: "0.3.0",
+  instructions: "Concept AI feasibility analysis (FMART-O). External assistants may research the web and submit completed analysis JSON via create_external_analysis / update_external_analysis (call get_submission_contract first for the full schema + rules + examples, then validate_external_analysis). Concept AI owns all validation, canonical FMART-O scoring, financial totals, dashboards, charts, versioning, and export file generation (PDF/XLSX/PPTX). Do NOT generate or upload PDF/Excel/PowerPoint files \u2014 use generate_report_exports to queue Concept AI's export engine and get_report_display_link to point the user to the produced files. Existing tools: list_reports, get_report, list_comments, add_comment, set_report_status.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -1487,6 +1797,7 @@ var mcp_default = defineMcp({
     add_comment_default,
     set_report_status_default,
     get_analysis_schema_default,
+    get_submission_contract_default,
     validate_external_analysis_default,
     create_external_analysis_default,
     update_external_analysis_default,

@@ -8,6 +8,7 @@ import {
   sbClient,
   validationErrorResult,
 } from "../shared";
+import { CANONICAL_SCHEMA_VERSION, SOURCE_SCHEMA_VERSION } from "../../reportContract";
 
 export default defineTool({
   name: "update_external_analysis",
@@ -70,6 +71,10 @@ export default defineTool({
           current.external_agent_metadata,
         ),
         canonical_validated: true,
+        source_schema_version: SOURCE_SCHEMA_VERSION,
+        canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+        normalization_warnings: normalized.warnings,
+        normalization_timestamp: new Date().toISOString(),
       })
       .eq("id", report_id)
       .eq("user_id", userId);
@@ -86,6 +91,9 @@ export default defineTool({
     return ok(`Report ${report_id} updated with canonical validated data.`, {
       report_id,
       warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings,
     });
   },
 });

@@ -2,9 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import type { ToolContext } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import {
+  CANONICAL_SCHEMA_VERSION,
+  SOURCE_SCHEMA_VERSION,
   conceptInputsSchema,
   feasibilityReportSchema,
-  normalizeExternalAnalysis,
+  normalizeExternalAnalysisToCanonicalReport,
   type ExternalNormalizationOptions,
   type ExternalNormalizationResult,
   type ReportValidationIssue,
@@ -47,6 +49,11 @@ export const EXTERNAL_ANALYSIS_SCHEMA = {
   type: "object",
   required: ["inputs", "analysis"],
   properties: {
+    schema_version: {
+      type: "string",
+      enum: [SOURCE_SCHEMA_VERSION],
+      description: `External submission schema version. Defaults to ${SOURCE_SCHEMA_VERSION}.`,
+    },
     title: {
       type: "string",
       description: "Optional compatibility alias for inputs.projectName.",
@@ -138,7 +145,18 @@ export function prepareExternalAnalysisForSave(
   if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
   const metadataIssues = validateAgentMetadataSize(payload);
   if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
-  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
+  const result = normalizeExternalAnalysisToCanonicalReport(
+    sanitizeExternalPayload(payload),
+    options,
+  );
+  if (!result.valid) return { valid: false, issues: result.issues };
+  return {
+    valid: true,
+    issues: [],
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+  };
 }
 
 /** Backwards-compatible named validator for MCP callers and focused tests. */
@@ -178,6 +196,9 @@ export function externalAgentMetadata(
     "canonical_repair_failed_at",
     "canonical_repair_errors",
     "source_payload",
+    "original_payload",
+    "source_schema_version",
+    "normalization_timestamp",
   ]);
   const supplied = isRecord(payloadRecord.agent_metadata)
     ? Object.fromEntries(
@@ -187,7 +208,7 @@ export function externalAgentMetadata(
     : {};
   const preserved = Object.fromEntries(
     Object.entries(existingRecord).filter(([key]) => (
-      reservedKeys.has(key) && key !== "source_payload"
+      reservedKeys.has(key) && key !== "source_payload" && key !== "original_payload"
     )),
   );
   const existingAgentMetadata = isRecord(existingRecord.agent_metadata)
@@ -210,9 +231,12 @@ export function externalAgentMetadata(
       ? { legacy_agent_metadata: legacyAgentMetadata }
       : {}),
     agent_metadata: agentMetadata,
-    canonical_schema_version: "feasibility-report.v1",
+    source_schema_version: SOURCE_SCHEMA_VERSION,
+    canonical_schema_version: CANONICAL_SCHEMA_VERSION,
     normalized_at: new Date().toISOString(),
+    normalization_timestamp: new Date().toISOString(),
     normalization_warnings: warnings,
+    original_payload: clean,
   };
 }
 

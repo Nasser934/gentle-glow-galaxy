@@ -305,10 +305,21 @@ export const feasibilityReportSchema = z.object({
   legacyEvidence: z.boolean().optional(),
 }).passthrough();
 
+/** Schema versions exchanged with external assistants and stored on reports. */
+export const SOURCE_SCHEMA_VERSION = "external_agent.v1";
+export const CANONICAL_SCHEMA_VERSION = "canonical_report.v2";
+
 export interface ReportValidationIssue {
   path: string;
   message: string;
+  /** Machine-readable reason so an assistant can self-correct and resend. */
+  code?: string;
+  /** Expected type/shape, e.g. "number", "string", "array<object>". */
+  expected?: string;
+  /** A concrete valid example value for this path. */
+  example?: unknown;
 }
+
 
 export type CanonicalValidationResult =
   | {
@@ -432,11 +443,19 @@ const scenarioName = (value: unknown): RevenueScenario["scenario"] => {
 };
 
 const zodIssues = (prefix: string, error: z.ZodError): ReportValidationIssue[] => (
-  error.issues.map((issue) => ({
-    path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
-    message: issue.message,
-  }))
+  error.issues.map((issue) => {
+    const anyIssue = issue as unknown as { code?: string; expected?: unknown };
+    const received = (issue as unknown as { received?: unknown }).received;
+    const missing = anyIssue.code === "invalid_type" && received === "undefined";
+    return {
+      path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
+      message: issue.message,
+      code: missing ? "missing_required_field" : (anyIssue.code ?? "invalid_value"),
+      expected: typeof anyIssue.expected === "string" ? anyIssue.expected : undefined,
+    };
+  })
 );
+
 
 export function validateCanonicalReportData(
   inputs: unknown,
@@ -574,6 +593,9 @@ const normalizeScores = (
       issues: [{
         path: "analysis.scores",
         message: "scores (or legacy fmarto_scores/fmarto) are required",
+        code: "missing_required_field",
+        expected: "object",
+        example: { financial: 6.5, market: 7, achievability: 6, risk: 5.5, timing: 7, operational: 6 },
       }],
     };
   }
@@ -594,7 +616,10 @@ const normalizeScores = (
     if (rawValue === undefined || rawValue < 0 || rawValue > 100) {
       issues.push({
         path: `analysis.scores.${dimension}`,
-        message: "must resolve to a number between 0 and 100",
+        message: "must resolve to a number between 0 and 100 (0-10 scale preferred)",
+        code: "missing_required_field",
+        expected: "number",
+        example: 6.5,
       });
       continue;
     }
@@ -922,13 +947,18 @@ export function normalizeExternalAnalysis(
   options: ExternalNormalizationOptions = {},
 ): ExternalNormalizationResult {
   if (!isRecord(payload)) {
-    return { valid: false, issues: [{ path: "$", message: "payload must be an object" }] };
+    return { valid: false, issues: [{ path: "$", message: "payload must be an object", code: "invalid_type", expected: "object" }] };
   }
   const analysis = record(valueAt(payload, "analysis", "output", "report"));
   if (Object.keys(analysis).length === 0) {
     return {
       valid: false,
-      issues: [{ path: "analysis", message: "analysis object is required" }],
+      issues: [{
+        path: "analysis",
+        message: "analysis object is required",
+        code: "missing_required_field",
+        expected: "object",
+      }],
     };
   }
 
@@ -944,6 +974,9 @@ export function normalizeExternalAnalysis(
       issues: [{
         path: "analysis.executiveSummary",
         message: "executiveSummary (or legacy executive_summary/verdict.summary) is required",
+        code: "missing_required_field",
+        expected: "string",
+        example: "This concept is viable subject to licensing and anchor-client validation.",
       }],
     };
   }
@@ -1002,4 +1035,110 @@ export function normalizeExternalAnalysis(
     output: validated.output,
     warnings: [...warnings],
   };
+}
+
+// ============================================================
+// Versioned external → canonical normalization (external_agent.v1)
+// ============================================================
+
+export interface CanonicalNormalizationEnvelope {
+  valid: true;
+  sourceSchemaVersion: string;
+  canonicalSchemaVersion: string;
+  inputs: ConceptInputs;
+  output: FeasibilityReport;
+  warnings: string[];
+  normalizationTimestamp: string;
+  issues: [];
+}
+
+export type CanonicalNormalizationResult =
+  | CanonicalNormalizationEnvelope
+  | { valid: false; sourceSchemaVersion: string; issues: ReportValidationIssue[] };
+
+/** Detect the declared external schema version, defaulting to v1. */
+export function detectExternalSchemaVersion(payload: unknown): string {
+  if (!isRecord(payload)) return SOURCE_SCHEMA_VERSION;
+  const declared = text(valueAt(payload, "schema_version", "schemaVersion"))
+    || text(valueAt(record(valueAt(payload, "analysis", "output", "report")), "schema_version", "schemaVersion"));
+  return declared || SOURCE_SCHEMA_VERSION;
+}
+
+/**
+ * Deterministic external → canonical mapping. Never fabricates values: missing
+ * optional sections become empty structures plus an explicit warning.
+ */
+export function normalizeExternalAnalysisToCanonicalReport(
+  payload: unknown,
+  options: ExternalNormalizationOptions = {},
+): CanonicalNormalizationResult {
+  const sourceSchemaVersion = detectExternalSchemaVersion(payload);
+  if (sourceSchemaVersion !== SOURCE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      sourceSchemaVersion,
+      issues: [{
+        path: "schema_version",
+        message: `unsupported schema_version "${sourceSchemaVersion}"; expected "${SOURCE_SCHEMA_VERSION}"`,
+        code: "unsupported_schema_version",
+        expected: "string",
+        example: SOURCE_SCHEMA_VERSION,
+      }],
+    };
+  }
+  const result = normalizeExternalAnalysis(payload, options);
+  if (!result.valid) return { valid: false, sourceSchemaVersion, issues: result.issues };
+  return {
+    valid: true,
+    sourceSchemaVersion,
+    canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+    normalizationTimestamp: new Date().toISOString(),
+    issues: [],
+  };
+}
+
+export type ResolvedCanonicalReport =
+  | {
+      valid: true;
+      inputs: ConceptInputs;
+      output: FeasibilityReport;
+      /** true when the stored row was repaired on read (legacy external row). */
+      repaired: boolean;
+      warnings: string[];
+    }
+  | { valid: false; issues: ReportValidationIssue[] };
+
+/**
+ * Read-path resolver used by report routes. Canonical rows pass straight
+ * through; legacy external-agent rows that still hold their raw payload are
+ * normalized deterministically instead of showing a compatibility error.
+ */
+export function resolveCanonicalReportData(
+  inputs: unknown,
+  output: unknown,
+  options: ExternalNormalizationOptions & { title?: string; industry?: string } = {},
+): ResolvedCanonicalReport {
+  const canonical = validateCanonicalReportData(inputs, output);
+  if (canonical.valid) {
+    return { valid: true, inputs: canonical.inputs, output: canonical.output, repaired: false, warnings: [] };
+  }
+  const { title, industry, ...normalizationOptions } = options;
+  const repaired = normalizeExternalAnalysis(
+    { inputs, analysis: output, ...(title ? { title } : {}), ...(industry ? { industry } : {}) },
+    normalizationOptions,
+  );
+
+  if (repaired.valid) {
+    return {
+      valid: true,
+      inputs: repaired.inputs,
+      output: repaired.output,
+      repaired: true,
+      warnings: repaired.warnings,
+    };
+  }
+  return { valid: false, issues: canonical.issues };
 }

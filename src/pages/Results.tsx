@@ -16,9 +16,9 @@ import { exportReportToPdf, type VersionFamilyEntry } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
+import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow, persistCanonicalRepair } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { validateCanonicalReportData } from "@/lib/reportContract";
+import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
@@ -77,7 +77,7 @@ const Results = () => {
   const compatibility = useMemo(
     () => (
       rawReport !== undefined && rawInputs !== undefined
-        ? validateCanonicalReportData(rawInputs, rawReport)
+        ? resolveCanonicalReportData(rawInputs, rawReport)
         : null
     ),
     [rawReport, rawInputs],
@@ -184,6 +184,26 @@ const Results = () => {
   }, [routeReportId, stateReport, stateOwnerId, userId, navigate]);
 
   const canEdit = !readOnlyFlag && (!reportId || (!!user && !!ownerId && user.id === ownerId));
+
+  // Legacy external-agent rows still hold the raw MCP payload. They render via
+  // the deterministic read-path repair; persist that canonical result once so
+  // exports, versioning and shared views all read canonical data.
+  const repairedOnce = useRef(false);
+  useEffect(() => {
+    if (repairedOnce.current) return;
+    if (!compatibility || !("repaired" in compatibility) || !compatibility.repaired) return;
+    if (!reportId || !user || !ownerId || user.id !== ownerId) return;
+    repairedOnce.current = true;
+    persistCanonicalRepair({
+      reportId,
+      inputs: compatibility.inputs,
+      output: compatibility.output,
+      warnings: compatibility.warnings,
+      originalInputs: rawInputs,
+      originalOutput: rawReport,
+    }).catch((e) => console.warn("canonical repair persist failed", e));
+  }, [compatibility, reportId, user, ownerId, rawInputs, rawReport]);
+
 
   // Auto-save once on first load — never in read-only/shared view, and never
   // when we already have a reportId (Analyze.tsx now saves before navigating,

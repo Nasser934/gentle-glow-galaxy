@@ -211,3 +211,35 @@ export async function updateReportStatus(id: string, status: ReportRow["status"]
     report_id: id, changed_by: user.id, from_status: prev?.status ?? null, to_status: status, note: note ?? null,
   });
 }
+
+/**
+ * One-time self-heal for legacy external-agent rows that still store the raw
+ * MCP payload. Writes the deterministically normalized canonical report back
+ * to the row (owner-only, enforced by RLS). Never invents values.
+ */
+export async function persistCanonicalRepair(params: {
+  reportId: string;
+  inputs: ConceptInputs;
+  output: FeasibilityReport;
+  warnings: string[];
+  originalInputs: unknown;
+  originalOutput: unknown;
+}) {
+  const { error } = await supabase
+    .from("reports")
+    .update({
+      inputs: params.inputs as unknown as never,
+      output: params.output as unknown as never,
+      original_payload: {
+        inputs: params.originalInputs,
+        analysis: params.originalOutput,
+      } as unknown as never,
+      normalization_warnings: params.warnings as unknown as never,
+      normalization_timestamp: new Date().toISOString(),
+      source_schema_version: "external_agent.v1",
+      canonical_schema_version: "canonical_report.v2",
+      canonical_validated: true,
+    })
+    .eq("id", params.reportId);
+  if (error) throw error;
+}
