@@ -16,7 +16,7 @@ import { exportReportToPdf, type VersionFamilyEntry } from "@/lib/exportPdf";
 import { exportReportToPptx } from "@/lib/exportPptx";
 import { exportReportToXlsx } from "@/lib/exportXlsx";
 import { InteractiveDashboard } from "@/components/report/InteractiveDashboard";
-import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow } from "@/lib/reports";
+import { saveReport, getReportById, listReportVersions, restoreReportGroup, type ReportRow, persistCanonicalRepair } from "@/lib/reports";
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";

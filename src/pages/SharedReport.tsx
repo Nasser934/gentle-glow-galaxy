@@ -75,7 +75,7 @@ const SharedReportContent = ({
     return (
       <ReportCompatibilityPanel
         reportId={row.display_id || row.output?.reportId || row.id}
-        issues={compatibility.issues}
+        issues={"issues" in compatibility ? compatibility.issues : []}
       />
     );
   }
