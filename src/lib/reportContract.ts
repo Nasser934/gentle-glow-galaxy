@@ -1036,3 +1036,103 @@ export function normalizeExternalAnalysis(
     warnings: [...warnings],
   };
 }
+
+// ============================================================
+// Versioned external → canonical normalization (external_agent.v1)
+// ============================================================
+
+export interface CanonicalNormalizationEnvelope {
+  valid: true;
+  sourceSchemaVersion: string;
+  canonicalSchemaVersion: string;
+  inputs: ConceptInputs;
+  output: FeasibilityReport;
+  warnings: string[];
+  normalizationTimestamp: string;
+  issues: [];
+}
+
+export type CanonicalNormalizationResult =
+  | CanonicalNormalizationEnvelope
+  | { valid: false; sourceSchemaVersion: string; issues: ReportValidationIssue[] };
+
+/** Detect the declared external schema version, defaulting to v1. */
+export function detectExternalSchemaVersion(payload: unknown): string {
+  if (!isRecord(payload)) return SOURCE_SCHEMA_VERSION;
+  const declared = text(valueAt(payload, "schema_version", "schemaVersion"))
+    || text(valueAt(record(valueAt(payload, "analysis", "output", "report")), "schema_version", "schemaVersion"));
+  return declared || SOURCE_SCHEMA_VERSION;
+}
+
+/**
+ * Deterministic external → canonical mapping. Never fabricates values: missing
+ * optional sections become empty structures plus an explicit warning.
+ */
+export function normalizeExternalAnalysisToCanonicalReport(
+  payload: unknown,
+  options: ExternalNormalizationOptions = {},
+): CanonicalNormalizationResult {
+  const sourceSchemaVersion = detectExternalSchemaVersion(payload);
+  if (sourceSchemaVersion !== SOURCE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      sourceSchemaVersion,
+      issues: [{
+        path: "schema_version",
+        message: `unsupported schema_version "${sourceSchemaVersion}"; expected "${SOURCE_SCHEMA_VERSION}"`,
+        code: "unsupported_schema_version",
+        expected: "string",
+        example: SOURCE_SCHEMA_VERSION,
+      }],
+    };
+  }
+  const result = normalizeExternalAnalysis(payload, options);
+  if (!result.valid) return { valid: false, sourceSchemaVersion, issues: result.issues };
+  return {
+    valid: true,
+    sourceSchemaVersion,
+    canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+    normalizationTimestamp: new Date().toISOString(),
+    issues: [],
+  };
+}
+
+export type ResolvedCanonicalReport =
+  | {
+      valid: true;
+      inputs: ConceptInputs;
+      output: FeasibilityReport;
+      /** true when the stored row was repaired on read (legacy external row). */
+      repaired: boolean;
+      warnings: string[];
+    }
+  | { valid: false; issues: ReportValidationIssue[] };
+
+/**
+ * Read-path resolver used by report routes. Canonical rows pass straight
+ * through; legacy external-agent rows that still hold their raw payload are
+ * normalized deterministically instead of showing a compatibility error.
+ */
+export function resolveCanonicalReportData(
+  inputs: unknown,
+  output: unknown,
+): ResolvedCanonicalReport {
+  const canonical = validateCanonicalReportData(inputs, output);
+  if (canonical.valid) {
+    return { valid: true, inputs: canonical.inputs, output: canonical.output, repaired: false, warnings: [] };
+  }
+  const repaired = normalizeExternalAnalysis({ inputs, analysis: output });
+  if (repaired.valid) {
+    return {
+      valid: true,
+      inputs: repaired.inputs,
+      output: repaired.output,
+      repaired: true,
+      warnings: repaired.warnings,
+    };
+  }
+  return { valid: false, issues: canonical.issues };
+}
