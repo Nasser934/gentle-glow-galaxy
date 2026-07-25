@@ -12,7 +12,7 @@
   "mcp": {
     "server": {
       "name": "concept-ai-mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "title": "Concept AI"
     },
     "tools": [
@@ -181,6 +181,22 @@
         "name": "get_analysis_schema",
         "title": "Get Concept AI external-analysis schema",
         "description": "Return the JSON schema (external_agent.v1) that external assistants must follow when submitting completed feasibility analysis to Concept AI. Mirrors exactly what the application can render.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_submission_contract",
+        "title": "Get Concept AI submission contract",
+        "description": "Return the complete external-analysis submission contract: schema_version, JSON schema, human-readable field rules, enums, valid and invalid examples, validation guidance and supported report types. Call this BEFORE building any payload for create_external_analysis or update_external_analysis.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,

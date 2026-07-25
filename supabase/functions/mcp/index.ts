@@ -1067,6 +1067,11 @@ var EXTERNAL_ANALYSIS_SCHEMA = {
   type: "object",
   required: ["inputs", "analysis"],
   properties: {
+    schema_version: {
+      type: "string",
+      enum: [SOURCE_SCHEMA_VERSION],
+      description: `External submission schema version. Defaults to ${SOURCE_SCHEMA_VERSION}.`
+    },
     title: {
       type: "string",
       description: "Optional compatibility alias for inputs.projectName."
@@ -1164,13 +1169,16 @@ function externalAgentMetadata(payload2, warnings, existing = {}) {
     "backfilled_at",
     "canonical_repair_failed_at",
     "canonical_repair_errors",
-    "source_payload"
+    "source_payload",
+    "original_payload",
+    "source_schema_version",
+    "normalization_timestamp"
   ]);
   const supplied = isRecord2(payloadRecord.agent_metadata) ? Object.fromEntries(
     Object.entries(payloadRecord.agent_metadata).filter(([key]) => !reservedKeys.has(key))
   ) : {};
   const preserved = Object.fromEntries(
-    Object.entries(existingRecord).filter(([key]) => reservedKeys.has(key) && key !== "source_payload")
+    Object.entries(existingRecord).filter(([key]) => reservedKeys.has(key) && key !== "source_payload" && key !== "original_payload")
   );
   const existingAgentMetadata = isRecord2(existingRecord.agent_metadata) ? existingRecord.agent_metadata : {};
   const legacyTopLevelMetadata = Object.fromEntries(
@@ -1182,9 +1190,12 @@ function externalAgentMetadata(payload2, warnings, existing = {}) {
     ...preserved,
     ...Object.keys(legacyAgentMetadata).length > 0 ? { legacy_agent_metadata: legacyAgentMetadata } : {},
     agent_metadata: agentMetadata,
-    canonical_schema_version: "feasibility-report.v1",
+    source_schema_version: SOURCE_SCHEMA_VERSION,
+    canonical_schema_version: CANONICAL_SCHEMA_VERSION,
     normalized_at: (/* @__PURE__ */ new Date()).toISOString(),
-    normalization_warnings: warnings
+    normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    normalization_warnings: warnings,
+    original_payload: clean
   };
 }
 function reportDisplayPath(report) {
@@ -1193,6 +1204,121 @@ function reportDisplayPath(report) {
 }
 
 // src/lib/mcp/submissionContract.ts
+var VALID_SUBMISSION_EXAMPLE = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  title: "Riyadh Data Center Advisory Consultancy",
+  industry: "Information Technology",
+  inputs: {
+    projectName: "Riyadh Data Center Advisory Consultancy",
+    industry: "Information Technology",
+    location: "Riyadh, Saudi Arabia",
+    description: "Owner-side advisory for data-center investors and operators.",
+    strategicObjectives: "Win two anchor framework agreements in year one.",
+    businessModel: "Professional Services",
+    revenueModel: "Project / milestone billing",
+    founderExperience: "",
+    budgetRange: "SAR 4,500,000 \u2013 7,500,000",
+    timeline: "12 months",
+    teamSize: "6 \u2013 15",
+    dependencies: "Saudi Council of Engineers licensing pathway.",
+    assumptions: "Riyadh HQ; asset-light associate network.",
+    constraints: "No stamped engineering design until licensed.",
+    successFactors: "One anchor client converted to a framework agreement.",
+    knownRisks: "Licensing, long sales cycles, specialist scarcity.",
+    regulatoryConsiderations: "Saudi Council of Engineers registration required.",
+    technologyReadiness: "Proven / Mature",
+    competitorUrls: ""
+  },
+  analysis: {
+    executiveSummary: "Viable advisory concept subject to licensing and anchor-client validation.",
+    scores: {
+      financial: 6.2,
+      market: 7.4,
+      achievability: 6.8,
+      risk: 5.5,
+      timing: 7,
+      operational: 6.1,
+      rationale: {
+        financial: "Planning-grade cost model only.",
+        market: "Strong announced capacity pipeline.",
+        achievability: "Asset-light model is deliverable.",
+        risk: "Licensing and liability exposure.",
+        timing: "Demand is building now.",
+        operational: "Depends on associate network depth."
+      }
+    },
+    market: {
+      tamLabel: "Saudi data-center advisory spend",
+      tamValue: "",
+      tamCagr: "",
+      samLabel: "",
+      samValue: "",
+      samCagr: "",
+      somLabel: "",
+      somValue: "",
+      somCagr: "",
+      growthChart: [],
+      currency: "SAR"
+    },
+    financials: {
+      currency: "SAR",
+      capEx: [
+        { category: "Systems & tooling", low: 25e4, high: 4e5, notes: "Planning assumption" }
+      ],
+      opEx: [{ category: "Core salaries", monthly: 35e4, annual: 42e5 }],
+      scenarios: [
+        {
+          scenario: "Base Case",
+          probability: "50%",
+          subscribersYr1: "4 engagements",
+          annualRevenue: "SAR 6,000,000",
+          breakEven: "Month 16"
+        }
+      ],
+      investmentRange: "SAR 4,500,000 \u2013 7,500,000",
+      breakEvenSummary: "Month 14 \u2013 18"
+    },
+    risks: [
+      {
+        name: "Engineering licensing scope",
+        probability: "Med",
+        impact: "High",
+        level: "High",
+        mitigation: "Obtain formal legal guidance before offering regulated services."
+      }
+    ],
+    competitors: [],
+    recommendations: ["Secure the licensing pathway before signing regulated scope."],
+    next_steps: ["Obtain written Saudi Council of Engineers guidance."],
+    claims: [
+      {
+        text: "Saudi Arabia announced multi-gigawatt data-center investment programmes.",
+        confidence: "High",
+        sources: [{ title: "Official announcement", url: "https://example.gov.sa/news", source: "example.gov.sa" }]
+      }
+    ],
+    evidence_warnings: ["No licensed market dataset was used; TAM/SAM/CAGR are intentionally empty."]
+  },
+  agent_metadata: { model: "external-assistant", model_version: "2026-07" }
+};
+var INVALID_SUBMISSION_EXAMPLE = {
+  payload: {
+    title: "Some Project",
+    inputs: { region: "Riyadh", budget: 45e5 },
+    output: {
+      fmarto_scores: { financial: "high", market: 7 },
+      financials: { scenarios: [{ scenario: "base", revenue: "6m" }] }
+    }
+  },
+  why_invalid: [
+    "`output` must be named `analysis`; `output` is only accepted as a legacy alias and should not be used for new submissions.",
+    '`fmarto_scores.financial` is the string "high"; every FMART-O dimension must be a number from 0 to 10.',
+    "Score dimensions achievability, risk, timing and operational are missing \u2014 all six are required.",
+    "`analysis.executiveSummary` is missing.",
+    "`financials.scenarios[0].scenario` must be exactly Optimistic, Base Case or Pessimistic.",
+    "Prose written outside the JSON object is rejected \u2014 send JSON only."
+  ]
+};
 var SUBMISSION_FIELD_RULES = {
   never_infer: [
     "founderExperience",
@@ -1221,6 +1347,60 @@ var SUBMISSION_FIELD_RULES = {
   citations: "claims[] = { text, confidence: High|Medium|Low, sources: [{ title, url, source }] }. Preserve the original absolute http(s) URLs exactly.",
   totals: "Do not send capExTotal or the overall score. Concept AI recomputes capEx totals, weighted FMART-O overall and the verdict deterministically."
 };
+var SUBMISSION_ENUMS = {
+  "scores.verdict": ["PROCEED", "PROCEED WITH CAUTION", "REVISE", "DO NOT PROCEED"],
+  "risks[].probability|impact|level": ["Low", "Med", "High"],
+  "financials.scenarios[].scenario": ["Optimistic", "Base Case", "Pessimistic"],
+  "research.confidence|claims[].confidence": ["High", "Medium", "Low"],
+  "research.sentiment": ["Positive", "Mixed", "Negative", "Insufficient data"]
+};
+var SUBMISSION_RULES = [
+  "Do not rename fields.",
+  "Do not add unsupported field names.",
+  "Do not submit prose outside the JSON object \u2014 the payload must be a single JSON object.",
+  "Do not invent missing facts.",
+  "Use an empty string, an empty array, or omit an optional field only where the schema allows it.",
+  "Use SAR for this report unless another currency is explicitly provided.",
+  "Use ISO 8601 dates.",
+  "Send numeric values as numbers, not formatted strings, except where the schema requires display text.",
+  "Preserve source URLs and claim-level citations exactly as found.",
+  "Call validate_external_analysis on the full payload before create_external_analysis.",
+  "If validation returns issues, fix each issue.path using issue.code/expected/example and resend."
+];
+var SUBMISSION_CONTRACT = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+  supported_report_types: ["feasibility_analysis"],
+  json_schema: EXTERNAL_ANALYSIS_SCHEMA,
+  required_top_level_fields: ["inputs", "analysis"],
+  optional_top_level_fields: ["schema_version", "title", "industry", "agent_metadata"],
+  field_rules: SUBMISSION_FIELD_RULES,
+  enums: SUBMISSION_ENUMS,
+  rules: SUBMISSION_RULES,
+  examples: {
+    valid: VALID_SUBMISSION_EXAMPLE,
+    invalid: INVALID_SUBMISSION_EXAMPLE
+  },
+  validation_guidance: {
+    workflow: [
+      "get_submission_contract",
+      "build payload",
+      "validate_external_analysis",
+      "fix reported issues",
+      "create_external_analysis (or update_external_analysis)"
+    ],
+    error_shape: {
+      valid: false,
+      issues: [{
+        path: "analysis.financials.scenarios[0].probability",
+        code: "missing_required_field",
+        message: "Probability is required.",
+        expected: "string",
+        example: "35%"
+      }]
+    }
+  }
+};
 
 // src/lib/mcp/tools/get_analysis_schema.ts
 var payload = {
@@ -1239,10 +1419,24 @@ var get_analysis_schema_default = defineTool6({
   handler: () => ok(JSON.stringify(payload, null, 2), payload)
 });
 
-// src/lib/mcp/tools/validate_external_analysis.ts
+// src/lib/mcp/tools/get_submission_contract.ts
 import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+var get_submission_contract_default = defineTool7({
+  name: "get_submission_contract",
+  title: "Get Concept AI submission contract",
+  description: "Return the complete external-analysis submission contract: schema_version, JSON schema, human-readable field rules, enums, valid and invalid examples, validation guidance and supported report types. Call this BEFORE building any payload for create_external_analysis or update_external_analysis.",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: () => ({
+    content: [{ type: "text", text: JSON.stringify(SUBMISSION_CONTRACT, null, 2) }],
+    structuredContent: { contract: SUBMISSION_CONTRACT }
+  })
+});
+
+// src/lib/mcp/tools/validate_external_analysis.ts
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z8 } from "npm:zod@^4.4.3";
-var validate_external_analysis_default = defineTool7({
+var validate_external_analysis_default = defineTool8({
   name: "validate_external_analysis",
   title: "Validate external analysis payload",
   description: "Dry-run validation of a proposed external analysis payload against Concept AI's schema. Returns a list of issues (empty = valid). Does not persist anything.",
@@ -1266,9 +1460,9 @@ var validate_external_analysis_default = defineTool7({
 });
 
 // src/lib/mcp/tools/create_external_analysis.ts
-import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z9 } from "npm:zod@^4.4.3";
-var create_external_analysis_default = defineTool8({
+var create_external_analysis_default = defineTool9({
   name: "create_external_analysis",
   title: "Create report from external analysis",
   description: "Create a new Concept AI report from a completed external-assistant analysis. Concept AI validates the payload, stores a canonical report (source_mode=external_agent), and recomputes authoritative FMART-O scores & financial totals. Rejects client-supplied ownership fields.",
@@ -1325,9 +1519,9 @@ var create_external_analysis_default = defineTool8({
 });
 
 // src/lib/mcp/tools/update_external_analysis.ts
-import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z10 } from "npm:zod@^4.4.3";
-var update_external_analysis_default = defineTool9({
+var update_external_analysis_default = defineTool10({
   name: "update_external_analysis",
   title: "Update an external-agent report",
   description: "Replace the analysis of an existing external-agent report you own. Concept AI re-validates and recomputes canonical scores. Reports created via the in-app workflow cannot be updated through this tool.",
@@ -1382,7 +1576,7 @@ var update_external_analysis_default = defineTool9({
 });
 
 // src/lib/mcp/tools/generate_report_exports.ts
-import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z11 } from "npm:zod@^4.4.3";
 var FORMATS = ["pdf", "xlsx", "pptx"];
 var MAX_EXPORT_REPORT_BYTES = 512 * 1024;
@@ -1398,7 +1592,7 @@ var exportPreflightSchema = z11.object({
 function siteOrigin() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
-var generate_report_exports_default = defineTool10({
+var generate_report_exports_default = defineTool11({
   name: "generate_report_exports",
   title: "Queue report exports (PDF / XLSX / PPTX)",
   description: "Queue one or more export jobs for a report you own. Concept AI generates the files with its own templates and export engines \u2014 external assistants must NOT upload pre-generated files. Returns a display URL where the exports are produced and downloaded.",
@@ -1453,9 +1647,9 @@ var generate_report_exports_default = defineTool10({
 });
 
 // src/lib/mcp/tools/get_export_status.ts
-import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z12 } from "npm:zod@^4.4.3";
-var get_export_status_default = defineTool11({
+var get_export_status_default = defineTool12({
   name: "get_export_status",
   title: "Get export job status",
   description: "Fetch the current status of a single export job (queued, ready, or failed).",
@@ -1473,9 +1667,9 @@ var get_export_status_default = defineTool11({
 });
 
 // src/lib/mcp/tools/list_report_exports.ts
-import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z13 } from "npm:zod@^4.4.3";
-var list_report_exports_default = defineTool12({
+var list_report_exports_default = defineTool13({
   name: "list_report_exports",
   title: "List export jobs for a report",
   description: "List all export jobs (PDF/XLSX/PPTX) for a report you own, newest first.",
@@ -1493,12 +1687,12 @@ var list_report_exports_default = defineTool12({
 });
 
 // src/lib/mcp/tools/get_report_display_link.ts
-import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z14 } from "npm:zod@^4.4.3";
 function siteOrigin2() {
   return process.env.APP_SITE_URL ?? "https://gentle-glow-galaxy.lovable.app";
 }
-var get_report_display_link_default = defineTool13({
+var get_report_display_link_default = defineTool14({
   name: "get_report_display_link",
   title: "Get shareable link for a report",
   description: "Return the shareable Concept AI URL where a report is displayed (dashboard, charts, evidence, exports). Only works for reports the signed-in user can access.",
@@ -1532,8 +1726,8 @@ var projectRef = "smjiyjenxbtfiiovxbnq";
 var mcp_default = defineMcp({
   name: "concept-ai-mcp",
   title: "Concept AI",
-  version: "0.2.0",
-  instructions: "Concept AI feasibility analysis (FMART-O). External assistants may research the web and submit completed analysis JSON via create_external_analysis / update_external_analysis (use get_analysis_schema first, then validate_external_analysis). Concept AI owns all validation, canonical FMART-O scoring, financial totals, dashboards, charts, versioning, and export file generation (PDF/XLSX/PPTX). Do NOT generate or upload PDF/Excel/PowerPoint files \u2014 use generate_report_exports to queue Concept AI's export engine and get_report_display_link to point the user to the produced files. Existing tools: list_reports, get_report, list_comments, add_comment, set_report_status.",
+  version: "0.3.0",
+  instructions: "Concept AI feasibility analysis (FMART-O). External assistants may research the web and submit completed analysis JSON via create_external_analysis / update_external_analysis (call get_submission_contract first for the full schema + rules + examples, then validate_external_analysis). Concept AI owns all validation, canonical FMART-O scoring, financial totals, dashboards, charts, versioning, and export file generation (PDF/XLSX/PPTX). Do NOT generate or upload PDF/Excel/PowerPoint files \u2014 use generate_report_exports to queue Concept AI's export engine and get_report_display_link to point the user to the produced files. Existing tools: list_reports, get_report, list_comments, add_comment, set_report_status.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -1545,6 +1739,7 @@ var mcp_default = defineMcp({
     add_comment_default,
     set_report_status_default,
     get_analysis_schema_default,
+    get_submission_contract_default,
     validate_external_analysis_default,
     create_external_analysis_default,
     update_external_analysis_default,
