@@ -180,7 +180,7 @@
       {
         "name": "get_analysis_schema",
         "title": "Get Concept AI external-analysis schema",
-        "description": "Return the JSON schema that external assistants must follow when submitting completed feasibility analysis to Concept AI (create_external_analysis / update_external_analysis).",
+        "description": "Return the JSON schema (external_agent.v1) that external assistants must follow when submitting completed feasibility analysis to Concept AI. Mirrors exactly what the application can render.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,

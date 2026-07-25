@@ -477,6 +477,8 @@ var feasibilityReportSchema = z6.object({
   decision: decisionSchema.optional(),
   legacyEvidence: z6.boolean().optional()
 }).passthrough();
+var SOURCE_SCHEMA_VERSION = "external_agent.v1";
+var CANONICAL_SCHEMA_VERSION = "canonical_report.v2";
 var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var record = (value) => isRecord(value) ? value : {};
 var valueAt = (source, ...keys) => {
@@ -573,8 +575,8 @@ function validateCanonicalReportData(inputs, output) {
     output: outputResult.data
   };
 }
-var normalizeInputs = (payload) => {
-  const candidate = record(payload.inputs);
+var normalizeInputs = (payload2) => {
+  const candidate = record(payload2.inputs);
   const canonical = conceptInputsSchema.safeParse(candidate);
   if (canonical.success) return canonical.data;
   const overview = record(candidate.overview);
@@ -582,8 +584,8 @@ var normalizeInputs = (payload) => {
   const operatingModel = record(valueAt(candidate, "operatingModel", "operating_model"));
   const businessModelRows = valueAt(candidate, "businessModel", "business_model");
   return {
-    projectName: text(valueAt(candidate, "projectName", "project_name", "working_name", "title", "name")) || text(valueAt(overview, "projectName", "project_name", "title", "name")) || text(payload.title),
-    industry: text(valueAt(candidate, "industry", "sector")) || text(valueAt(overview, "industry", "sector")) || text(payload.industry),
+    projectName: text(valueAt(candidate, "projectName", "project_name", "working_name", "title", "name")) || text(valueAt(overview, "projectName", "project_name", "title", "name")) || text(payload2.title),
+    industry: text(valueAt(candidate, "industry", "sector")) || text(valueAt(overview, "industry", "sector")) || text(payload2.industry),
     location: text(valueAt(candidate, "location", "region", "geography")) || text(valueAt(overview, "location", "region", "geography")),
     description: text(valueAt(candidate, "description", "overview", "summary")) || text(valueAt(overview, "description", "summary")) || text(valueAt(scope, "description", "summary")),
     strategicObjectives: text(valueAt(candidate, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(overview, "strategicObjectives", "strategic_objectives", "objectives")) || text(valueAt(candidate, "value_proposition")),
@@ -958,11 +960,11 @@ var normalizeResearch = (analysis) => {
     })
   };
 };
-function normalizeExternalAnalysis(payload, options = {}) {
-  if (!isRecord(payload)) {
+function normalizeExternalAnalysis(payload2, options = {}) {
+  if (!isRecord(payload2)) {
     return { valid: false, issues: [{ path: "$", message: "payload must be an object", code: "invalid_type", expected: "object" }] };
   }
-  const analysis = record(valueAt(payload, "analysis", "output", "report"));
+  const analysis = record(valueAt(payload2, "analysis", "output", "report"));
   if (Object.keys(analysis).length === 0) {
     return {
       valid: false,
@@ -974,7 +976,7 @@ function normalizeExternalAnalysis(payload, options = {}) {
       }]
     };
   }
-  const inputs = normalizeInputs(payload);
+  const inputs = normalizeInputs(payload2);
   const scoreResult = normalizeScores(analysis);
   if (!scoreResult.scores) return { valid: false, issues: scoreResult.issues };
   const summary = text(valueAt(analysis, "executiveSummary", "executive_summary")) || text(record(analysis.verdict).summary);
@@ -993,7 +995,7 @@ function normalizeExternalAnalysis(payload, options = {}) {
   const warnings = /* @__PURE__ */ new Set([
     ...stringList(valueAt(analysis, "evidenceWarnings", "evidence_warnings"))
   ]);
-  const reportId = options.reportId || text(valueAt(analysis, "reportId", "report_id")) || text(valueAt(payload, "reportId", "report_id")) || "EXTERNAL-PENDING";
+  const reportId = options.reportId || text(valueAt(analysis, "reportId", "report_id")) || text(valueAt(payload2, "reportId", "report_id")) || "EXTERNAL-PENDING";
   const output = {
     reportId,
     dateIssued: options.dateIssued || text(valueAt(analysis, "dateIssued", "date_issued")) || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
@@ -1105,38 +1107,38 @@ var FORBIDDEN_INPUT_KEYS = /* @__PURE__ */ new Set([
   "archived_at"
 ]);
 var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function sanitizeExternalPayload(payload) {
-  if (!isRecord2(payload)) return payload;
+function sanitizeExternalPayload(payload2) {
+  if (!isRecord2(payload2)) return payload2;
   return Object.fromEntries(
-    Object.entries(payload).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key))
+    Object.entries(payload2).filter(([key]) => !FORBIDDEN_INPUT_KEYS.has(key))
   );
 }
-function validatePayloadSize(payload) {
+function validatePayloadSize(payload2) {
   let serialized;
   try {
-    serialized = JSON.stringify(payload ?? {});
+    serialized = JSON.stringify(payload2 ?? {});
   } catch {
     return [{ path: "$", message: "payload must be JSON-serializable" }];
   }
   return new TextEncoder().encode(serialized).length > MAX_PAYLOAD_BYTES ? [{ path: "$", message: `payload exceeds ${MAX_PAYLOAD_BYTES} bytes` }] : [];
 }
-function validateAgentMetadataSize(payload) {
-  if (!isRecord2(payload) || payload.agent_metadata === void 0) return [];
-  if (!isRecord2(payload.agent_metadata)) {
+function validateAgentMetadataSize(payload2) {
+  if (!isRecord2(payload2) || payload2.agent_metadata === void 0) return [];
+  if (!isRecord2(payload2.agent_metadata)) {
     return [{ path: "agent_metadata", message: "agent_metadata must be an object" }];
   }
-  const serialized = JSON.stringify(payload.agent_metadata);
+  const serialized = JSON.stringify(payload2.agent_metadata);
   return new TextEncoder().encode(serialized).length > MAX_AGENT_METADATA_BYTES ? [{
     path: "agent_metadata",
     message: `agent_metadata exceeds ${MAX_AGENT_METADATA_BYTES} bytes`
   }] : [];
 }
-function prepareExternalAnalysisForSave(payload, options = {}) {
-  const sizeIssues = validatePayloadSize(payload);
+function prepareExternalAnalysisForSave(payload2, options = {}) {
+  const sizeIssues = validatePayloadSize(payload2);
   if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
-  const metadataIssues = validateAgentMetadataSize(payload);
+  const metadataIssues = validateAgentMetadataSize(payload2);
   if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
-  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
+  return normalizeExternalAnalysis(sanitizeExternalPayload(payload2), options);
 }
 function validationErrorResult(issues) {
   return {
@@ -1149,8 +1151,8 @@ ${issues.map((issue) => `- ${issue.path}: ${issue.message}`).join("\n")}`
     isError: true
   };
 }
-function externalAgentMetadata(payload, warnings, existing = {}) {
-  const clean = sanitizeExternalPayload(payload);
+function externalAgentMetadata(payload2, warnings, existing = {}) {
+  const clean = sanitizeExternalPayload(payload2);
   const payloadRecord = isRecord2(clean) ? clean : {};
   const existingRecord = isRecord2(existing) ? existing : {};
   const reservedKeys = /* @__PURE__ */ new Set([
@@ -1190,16 +1192,51 @@ function reportDisplayPath(report) {
   return `/reports/${report.id}`;
 }
 
+// src/lib/mcp/submissionContract.ts
+var SUBMISSION_FIELD_RULES = {
+  never_infer: [
+    "founderExperience",
+    "regulatoryConsiderations",
+    "market.tamValue / samValue / somValue / any CAGR",
+    "market.growthChart points",
+    "financials.scenarios[].probability and subscribersYr1",
+    "fundingMix",
+    "customer profile fields",
+    "citation URLs"
+  ],
+  optional_sections: [
+    "analysis.customer",
+    "analysis.competitors",
+    "analysis.fundingMix",
+    "analysis.research",
+    "analysis.claims",
+    "analysis.market growth points"
+  ],
+  numbers: "Send raw numbers (not formatted strings) for capEx.low/high, opEx.monthly/annual and growthChart tam/sam. Score dimensions are numbers 0\u201310. Display-only fields (investmentRange, annualRevenue, probability, breakEvenSummary) are strings.",
+  currency: "Use SAR for this workspace unless another currency is explicitly provided in the inputs. Set financials.currency and market.currency to the ISO code.",
+  dates: "ISO 8601 (YYYY-MM-DD) for dateIssued and any date field. Never guess a date.",
+  risks: "risks[] = { name, probability, impact, level, mitigation }. probability/impact/level must be Low | Med | High (high/medium/critical/material are normalized).",
+  scenarios: 'financials.scenarios[] = { scenario: Optimistic|Base Case|Pessimistic, probability, subscribersYr1, annualRevenue, breakEven }. Leave a field as "" when unknown \u2014 never invent it.',
+  market: 'market = { tamLabel, tamValue, tamCagr, samLabel, samValue, samCagr, somLabel, somValue, somCagr, growthChart[], currency }. Leave values as "" and growthChart as [] when no licensed dataset was used.',
+  citations: "claims[] = { text, confidence: High|Medium|Low, sources: [{ title, url, source }] }. Preserve the original absolute http(s) URLs exactly.",
+  totals: "Do not send capExTotal or the overall score. Concept AI recomputes capEx totals, weighted FMART-O overall and the verdict deterministically."
+};
+
 // src/lib/mcp/tools/get_analysis_schema.ts
+var payload = {
+  schema_version: SOURCE_SCHEMA_VERSION,
+  canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+  schema: EXTERNAL_ANALYSIS_SCHEMA,
+  field_rules: SUBMISSION_FIELD_RULES,
+  note: "This is the exact schema the Concept AI dashboard, charts and exporters render. Call get_submission_contract for enums, examples and validation guidance."
+};
 var get_analysis_schema_default = defineTool6({
   name: "get_analysis_schema",
   title: "Get Concept AI external-analysis schema",
-  description: "Return the JSON schema that external assistants must follow when submitting completed feasibility analysis to Concept AI (create_external_analysis / update_external_analysis).",
+  description: "Return the JSON schema (external_agent.v1) that external assistants must follow when submitting completed feasibility analysis to Concept AI. Mirrors exactly what the application can render.",
   inputSchema: {},
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: () => ok(JSON.stringify(EXTERNAL_ANALYSIS_SCHEMA, null, 2), {
-    schema: EXTERNAL_ANALYSIS_SCHEMA
-  })
+  handler: () => ok(JSON.stringify(payload, null, 2), payload)
 });
 
 // src/lib/mcp/tools/validate_external_analysis.ts
@@ -1213,9 +1250,9 @@ var validate_external_analysis_default = defineTool7({
     payload: z8.any().describe("The external analysis JSON payload to validate.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ payload }, ctx) => {
+  handler: async ({ payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
-    const result = prepareExternalAnalysisForSave(payload, {
+    const result = prepareExternalAnalysisForSave(payload2, {
       reportId: "EXTERNAL-VALIDATION"
     });
     if (!result.valid) return validationErrorResult(result.issues);
@@ -1240,10 +1277,10 @@ var create_external_analysis_default = defineTool8({
     payload: z9.any().describe("External analysis JSON matching get_analysis_schema.")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-  handler: async ({ idempotency_key, payload }, ctx) => {
+  handler: async ({ idempotency_key, payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
-    const normalized = prepareExternalAnalysisForSave(payload, {
+    const normalized = prepareExternalAnalysisForSave(payload2, {
       reportId: `EXT-${idempotency_key.slice(0, 20).toUpperCase()}`
     });
     if (!normalized.valid) return validationErrorResult(normalized.issues);
@@ -1263,7 +1300,7 @@ var create_external_analysis_default = defineTool8({
       inputs: normalized.inputs,
       output: normalized.output,
       source_mode: "external_agent",
-      external_agent_metadata: externalAgentMetadata(payload, normalized.warnings),
+      external_agent_metadata: externalAgentMetadata(payload2, normalized.warnings),
       canonical_validated: true,
       is_public: false,
       status: "draft"
@@ -1300,7 +1337,7 @@ var update_external_analysis_default = defineTool9({
     payload: z10.any().describe("Full external analysis JSON (same shape as create).")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-  handler: async ({ report_id, idempotency_key, payload }, ctx) => {
+  handler: async ({ report_id, idempotency_key, payload: payload2 }, ctx) => {
     if (!ctx.isAuthenticated()) return err("Not authenticated");
     const userId = ctx.getUserId();
     const sb = sbClient(ctx);
@@ -1313,7 +1350,7 @@ var update_external_analysis_default = defineTool9({
       return err("This report was not created by an external assistant; use the in-app workflow to edit it.");
     }
     const currentOutput = current.output && typeof current.output === "object" && !Array.isArray(current.output) ? current.output : {};
-    const normalized = prepareExternalAnalysisForSave(payload, {
+    const normalized = prepareExternalAnalysisForSave(payload2, {
       reportId: typeof currentOutput.reportId === "string" ? currentOutput.reportId : current.display_id
     });
     if (!normalized.valid) return validationErrorResult(normalized.issues);
@@ -1323,7 +1360,7 @@ var update_external_analysis_default = defineTool9({
       inputs: normalized.inputs,
       output: normalized.output,
       external_agent_metadata: externalAgentMetadata(
-        payload,
+        payload2,
         normalized.warnings,
         current.external_agent_metadata
       ),
