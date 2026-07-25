@@ -75,10 +75,6 @@ export default defineTool({
         canonical_schema_version: CANONICAL_SCHEMA_VERSION,
         normalization_warnings: normalized.warnings,
         normalization_timestamp: new Date().toISOString(),
-      source_schema_version: SOURCE_SCHEMA_VERSION,
-      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
-      normalization_warnings: normalized.warnings,
-      normalization_timestamp: new Date().toISOString(),
       })
       .eq("id", report_id)
       .eq("user_id", userId);
