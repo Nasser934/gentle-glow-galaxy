@@ -6,7 +6,7 @@ import {
   SOURCE_SCHEMA_VERSION,
   conceptInputsSchema,
   feasibilityReportSchema,
-  normalizeExternalAnalysis,
+  normalizeExternalAnalysisToCanonicalReport,
   type ExternalNormalizationOptions,
   type ExternalNormalizationResult,
   type ReportValidationIssue,
@@ -145,7 +145,18 @@ export function prepareExternalAnalysisForSave(
   if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
   const metadataIssues = validateAgentMetadataSize(payload);
   if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
-  return normalizeExternalAnalysis(sanitizeExternalPayload(payload), options);
+  const result = normalizeExternalAnalysisToCanonicalReport(
+    sanitizeExternalPayload(payload),
+    options,
+  );
+  if (!result.valid) return { valid: false, issues: result.issues };
+  return {
+    valid: true,
+    issues: [],
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+  };
 }
 
 /** Backwards-compatible named validator for MCP callers and focused tests. */

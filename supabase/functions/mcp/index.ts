@@ -1040,6 +1040,39 @@ function normalizeExternalAnalysis(payload2, options = {}) {
     warnings: [...warnings]
   };
 }
+function detectExternalSchemaVersion(payload2) {
+  if (!isRecord(payload2)) return SOURCE_SCHEMA_VERSION;
+  const declared = text(valueAt(payload2, "schema_version", "schemaVersion")) || text(valueAt(record(valueAt(payload2, "analysis", "output", "report")), "schema_version", "schemaVersion"));
+  return declared || SOURCE_SCHEMA_VERSION;
+}
+function normalizeExternalAnalysisToCanonicalReport(payload2, options = {}) {
+  const sourceSchemaVersion = detectExternalSchemaVersion(payload2);
+  if (sourceSchemaVersion !== SOURCE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      sourceSchemaVersion,
+      issues: [{
+        path: "schema_version",
+        message: `unsupported schema_version "${sourceSchemaVersion}"; expected "${SOURCE_SCHEMA_VERSION}"`,
+        code: "unsupported_schema_version",
+        expected: "string",
+        example: SOURCE_SCHEMA_VERSION
+      }]
+    };
+  }
+  const result = normalizeExternalAnalysis(payload2, options);
+  if (!result.valid) return { valid: false, sourceSchemaVersion, issues: result.issues };
+  return {
+    valid: true,
+    sourceSchemaVersion,
+    canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings,
+    normalizationTimestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    issues: []
+  };
+}
 
 // src/lib/mcp/shared.ts
 function sbClient(ctx) {
@@ -1143,7 +1176,18 @@ function prepareExternalAnalysisForSave(payload2, options = {}) {
   if (sizeIssues.length > 0) return { valid: false, issues: sizeIssues };
   const metadataIssues = validateAgentMetadataSize(payload2);
   if (metadataIssues.length > 0) return { valid: false, issues: metadataIssues };
-  return normalizeExternalAnalysis(sanitizeExternalPayload(payload2), options);
+  const result = normalizeExternalAnalysisToCanonicalReport(
+    sanitizeExternalPayload(payload2),
+    options
+  );
+  if (!result.valid) return { valid: false, issues: result.issues };
+  return {
+    valid: true,
+    issues: [],
+    inputs: result.inputs,
+    output: result.output,
+    warnings: result.warnings
+  };
 }
 function validationErrorResult(issues) {
   return {
@@ -1496,6 +1540,10 @@ var create_external_analysis_default = defineTool9({
       source_mode: "external_agent",
       external_agent_metadata: externalAgentMetadata(payload2, normalized.warnings),
       canonical_validated: true,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       is_public: false,
       status: "draft"
     };
@@ -1513,7 +1561,10 @@ var create_external_analysis_default = defineTool9({
       report_id: data.id,
       slug: data.slug,
       display_id: data.display_id,
-      warnings: normalized.warnings
+      warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings
     });
   }
 });
@@ -1558,7 +1609,15 @@ var update_external_analysis_default = defineTool10({
         normalized.warnings,
         current.external_agent_metadata
       ),
-      canonical_validated: true
+      canonical_validated: true,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_warnings: normalized.warnings,
+      normalization_timestamp: (/* @__PURE__ */ new Date()).toISOString()
     }).eq("id", report_id).eq("user_id", userId);
     if (updErr) return err(updErr.message);
     await sb.from("mcp_write_idempotency").insert({
@@ -1570,7 +1629,10 @@ var update_external_analysis_default = defineTool10({
     });
     return ok(`Report ${report_id} updated with canonical validated data.`, {
       report_id,
-      warnings: normalized.warnings
+      warnings: normalized.warnings,
+      source_schema_version: SOURCE_SCHEMA_VERSION,
+      canonical_schema_version: CANONICAL_SCHEMA_VERSION,
+      normalization_changes: normalized.warnings
     });
   }
 });
