@@ -443,11 +443,19 @@ const scenarioName = (value: unknown): RevenueScenario["scenario"] => {
 };
 
 const zodIssues = (prefix: string, error: z.ZodError): ReportValidationIssue[] => (
-  error.issues.map((issue) => ({
-    path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
-    message: issue.message,
-  }))
+  error.issues.map((issue) => {
+    const anyIssue = issue as unknown as { code?: string; expected?: unknown };
+    const received = (issue as unknown as { received?: unknown }).received;
+    const missing = anyIssue.code === "invalid_type" && received === "undefined";
+    return {
+      path: [prefix, ...issue.path.map(String)].filter(Boolean).join("."),
+      message: issue.message,
+      code: missing ? "missing_required_field" : (anyIssue.code ?? "invalid_value"),
+      expected: typeof anyIssue.expected === "string" ? anyIssue.expected : undefined,
+    };
+  })
 );
+
 
 export function validateCanonicalReportData(
   inputs: unknown,
