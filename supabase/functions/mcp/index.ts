@@ -652,7 +652,10 @@ var normalizeScores = (analysis) => {
     return {
       issues: [{
         path: "analysis.scores",
-        message: "scores (or legacy fmarto_scores/fmarto) are required"
+        message: "scores (or legacy fmarto_scores/fmarto) are required",
+        code: "missing_required_field",
+        expected: "object",
+        example: { financial: 6.5, market: 7, achievability: 6, risk: 5.5, timing: 7, operational: 6 }
       }]
     };
   }
@@ -671,7 +674,10 @@ var normalizeScores = (analysis) => {
     if (rawValue === void 0 || rawValue < 0 || rawValue > 100) {
       issues.push({
         path: `analysis.scores.${dimension}`,
-        message: "must resolve to a number between 0 and 100"
+        message: "must resolve to a number between 0 and 100 (0-10 scale preferred)",
+        code: "missing_required_field",
+        expected: "number",
+        example: 6.5
       });
       continue;
     }
@@ -954,13 +960,18 @@ var normalizeResearch = (analysis) => {
 };
 function normalizeExternalAnalysis(payload, options = {}) {
   if (!isRecord(payload)) {
-    return { valid: false, issues: [{ path: "$", message: "payload must be an object" }] };
+    return { valid: false, issues: [{ path: "$", message: "payload must be an object", code: "invalid_type", expected: "object" }] };
   }
   const analysis = record(valueAt(payload, "analysis", "output", "report"));
   if (Object.keys(analysis).length === 0) {
     return {
       valid: false,
-      issues: [{ path: "analysis", message: "analysis object is required" }]
+      issues: [{
+        path: "analysis",
+        message: "analysis object is required",
+        code: "missing_required_field",
+        expected: "object"
+      }]
     };
   }
   const inputs = normalizeInputs(payload);
@@ -972,7 +983,10 @@ function normalizeExternalAnalysis(payload, options = {}) {
       valid: false,
       issues: [{
         path: "analysis.executiveSummary",
-        message: "executiveSummary (or legacy executive_summary/verdict.summary) is required"
+        message: "executiveSummary (or legacy executive_summary/verdict.summary) is required",
+        code: "missing_required_field",
+        expected: "string",
+        example: "This concept is viable subject to licensing and anchor-client validation."
       }]
     };
   }
