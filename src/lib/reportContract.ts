@@ -1119,12 +1119,18 @@ export type ResolvedCanonicalReport =
 export function resolveCanonicalReportData(
   inputs: unknown,
   output: unknown,
+  options: ExternalNormalizationOptions & { title?: string; industry?: string } = {},
 ): ResolvedCanonicalReport {
   const canonical = validateCanonicalReportData(inputs, output);
   if (canonical.valid) {
     return { valid: true, inputs: canonical.inputs, output: canonical.output, repaired: false, warnings: [] };
   }
-  const repaired = normalizeExternalAnalysis({ inputs, analysis: output });
+  const { title, industry, ...normalizationOptions } = options;
+  const repaired = normalizeExternalAnalysis(
+    { inputs, analysis: output, ...(title ? { title } : {}), ...(industry ? { industry } : {}) },
+    normalizationOptions,
+  );
+
   if (repaired.valid) {
     return {
       valid: true,
