@@ -22,6 +22,7 @@ vi.mock("@/lib/reports", () => ({
   saveReport: vi.fn(),
   listReportVersions: vi.fn().mockResolvedValue([]),
   restoreReportGroup: vi.fn(),
+  persistCanonicalRepair: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/components/report/InteractiveDashboard", () => ({
@@ -149,17 +150,18 @@ describe("report route compatibility guard", () => {
     "competitors",
     "recommendations",
     "nextSteps",
-  ])("does not crash React when %s is missing", async (field) => {
+  ])("recovers instead of crashing when %s is missing", async (field) => {
     const broken = structuredClone(canonicalReportFixture) as unknown as Record<string, unknown>;
     delete broken[field];
     mocks.getReportById.mockResolvedValue(reportRow(broken));
 
     renderReportRoute();
 
+    // Missing optional sections are repaired deterministically on read, so the
+    // workspace renders with empty sections instead of a compatibility error.
     await waitFor(() => {
-      expect(screen.getByText("Report data is incompatible")).toBeInTheDocument();
-      expect(screen.getByText(`output.${field}`)).toBeInTheDocument();
+      expect(screen.getByTestId("interactive-dashboard")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("interactive-dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Report data is incompatible")).not.toBeInTheDocument();
   });
 });
