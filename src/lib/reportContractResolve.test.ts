@@ -43,9 +43,13 @@ describe("canonical read-path resolver", () => {
   it("returns structured issues instead of throwing on unusable data", () => {
     const result = resolveCanonicalReportData(null, { nothing: true });
     expect(result.valid).toBe(false);
-    if (result.valid) throw new Error("expected unusable data to fail");
-    expect(result.issues.length).toBeGreaterThan(0);
-    expect(result.issues.every((issue) => typeof issue.path === "string")).toBe(true);
+    if (result.valid === false) {
+      expect(result.issues.length).toBeGreaterThan(0);
+      expect(result.issues.every((issue) => typeof issue.path === "string")).toBe(true);
+    } else {
+      throw new Error("expected unusable data to fail");
+    }
+
 
   });
 
