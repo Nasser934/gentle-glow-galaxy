@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { kimiStructured, KimiError } from "../_shared/kimi.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,8 +59,8 @@ serve(async (req) => {
     }
     const brief = rawBrief.slice(0, MAX_BRIEF_LEN);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // AI provider: Kimi Code only (see _shared/kimi.ts). No fallback providers.
+
 
     const systemPrompt = `You are a senior feasibility consultant. From a short business brief, draft a complete business case for downstream feasibility analysis.
 Return STRUCTURED data via the provided tool. Be realistic, specific, and concise. Use the same language as the user's brief (English or Arabic). Default to English if mixed.`;
@@ -69,24 +70,17 @@ Return STRUCTURED data via the provided tool. Be realistic, specific, and concis
 
 Generate a full draft business case. Choose realistic budget range, timeline, team size, technology readiness, and location/industry. Do NOT invent a different project — stay faithful to the brief.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "draft_business_case",
-              description: "Draft a complete business case from a short brief.",
-              parameters: {
-                type: "object",
-                properties: {
+    const draft = await kimiStructured(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      "draft_business_case",
+      "Draft a complete business case from a short brief.",
+      {
+        type: "object",
+        properties: {
+
                   projectName: { type: "string" },
                   industry: { type: "string", enum: [
                     "Information Technology","Telecommunications","Infrastructure & Construction",
@@ -118,40 +112,31 @@ Generate a full draft business case. Choose realistic budget range, timeline, te
                   knownRisks: { type: "string" },
                   regulatoryConsiderations: { type: "string" },
                   technologyReadiness: { type: "string", enum: ["Proven / Mature","Established / Widely Used","Emerging / Early Adoption","Experimental / R&D Phase","Unknown / Not Yet Assessed"] },
-                  competitorUrls: { type: "string", description: "Empty string — user will fill manually." },
-                },
-                required: [
-                  "projectName","industry","location","description","strategicObjectives",
-                  "businessModel","revenueModel","founderExperience",
-                  "budgetRange","timeline","teamSize","dependencies","assumptions",
-                  "constraints","successFactors","knownRisks","regulatoryConsiderations","technologyReadiness",
-                  "competitorUrls"
-                ],
-                additionalProperties: false,
-              },
-            },
-          },
+          competitorUrls: { type: "string", description: "Empty string — user will fill manually." },
+        },
+        required: [
+          "projectName","industry","location","description","strategicObjectives",
+          "businessModel","revenueModel","founderExperience",
+          "budgetRange","timeline","teamSize","dependencies","assumptions",
+          "constraints","successFactors","knownRisks","regulatoryConsiderations","technologyReadiness",
+          "competitorUrls"
         ],
-        tool_choice: { type: "function", function: { name: "draft_business_case" } },
-      }),
-    });
-
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("autofill error", response.status, t);
-      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit. Try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "AI usage limit reached. Add credits to continue." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      throw new Error(`AI gateway ${response.status}`);
+        additionalProperties: false,
+      },
+    );
+    if (!draft || typeof draft !== "object" || !draft.projectName) {
+      throw new KimiError(502, "AI did not return a valid draft.");
     }
 
-    const data = await response.json();
-    const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) throw new Error("AI did not return a draft");
-    const draft = JSON.parse(args);
 
     return new Response(JSON.stringify({ draft }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error(e);
+    if (e instanceof KimiError) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

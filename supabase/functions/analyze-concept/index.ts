@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
+import { kimiStructured, KimiError } from "../_shared/kimi.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -553,8 +554,8 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // AI provider: Kimi Code only (see _shared/kimi.ts). No fallback providers.
+
 
     const publicResearch = await fetchPublicResearch(inputs);
 
@@ -607,35 +608,19 @@ ${JSON.stringify(publicResearch, null, 2)}
 
 Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain when relevant.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [{ type: "function", function: { name: "provide_report", description: "Provide the full feasibility report.", parameters: reportSchema } }],
-        tool_choice: { type: "function", function: { name: "provide_report" } },
-      }),
-    });
-
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("analyze error", response.status, t);
-      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "AI usage limit reached. Add credits to continue." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      throw new Error(`AI gateway ${response.status}`);
+    const parsed = await kimiStructured(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      "provide_report",
+      "Provide the full feasibility report.",
+      reportSchema as Record<string, unknown>,
+    );
+    if (!parsed || typeof parsed !== "object" || !parsed.scores || !parsed.financials) {
+      throw new KimiError(502, "AI did not return a structured report.");
     }
 
-    const data = await response.json();
-    const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!args) {
-      console.error("No tool call:", JSON.stringify(data).slice(0, 500));
-      throw new Error("AI did not return structured report");
-    }
-    const parsed = JSON.parse(args);
 
     // Re-shape financials.capEx totals into the client shape
     const baseReport: any = {
@@ -684,6 +669,11 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
     return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("analyze-concept error:", e);
+    if (e instanceof KimiError) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: "Analysis failed. Please try again." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
