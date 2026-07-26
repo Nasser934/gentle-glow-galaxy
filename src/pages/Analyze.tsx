@@ -144,6 +144,21 @@ const Analyze = () => {
       </p>
     ) : null;
 
+  /** Supabase FunctionsHttpError hides the body; read it so users see the real reason. */
+  const readFnError = async (error: any, fallback: string) => {
+    const res = error?.context;
+    if (res && typeof res.json === "function") {
+      try {
+        const body = await res.clone().json();
+        if (body?.error) return String(body.error);
+      } catch { /* ignore */ }
+      if (res.status === 401) return "Your session expired. Please sign in again.";
+      if (res.status === 429) return "Too many requests. Please wait a moment and try again.";
+      if (res.status === 402) return "AI credits exhausted. Please top up to continue.";
+    }
+    return error?.message || fallback;
+  };
+
   const handleAutoFill = async () => {
     if (brief.trim().length < 10) {
       toast.error("Describe your idea in a sentence or two first.");
@@ -151,8 +166,13 @@ const Analyze = () => {
     }
     setIsAutoFilling(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        toast.error("Please sign in to use AI draft generation.");
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("autofill-brief", { body: { brief } });
-      if (error) throw error;
+      if (error) throw new Error(await readFnError(error, "Could not generate draft."));
       if (data?.error) throw new Error(data.error);
       setInputs(data.draft);
       setFieldErrors({});
@@ -168,10 +188,15 @@ const Analyze = () => {
   const completeField = async (field: EssayField) => {
     setCompleting(field);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        toast.error("Please sign in to use AI completion.");
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("complete-field", {
         body: { field, partial: inputs[field], inputs },
       });
-      if (error) throw error;
+      if (error) throw new Error(await readFnError(error, "AI completion failed."));
       if (data?.error) throw new Error(data.error);
       if (data?.text) set(field, data.text);
       toast.success("Field completed by AI.");
@@ -181,6 +206,7 @@ const Analyze = () => {
       setCompleting(null);
     }
   };
+
 
   const validateStep = () => {
     const errs: Partial<Record<keyof ConceptInputs, string>> = {};
