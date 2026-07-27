@@ -227,6 +227,9 @@ export interface FeasibilityReport {
   // by ensureEvidenceFields() so old reports stay compatible).
   // ----------------------------------------------------------
   inputQualityScore?: number; // 0-100
+  /** Evidence-readiness signal (0-10). Separate from the FMART-O feasibility score. */
+  decisionReadinessScore?: number;
+  decisionReadinessStatus?: "READY" | "NEEDS VALIDATION" | "INSUFFICIENT EVIDENCE";
   inputCompleteness?: {
     overall: number;
     missingFields: string[];
