@@ -490,9 +490,73 @@ const reportSchema = {
   additionalProperties: false,
 };
 
+export type ReportPartKey = "decision" | "market" | "financial" | "actions";
+
+const reportProperties = (reportSchema as { properties: Record<string, unknown> }).properties;
+
+function createPartSchema(keys: string[]) {
+  return {
+    type: "object",
+    properties: Object.fromEntries(keys.map((key) => [key, reportProperties[key]])),
+    required: keys,
+    additionalProperties: false,
+  };
+}
+
+export const REPORT_PARTS = [
+  {
+    key: "decision" as const,
+    label: "Scoring and decision",
+    keys: ["executiveSummary", "scores", "inputQualityScore", "inputCompleteness", "evidenceMix", "scoreExplanation"],
+  },
+  {
+    key: "market" as const,
+    label: "Market and customer analysis",
+    keys: ["market", "customer", "competitors", "research"],
+  },
+  {
+    key: "financial" as const,
+    label: "Financial model and risks",
+    keys: ["financials", "risks", "fundingMix", "fundingAdvisory"],
+  },
+  {
+    key: "actions" as const,
+    label: "Recommendations and evidence map",
+    keys: ["recommendations", "nextSteps", "claimEvidenceMap"],
+  },
+].map((part) => ({ ...part, schema: createPartSchema(part.keys) }));
+
+export function mergeReportParts(generationParts: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const part of REPORT_PARTS) {
+    const value = generationParts[part.key];
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Missing persisted report part: ${part.key}`);
+    }
+    Object.assign(merged, value);
+  }
+  return merged;
+}
+
+export function validateMergedReport(report: Record<string, unknown>): void {
+  const requiredKeys = REPORT_PARTS.flatMap((part) => part.keys);
+  const missing = requiredKeys.filter(
+    (key) => !(key in report) || report[key] === null || report[key] === undefined,
+  );
+  if (missing.length > 0) {
+    throw new Error(`Merged report is missing fields: ${missing.join(", ")}`);
+  }
+  if (
+    !report.scores || typeof report.scores !== "object" ||
+    !report.financials || typeof report.financials !== "object"
+  ) {
+    throw new Error("Merged report has invalid core sections.");
+  }
+}
+
 export function buildPrompts(inputs: Record<string, string>, publicResearch: any) {
   const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing · Operational).
-You MUST call the "provide_report" tool. All numbers must be realistic given the budget, industry, geography, and timeline.
+You MUST use the structured-output tool supplied with the request. All numbers must be realistic given the budget, industry, geography, and timeline.
 - Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
 - Pick realistic TAM/SAM/SOM with credible CAGR.
 - CapEx items must sum (low/high) close to capExLow/capExHigh totals.
