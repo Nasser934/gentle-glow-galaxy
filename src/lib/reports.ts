@@ -1,5 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ConceptInputs, FeasibilityReport } from "@/types/analysis";
+import {
+  versionFamilyFilter,
+  versionLinksForParent,
+} from "@/lib/reportVersioning";
 
 export interface ReportRow {
   id: string;
@@ -13,6 +17,7 @@ export interface ReportRow {
   status: "draft" | "in_review" | "approved" | "rejected";
   is_public: boolean;
   parent_report_id: string | null;
+  root_report_id?: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -32,6 +37,7 @@ const REPORT_ROW_COLUMNS = [
   "status",
   "is_public",
   "parent_report_id",
+  "root_report_id",
   "archived_at",
   "created_at",
   "updated_at",
@@ -57,9 +63,7 @@ export async function saveReport(inputs: ConceptInputs, output: FeasibilityRepor
 }
 
 /**
- * Save a re-run as a NEW row linked to the original/root report.
- * If the supplied parent is itself a child version, we walk up to the root so
- * the version chain stays flat (root -> v2, root -> v3, …).
+ * Save a re-run as a NEW row linked to its immediate parent and family root.
  */
 export async function saveRerunReport(params: {
   parentReportId: string;
@@ -69,13 +73,12 @@ export async function saveRerunReport(params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
 
-  // Ownership: walk to the root and verify the signed-in user owns it.
-  const rootId = await getReportRootId(params.parentReportId);
-  const root = await getReportWithOwnership(rootId);
-  if (!root) throw new Error("Original report not found.");
-  if (root.user_id !== user.id) {
+  const parent = await getReportWithOwnership(params.parentReportId);
+  if (!parent) throw new Error("Original report not found.");
+  if (parent.user_id !== user.id) {
     throw new Error("Only the report owner can create a new version.");
   }
+  const links = versionLinksForParent(parent);
 
   const { data, error } = await supabase
     .from("reports")
@@ -85,7 +88,8 @@ export async function saveRerunReport(params: {
       industry: params.inputs.industry || null,
       inputs: params.inputs as any,
       output: params.report as any,
-      parent_report_id: rootId,
+      parent_report_id: links.parentReportId,
+      root_report_id: links.rootReportId,
     } as any)
     .select("id, slug")
     .single();
@@ -115,9 +119,19 @@ export async function getReportById(id: string) {
 /** Returns ownership info without leaking the full payload — safe to call for permission checks. */
 export async function getReportWithOwnership(id: string) {
   const { data, error } = await supabase
-    .from("reports").select("id, user_id, parent_report_id, slug, is_public").eq("id", id).maybeSingle();
+    .from("reports")
+    .select("id, user_id, parent_report_id, root_report_id, slug, is_public")
+    .eq("id", id)
+    .maybeSingle();
   if (error) throw error;
-  return data as { id: string; user_id: string; parent_report_id: string | null; slug: string; is_public: boolean } | null;
+  return data as {
+    id: string;
+    user_id: string;
+    parent_report_id: string | null;
+    root_report_id?: string | null;
+    slug: string;
+    is_public: boolean;
+  } | null;
 }
 
 /**
@@ -132,6 +146,7 @@ export async function getReportRootId(reportId: string): Promise<string> {
     visited.add(currentId);
     const row = await getReportWithOwnership(currentId);
     if (!row) return currentId;
+    if (row.root_report_id) return row.root_report_id;
     if (!row.parent_report_id || row.parent_report_id === row.id) return row.id;
     currentId = row.parent_report_id;
   }
@@ -143,8 +158,8 @@ export async function listReportVersions(reportId: string) {
   const rootId = await getReportRootId(reportId);
   const { data, error } = await supabase
     .from("reports")
-    .select("id, slug, title, created_at, parent_report_id, user_id")
-    .or(`id.eq.${rootId},parent_report_id.eq.${rootId}`)
+    .select("id, slug, title, created_at, parent_report_id, root_report_id, user_id")
+    .or(versionFamilyFilter(rootId))
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
@@ -182,7 +197,7 @@ export async function archiveReportGroup(reportId: string) {
   const { error: e2 } = await supabase
     .from("reports")
     .update({ archived_at: now } as any)
-    .eq("parent_report_id", rootId);
+    .or(`root_report_id.eq.${rootId},parent_report_id.eq.${rootId}`);
   if (e2) throw e2;
 }
 
@@ -197,7 +212,7 @@ export async function restoreReportGroup(reportId: string) {
   const { error: e2 } = await supabase
     .from("reports")
     .update({ archived_at: null } as any)
-    .eq("parent_report_id", rootId);
+    .or(`root_report_id.eq.${rootId},parent_report_id.eq.${rootId}`);
   if (e2) throw e2;
 }
 

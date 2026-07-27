@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  ArrowLeft, CheckCircle2, ChevronRight, ExternalLink,
+  ArrowLeft, CheckCircle2, ChevronRight,
   Gauge, Loader2, MessageSquare, ShieldAlert, Sparkles, Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getReportById, type ReportRow } from "@/lib/reports";
-import { formatConfidence, confidencePercent, isInternalProject, prettifySource } from "@/lib/format";
+import { formatConfidence, confidencePercent, isInternalProject } from "@/lib/format";
 import { demoReport, demoInputs, DEMO_REPORT_ID } from "@/data/demoReport";
 import type { FeasibilityReport, ConceptInputs, ResearchCitation } from "@/types/analysis";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { validateCanonicalReportData } from "@/lib/reportContract";
@@ -128,7 +127,6 @@ const DecisionRoom = () => {
 
   const internal = isInternalProject(report, inputs);
 
-  const evidenceItems = (report.research?.citations || []).slice(0, 5);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -262,32 +260,18 @@ const DecisionRoom = () => {
           </div>
         </Section>
 
-        {/* Evidence Map */}
-        <Section title="Evidence Map" icon={Sparkles} hint="Top sources the AI grounded its decision in.">
-          {evidenceItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No public research citations were captured for this report.</p>
+        <Section title="Research & Sources" icon={Sparkles} hint="The full source snapshot is kept with the completed report.">
+          {row.demo ? (
+            <p className="text-sm text-muted-foreground">
+              This public demo uses an embedded legacy research snapshot.
+            </p>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {evidenceItems.map((c, i) => {
-                const body = (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{prettifySource(c)}</span>
-                      {c.url && <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-sm font-medium text-foreground">{c.title || "Untitled source"}</div>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{c.takeaway || "—"}</p>
-                  </>
-                );
-                return c.url ? (
-                  <a key={i} href={c.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
-                    {body}
-                  </a>
-                ) : (
-                  <div key={i} className="rounded-md border border-border p-3">{body}</div>
-                );
-              })}
-            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/reports/${reportId}?tab=research`}>
+                Open Research &amp; Sources
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
           )}
         </Section>
 
@@ -357,7 +341,6 @@ const DecisionRoom = () => {
         </Section>
 
         {/* Consumer Evidence & Improvement Layer */}
-        <EvidenceSections report={report} reportId={demo ? undefined : reportId} canEdit={canEditStatus} />
       </div>
     </div>
   );

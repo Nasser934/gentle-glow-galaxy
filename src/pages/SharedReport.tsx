@@ -10,7 +10,8 @@ import { CommentsPanel } from "@/components/report/CommentsPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ensureEvidenceFields } from "@/lib/evidence";
-import { EvidenceSections } from "@/components/report/evidence/EvidencePanel";
+import { ReportEvidenceSummary } from "@/components/report/evidence/ReportEvidenceSummary";
+import { ResearchSourcesPanel } from "@/components/report/research/ResearchSourcesPanel";
 import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
 
@@ -126,7 +127,10 @@ const SharedReportContent = ({
 
         <div className="mt-8">
           {/* Shared/public view is strictly read-only — no edit, no re-run, no owner controls. */}
-          <EvidenceSections report={enrichedReport} reportId={row.id} canEdit={false} />
+          <ReportEvidenceSummary report={enrichedReport} />
+          <div className="mt-8">
+            <ResearchSourcesPanel reportId={row.id} report={enrichedReport} />
+          </div>
         </div>
 
 

@@ -20,14 +20,24 @@ import { saveReport, getReportById, listReportVersions, restoreReportGroup, type
 import { ensureEvidenceFields } from "@/lib/evidence";
 import { resolveCanonicalReportData } from "@/lib/reportContract";
 import { ReportCompatibilityPanel } from "@/components/report/ReportCompatibilityPanel";
-import { EvidenceSections, ReportFamilyPanel, VersionComparison } from "@/components/report/evidence/EvidencePanel";
+import { ReportFamilyPanel, VersionComparison, WhyThisScore } from "@/components/report/evidence/EvidencePanel";
+import { ReportEvidenceSummary } from "@/components/report/evidence/ReportEvidenceSummary";
+import { ResearchSourcesPanel } from "@/components/report/research/ResearchSourcesPanel";
 import { StatusControl } from "@/components/report/StatusControl";
 import { WorkspaceHeader } from "@/components/report/workspace/WorkspaceHeader";
 import { ActivityTab } from "@/components/report/workspace/ActivityTab";
 import { useAuth } from "@/contexts/AuthContext";
 
-type WorkspaceTab = "overview" | "report" | "versions" | "activity";
-const TAB_VALUES: WorkspaceTab[] = ["overview", "report", "versions", "activity"];
+type WorkspaceTab = "overview" | "research" | "report" | "versions" | "activity";
+const RESEARCH_SOURCES_ENABLED =
+  import.meta.env.VITE_RESEARCH_SOURCES_ENABLED !== "false";
+const TAB_VALUES: WorkspaceTab[] = [
+  "overview",
+  ...(RESEARCH_SOURCES_ENABLED ? ["research" as const] : []),
+  "report",
+  "versions",
+  "activity",
+];
 
 
 
@@ -472,6 +482,9 @@ const Results = () => {
         <div className="mb-6 max-w-full overflow-x-auto overflow-y-hidden">
           <TabsList className="inline-flex h-auto min-h-9 w-max max-w-none flex-nowrap justify-start gap-1 rounded-lg border border-border bg-card/40 p-1">
             <TabsTrigger value="overview" className="text-[13px]">Overview</TabsTrigger>
+            {RESEARCH_SOURCES_ENABLED && (
+              <TabsTrigger value="research" className="text-[13px]">Research &amp; Sources</TabsTrigger>
+            )}
             <TabsTrigger value="report" className="text-[13px]">Export</TabsTrigger>
             <TabsTrigger value="versions" className="text-[13px]" disabled={!reportId}>Versions</TabsTrigger>
             <TabsTrigger value="activity" className="text-[13px]" disabled={!reportId}>Status History</TabsTrigger>
@@ -480,19 +493,26 @@ const Results = () => {
 
 
 
-        {/* OVERVIEW — interactive dashboard + evidence (version panels hidden; live in Versions tab) */}
+        {/* OVERVIEW — one compact report-level evidence summary. */}
         <TabsContent value="overview" className="mt-0 space-y-8">
           <section>
             <InteractiveDashboard report={report} inputs={inputs} />
           </section>
+          <ReportEvidenceSummary report={report} />
           <section className="space-y-4">
             <div>
               <h2 className="font-display text-lg font-semibold tracking-tight">Why this score?</h2>
-              <p className="text-xs text-muted-foreground">Per-dimension drivers, input quality, and evidence breakdown.</p>
+              <p className="text-xs text-muted-foreground">Per-dimension project drivers and validation actions.</p>
             </div>
-            <EvidenceSections report={report} reportId={reportId || undefined} canEdit={canEdit} hideVersionPanels />
+            <WhyThisScore report={report} />
           </section>
         </TabsContent>
+
+        {RESEARCH_SOURCES_ENABLED && (
+          <TabsContent value="research" className="mt-0">
+            <ResearchSourcesPanel reportId={reportId || undefined} report={report} />
+          </TabsContent>
+        )}
 
         {/* REPORT — export entry point (the PDF is generated; on-screen preview lives in the export pipeline) */}
         <TabsContent value="report" className="mt-0">

@@ -1,0 +1,8 @@
+{
+  "version": "report-layout-policy.v1",
+  "reportEvidenceSummaryLocation": "overview",
+  "detailedEvidenceLocation": "research_and_sources",
+  "sourcePageSize": 20,
+  "allowSectionSpecificCitations": true,
+  "repeatReportEvidenceSummary": false
+}

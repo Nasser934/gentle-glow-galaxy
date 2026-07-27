@@ -11,7 +11,7 @@
 //   7.  Market & Customer
 //   8.  Competition & Positioning
 //   9.  Risk & Mitigation
-//   10. Validation Roadmap (formerly Input Quality)
+//   10. Validation Roadmap (includes Brief Clarity)
 //   11. Evidence & Source Quality (citations cleaned + capped)
 //   App A — Project Brief (grouped)
 //   App B — Assumption Register (grouped)
@@ -443,7 +443,7 @@ export async function exportReportToPdf(
   );
   const iqScore = report.inputQualityScore ?? iq.overall;
   const iqLabel = iqScore >= 80 ? "Strong" : iqScore >= 60 ? "Adequate" : iqScore >= 40 ? "Needs improvement" : "Weak";
-  notice(doc, `Input quality: ${iqScore} / 100 — ${iqLabel}. Stronger inputs improve confidence; they do not automatically increase the feasibility score.`, "info");
+  notice(doc, `Brief Clarity: ${iqScore} / 100 — ${iqLabel}. This identifies where baseline assumptions were needed and does not change the feasibility score.`, "info");
 
   const validations = deriveValidationItems(report, inputs);
   if (validations.length) {
@@ -553,7 +553,7 @@ export async function exportReportToPdf(
       { size: 8.5, italic: true, color: C.muted },
     );
   } else {
-    notice(doc, "No curated external sources met the quality threshold. Add competitor URLs or analyst citations to strengthen the evidence base.", "info");
+    notice(doc, "No curated external sources met the quality threshold. Validate the report against additional authoritative public evidence.", "info");
   }
 
   /* ===================== APPENDICES ===================== */

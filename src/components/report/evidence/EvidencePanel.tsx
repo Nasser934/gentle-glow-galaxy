@@ -134,7 +134,7 @@ const Block = ({ icon: Icon, tone, title, children }: any) => (
   </div>
 );
 
-/* -------- Input Quality -------- */
+/* -------- Brief Clarity -------- */
 export const InputQualityPanel = ({
   report, reportId, canEdit,
 }: {
@@ -153,14 +153,14 @@ export const InputQualityPanel = ({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <FileWarning className="h-4 w-4 text-primary" /> Input quality
+          <FileWarning className="h-4 w-4 text-primary" /> Brief Clarity
         </CardTitle>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Badge variant="outline" className={STATUS_TONE[overallStatus]}>
             {STATUS_LABEL[overallStatus]} · {overall}%
           </Badge>
           <span className="text-xs text-muted-foreground">
-            Stronger inputs raise confidence — they don't automatically raise the score.
+            Shows where baseline assumptions were needed; it never changes FMART-O.
           </span>
         </div>
       </CardHeader>
@@ -342,6 +342,12 @@ export const VersionComparison = ({ report }: { report: FeasibilityReport }) => 
                   <Delta label="Score" prev={v.previousScore} next={v.newScore} fmt={(n) => n.toFixed(1)} />
                   <Delta label="Confidence" prev={v.previousConfidence} next={v.newConfidence} fmt={(n) => `${Math.round(n)}%`} />
                   <Delta label="AI assumptions" prev={v.previousAiAssumptionPercent} next={v.newAiAssumptionPercent} fmt={(n) => `${Math.round(n)}%`} invert />
+                  {v.previousDecisionReadiness != null && v.newDecisionReadiness != null && (
+                    <Delta label="Readiness" prev={v.previousDecisionReadiness} next={v.newDecisionReadiness} fmt={(n) => n.toFixed(1)} />
+                  )}
+                  {v.previousResearchQuality != null && v.newResearchQuality != null && (
+                    <Delta label="Research" prev={v.previousResearchQuality} next={v.newResearchQuality} fmt={(n) => `${Math.round(n)}`} />
+                  )}
                 </div>
               </div>
               <p className="mt-2 text-foreground">{v.summary}</p>
@@ -382,7 +388,7 @@ export const LegacyEvidenceNotice = ({ report, reportId, canEdit }: { report: Fe
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
       <span>
-        Evidence detail is estimated for this report. Re-run analysis to calculate full input quality and evidence mix.
+        Evidence detail is estimated for this report. Re-run analysis to calculate Brief Clarity and the evidence mix.
       </span>
       {canEdit && reportId && (
         <Button size="sm" variant="outline" onClick={() => navigate(`/analyze?reportId=${reportId}`)} className="gap-1.5">
