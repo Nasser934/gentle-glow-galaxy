@@ -27,9 +27,13 @@ export type Database = {
           inputs: Json
           lease_expires_at: string | null
           lease_token: string | null
+          model_id: string | null
           parent_report_id: string | null
+          policy_version: string | null
           previous_inputs: Json | null
           previous_output: Json | null
+          prompt_hash: string | null
+          prompt_version: string | null
           queue_pending: boolean
           report_id: string | null
           research: Json | null
@@ -37,6 +41,7 @@ export type Database = {
           research_quality: Json
           research_started_at: string | null
           research_state: Json
+          resolved_concept: Json | null
           root_report_id: string | null
           stage: string
           stage_attempts: Json
@@ -59,9 +64,13 @@ export type Database = {
           inputs?: Json
           lease_expires_at?: string | null
           lease_token?: string | null
+          model_id?: string | null
           parent_report_id?: string | null
+          policy_version?: string | null
           previous_inputs?: Json | null
           previous_output?: Json | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
@@ -69,6 +78,7 @@ export type Database = {
           research_quality?: Json
           research_started_at?: string | null
           research_state?: Json
+          resolved_concept?: Json | null
           root_report_id?: string | null
           stage?: string
           stage_attempts?: Json
@@ -91,9 +101,13 @@ export type Database = {
           inputs?: Json
           lease_expires_at?: string | null
           lease_token?: string | null
+          model_id?: string | null
           parent_report_id?: string | null
+          policy_version?: string | null
           previous_inputs?: Json | null
           previous_output?: Json | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
@@ -101,6 +115,7 @@ export type Database = {
           research_quality?: Json
           research_started_at?: string | null
           research_state?: Json
+          resolved_concept?: Json | null
           root_report_id?: string | null
           stage?: string
           stage_attempts?: Json
@@ -452,6 +467,165 @@ export type Database = {
           },
         ]
       }
+      report_research_runs: {
+        Row: {
+          analysis_job_id: string | null
+          authoritative_source_count: number
+          completed_at: string | null
+          created_at: string
+          executed_queries: Json
+          extracted_source_count: number
+          freshness: Json
+          id: string
+          model_id: string | null
+          policy_version: string | null
+          prompt_hash: string | null
+          prompt_version: string | null
+          report_id: string
+          research_quality: Json
+          research_review: Json
+          research_round_count: number
+          source_count: number
+          started_at: string | null
+          unique_domain_count: number
+        }
+        Insert: {
+          analysis_job_id?: string | null
+          authoritative_source_count?: number
+          completed_at?: string | null
+          created_at?: string
+          executed_queries?: Json
+          extracted_source_count?: number
+          freshness?: Json
+          id?: string
+          model_id?: string | null
+          policy_version?: string | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
+          report_id: string
+          research_quality?: Json
+          research_review?: Json
+          research_round_count?: number
+          source_count?: number
+          started_at?: string | null
+          unique_domain_count?: number
+        }
+        Update: {
+          analysis_job_id?: string | null
+          authoritative_source_count?: number
+          completed_at?: string | null
+          created_at?: string
+          executed_queries?: Json
+          extracted_source_count?: number
+          freshness?: Json
+          id?: string
+          model_id?: string | null
+          policy_version?: string | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
+          report_id?: string
+          research_quality?: Json
+          research_review?: Json
+          research_round_count?: number
+          source_count?: number
+          started_at?: string | null
+          unique_domain_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_research_runs_analysis_job_id_fkey"
+            columns: ["analysis_job_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_research_runs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: true
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_research_sources: {
+        Row: {
+          authority_score: number | null
+          categories: string[]
+          content_excerpt: string | null
+          created_at: string
+          domain: string
+          extracted: boolean
+          extraction_attempted: boolean
+          id: string
+          normalized_url: string
+          published_date: string | null
+          query_ids: string[]
+          relevance_score: number | null
+          report_id: string
+          research_run_id: string
+          snippet: string | null
+          source_rank: number | null
+          title: string
+          url: string
+        }
+        Insert: {
+          authority_score?: number | null
+          categories?: string[]
+          content_excerpt?: string | null
+          created_at?: string
+          domain: string
+          extracted?: boolean
+          extraction_attempted?: boolean
+          id?: string
+          normalized_url: string
+          published_date?: string | null
+          query_ids?: string[]
+          relevance_score?: number | null
+          report_id: string
+          research_run_id: string
+          snippet?: string | null
+          source_rank?: number | null
+          title: string
+          url: string
+        }
+        Update: {
+          authority_score?: number | null
+          categories?: string[]
+          content_excerpt?: string | null
+          created_at?: string
+          domain?: string
+          extracted?: boolean
+          extraction_attempted?: boolean
+          id?: string
+          normalized_url?: string
+          published_date?: string | null
+          query_ids?: string[]
+          relevance_score?: number | null
+          report_id?: string
+          research_run_id?: string
+          snippet?: string | null
+          source_rank?: number | null
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_research_sources_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_research_sources_research_run_id_fkey"
+            columns: ["research_run_id"]
+            isOneToOne: false
+            referencedRelation: "report_research_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_slug_aliases: {
         Row: {
           migrated_at: string
@@ -682,7 +856,7 @@ export type Database = {
           retry_after_seconds: number
         }[]
       }
-      can_view_report: { Args: { _report_id: string }; Returns: boolean }
+      can_view_report: { Args: { p_report_id: string }; Returns: boolean }
       claim_analysis_job: {
         Args: { p_job_id: string; p_lease_seconds?: number }
         Returns: {
@@ -697,9 +871,13 @@ export type Database = {
           inputs: Json
           lease_expires_at: string | null
           lease_token: string | null
+          model_id: string | null
           parent_report_id: string | null
+          policy_version: string | null
           previous_inputs: Json | null
           previous_output: Json | null
+          prompt_hash: string | null
+          prompt_version: string | null
           queue_pending: boolean
           report_id: string | null
           research: Json | null
@@ -707,6 +885,7 @@ export type Database = {
           research_quality: Json
           research_started_at: string | null
           research_state: Json
+          resolved_concept: Json | null
           root_report_id: string | null
           stage: string
           stage_attempts: Json
