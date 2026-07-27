@@ -20,20 +20,40 @@ function apiKey(): string {
   return key;
 }
 
-async function callKimi(body: Record<string, unknown>): Promise<any> {
-  const response = await fetch(KIMI_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: KIMI_MODEL,
-      reasoning_effort: "high",
-      stream: false,
-      ...body,
-    }),
-  });
+export interface KimiStructuredOptions {
+  reasoningEffort?: "low" | "high" | "max";
+  timeoutMs?: number;
+}
+
+async function callKimi(body: Record<string, unknown>, timeoutMs?: number): Promise<any> {
+  let response: Response;
+  try {
+    response = await fetch(KIMI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: KIMI_MODEL,
+        reasoning_effort: "high",
+        stream: false,
+        ...body,
+      }),
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    ) {
+      throw new KimiError(
+        504,
+        "Kimi did not complete this report section within the processing window.",
+      );
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const text = await response.text();
