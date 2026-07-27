@@ -288,7 +288,7 @@ serve(async (req) => {
         );
 
         const result = await runSearchBatch(batch, {
-          alreadyCompletedIds: completedIds,
+          alreadyCompletedIds: Array.from(completed),
         });
         const mergedSources = mergeResearchSources(state.sources ?? [], result.sources);
         const completedIds = Array.from(
