@@ -543,6 +543,7 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
 }
 
 export function buildBaseReport(parsed: any, publicResearch: any) {
+  const baseReport: any = {
     reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     classification: "Confidential",
