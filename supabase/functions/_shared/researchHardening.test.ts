@@ -16,11 +16,11 @@ import {
   withTavilyRetry,
   TavilyError,
   type ResearchSource,
-} from "../../supabase/functions/_shared/researchAgent.ts";
+} from "./researchAgent.ts";
 import {
   computeDecisionReadiness,
   decisionReadinessStatus,
-} from "../../supabase/functions/_shared/analysisCore.ts";
+} from "./analysisCore.ts";
 
 const source = (over: Partial<ResearchSource> = {}): ResearchSource => ({
   url: "https://example.com/a",
