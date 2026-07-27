@@ -16,8 +16,8 @@ import {
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
-import { getReportById, saveReport, saveRerunReport } from "@/lib/reports";
-import { assessInputQuality, ensureEvidenceFields, buildVersionEntry } from "@/lib/evidence";
+import { getReportById } from "@/lib/reports";
+import { assessInputQuality } from "@/lib/evidence";
 import { startAnalysisJob } from "@/lib/analysisJobs";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
