@@ -31,6 +31,10 @@ export type Database = {
           queue_pending: boolean
           report_id: string | null
           research: Json | null
+          research_completed_at: string | null
+          research_quality: Json | null
+          research_started_at: string | null
+          research_state: Json | null
           stage: string
           stage_attempts: Json
           stage_detail: string | null
@@ -56,6 +60,10 @@ export type Database = {
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
+          research_completed_at?: string | null
+          research_quality?: Json | null
+          research_started_at?: string | null
+          research_state?: Json | null
           stage?: string
           stage_attempts?: Json
           stage_detail?: string | null
@@ -81,6 +89,10 @@ export type Database = {
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
+          research_completed_at?: string | null
+          research_quality?: Json | null
+          research_started_at?: string | null
+          research_state?: Json | null
           stage?: string
           stage_attempts?: Json
           stage_detail?: string | null
@@ -673,6 +685,10 @@ export type Database = {
           queue_pending: boolean
           report_id: string | null
           research: Json | null
+          research_completed_at: string | null
+          research_quality: Json | null
+          research_started_at: string | null
+          research_state: Json | null
           stage: string
           stage_attempts: Json
           stage_detail: string | null

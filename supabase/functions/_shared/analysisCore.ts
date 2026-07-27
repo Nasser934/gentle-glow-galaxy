@@ -505,11 +505,6 @@ function createPartSchema(keys: string[]) {
 
 export const REPORT_PARTS = [
   {
-    key: "decision" as const,
-    label: "Scoring and decision",
-    keys: ["executiveSummary", "scores", "inputQualityScore", "inputCompleteness", "evidenceMix", "scoreExplanation"],
-  },
-  {
     key: "market" as const,
     label: "Market and customer analysis",
     keys: ["market", "customer", "competitors", "research"],
@@ -520,11 +515,17 @@ export const REPORT_PARTS = [
     keys: ["financials", "risks", "fundingMix", "fundingAdvisory"],
   },
   {
+    key: "decision" as const,
+    label: "Scoring and decision",
+    keys: ["executiveSummary", "scores", "inputQualityScore", "inputCompleteness", "evidenceMix", "scoreExplanation"],
+  },
+  {
     key: "actions" as const,
     label: "Recommendations and evidence map",
     keys: ["recommendations", "nextSteps", "claimEvidenceMap"],
   },
 ].map((part) => ({ ...part, schema: createPartSchema(part.keys) }));
+
 
 export function mergeReportParts(generationParts: Record<string, unknown>): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
@@ -610,8 +611,13 @@ export function buildPartPrompts(
   inputs: Record<string, string>,
   publicResearch: unknown,
   part: { key: ReportPartKey; label: string; keys: string[] },
+  previousParts: Record<string, unknown> = {},
 ) {
   const { systemPrompt, userPrompt } = buildPrompts(inputs, publicResearch as any);
+
+  const priorContext = Object.keys(previousParts).length > 0
+    ? JSON.stringify(previousParts, null, 2)
+    : "No prior report sections exist.";
 
   const partInstruction = `
 You are generating one persisted section of a larger report.
@@ -622,9 +628,18 @@ ${part.label}
 Return only these top-level fields:
 ${part.keys.join(", ")}
 
-Do not return fields from other report sections.
-Do not omit any field required by the supplied schema.
-Keep all calculations and assumptions internally consistent with the project context.
+Previously completed and authoritative report sections:
+${priorContext}
+
+Rules:
+- Treat previous sections as authoritative context.
+- Do not contradict values already produced.
+- Do not recreate fields from earlier sections.
+- Do not return fields from other report sections.
+- Do not omit any field required by the supplied schema.
+- Market research quality must affect confidence, not secretly change the feasibility score.
+- Weak or missing evidence must be stated plainly.
+- Never cite a source that is absent from the supplied research context.
 `;
 
   return {
@@ -632,6 +647,155 @@ Keep all calculations and assumptions internally consistent with the project con
     userPrompt: `${userPrompt}\n${partInstruction}`,
   };
 }
+
+const FMART_DIMENSIONS = [
+  "financial",
+  "market",
+  "achievability",
+  "risk",
+  "timing",
+  "operational",
+] as const;
+
+function clampScore(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(10, Math.max(0, parsed));
+}
+
+function roundOne(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+export function verdictFromScore(
+  score: number,
+): "PROCEED" | "PROCEED WITH CAUTION" | "REVISE" | "DO NOT PROCEED" {
+  if (score >= 7.5) return "PROCEED";
+  if (score >= 6.0) return "PROCEED WITH CAUTION";
+  if (score >= 4.5) return "REVISE";
+  return "DO NOT PROCEED";
+}
+
+function normalizeWeights(raw: Record<string, unknown>): Record<string, number> {
+  const parsed = Object.fromEntries(
+    FMART_DIMENSIONS.map((dimension) => [
+      dimension,
+      Math.max(0, Number(raw?.[dimension] ?? 0)),
+    ]),
+  ) as Record<string, number>;
+
+  const sum = FMART_DIMENSIONS.reduce((total, dimension) => total + parsed[dimension], 0);
+  if (!Number.isFinite(sum) || sum <= 0) {
+    return {
+      financial: 0.2,
+      market: 0.2,
+      achievability: 0.15,
+      risk: 0.15,
+      timing: 0.15,
+      operational: 0.15,
+    };
+  }
+
+  const normalized = Object.fromEntries(
+    FMART_DIMENSIONS.map((dimension) => [dimension, parsed[dimension] / sum]),
+  ) as Record<string, number>;
+
+  // Correct floating-point drift while keeping the model's relative weighting.
+  const normalizedSum = FMART_DIMENSIONS.reduce(
+    (total, dimension) => total + normalized[dimension],
+    0,
+  );
+  normalized.operational += 1 - normalizedSum;
+  return normalized;
+}
+
+function confidenceCapForQuality(qualityScore: number) {
+  if (qualityScore >= 75) return { market: 95, timing: 95, financial: 95, other: 95 };
+  if (qualityScore >= 50) return { market: 78, timing: 75, financial: 78, other: 85 };
+  if (qualityScore >= 25) return { market: 60, timing: 58, financial: 62, other: 75 };
+  return { market: 45, timing: 42, financial: 50, other: 65 };
+}
+
+/**
+ * Deterministic server-side finalization. Research quality can only lower
+ * confidence and evidence-mix claims — never the FMART-O score itself.
+ */
+export function finalizeReportDeterministically(
+  report: any,
+  researchQuality: { score?: number; level?: string } | null | undefined,
+): any {
+  const output = structuredClone(report ?? {});
+  if (!output.scores || typeof output.scores !== "object") {
+    throw new Error("Report scores are missing.");
+  }
+
+  const weights = normalizeWeights(output.scores.weights ?? {});
+  output.scores.weights = weights;
+  for (const dimension of FMART_DIMENSIONS) {
+    output.scores[dimension] = clampScore(output.scores[dimension]);
+  }
+
+  const overall = roundOne(
+    FMART_DIMENSIONS.reduce(
+      (total, dimension) => total + output.scores[dimension] * weights[dimension],
+      0,
+    ),
+  );
+  output.scores.overall = overall;
+  output.scores.verdict = verdictFromScore(overall);
+
+  const qualityScore = Math.max(0, Math.min(100, Number(researchQuality?.score ?? 0)));
+  const caps = confidenceCapForQuality(qualityScore);
+  const confidence = output.scores.confidence && typeof output.scores.confidence === "object"
+    ? output.scores.confidence
+    : {};
+
+  confidence.market = Math.min(Number(confidence.market ?? 0), caps.market);
+  confidence.timing = Math.min(Number(confidence.timing ?? 0), caps.timing);
+  confidence.financial = Math.min(Number(confidence.financial ?? 0), caps.financial);
+  confidence.achievability = Math.min(Number(confidence.achievability ?? 0), caps.other);
+  confidence.risk = Math.min(Number(confidence.risk ?? 0), caps.other);
+  confidence.operational = Math.min(Number(confidence.operational ?? 0), caps.other);
+  output.scores.confidence = confidence;
+
+  if (output.research && typeof output.research === "object") {
+    output.research.confidence = qualityScore >= 75 ? "High" : qualityScore >= 50 ? "Medium" : "Low";
+  }
+
+  if (output.evidenceMix && typeof output.evidenceMix === "object") {
+    const maxWebPercent = qualityScore >= 75
+      ? 50
+      : qualityScore >= 50
+        ? 38
+        : qualityScore >= 25
+          ? 25
+          : 15;
+    const currentWeb = Math.max(0, Number(output.evidenceMix.webResearchPercent ?? 0));
+    const cappedWeb = Math.min(currentWeb, maxWebPercent);
+    const userPercent = Math.max(0, Number(output.evidenceMix.userInputPercent ?? 0));
+    const boundedUser = Math.min(userPercent, 100 - cappedWeb);
+    output.evidenceMix = {
+      userInputPercent: Math.round(boundedUser),
+      webResearchPercent: Math.round(cappedWeb),
+      aiAssumptionPercent: Math.max(
+        0,
+        100 - Math.round(boundedUser) - Math.round(cappedWeb),
+      ),
+    };
+  }
+
+  if (Array.isArray(output.scoreExplanation)) {
+    for (const row of output.scoreExplanation) {
+      const dimension = String(row?.dimension ?? "");
+      if ((FMART_DIMENSIONS as readonly string[]).includes(dimension)) {
+        row.score = output.scores[dimension];
+      }
+    }
+  }
+
+  return output;
+}
+
 
 
 export function buildBaseReport(parsed: any, publicResearch: any) {

@@ -1,0 +1,1 @@
+ALTER TABLE public.analysis_jobs ADD COLUMN IF NOT EXISTS research_started_at timestamptz;
