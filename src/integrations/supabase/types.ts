@@ -21,12 +21,19 @@ export type Database = {
           created_at: string
           draft: Json | null
           error: string | null
+          generation_parts: Json
+          generation_step: number
           id: string
           inputs: Json
+          lease_expires_at: string | null
+          lease_token: string | null
           parent_report_id: string | null
+          queue_pending: boolean
           report_id: string | null
           research: Json | null
           stage: string
+          stage_attempts: Json
+          stage_detail: string | null
           started_at: string
           status: string
           title: string
@@ -39,12 +46,19 @@ export type Database = {
           created_at?: string
           draft?: Json | null
           error?: string | null
+          generation_parts?: Json
+          generation_step?: number
           id?: string
           inputs?: Json
+          lease_expires_at?: string | null
+          lease_token?: string | null
           parent_report_id?: string | null
+          queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
           stage?: string
+          stage_attempts?: Json
+          stage_detail?: string | null
           started_at?: string
           status?: string
           title?: string
@@ -57,12 +71,19 @@ export type Database = {
           created_at?: string
           draft?: Json | null
           error?: string | null
+          generation_parts?: Json
+          generation_step?: number
           id?: string
           inputs?: Json
+          lease_expires_at?: string | null
+          lease_token?: string | null
           parent_report_id?: string | null
+          queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
           stage?: string
+          stage_attempts?: Json
+          stage_detail?: string | null
           started_at?: string
           status?: string
           title?: string
@@ -634,6 +655,40 @@ export type Database = {
         }[]
       }
       can_view_report: { Args: { _report_id: string }; Returns: boolean }
+      claim_analysis_job: {
+        Args: { p_job_id: string; p_lease_seconds?: number }
+        Returns: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          draft: Json | null
+          error: string | null
+          generation_parts: Json
+          generation_step: number
+          id: string
+          inputs: Json
+          lease_expires_at: string | null
+          lease_token: string | null
+          parent_report_id: string | null
+          queue_pending: boolean
+          report_id: string | null
+          research: Json | null
+          stage: string
+          stage_attempts: Json
+          stage_detail: string | null
+          started_at: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "analysis_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       complete_analysis_request: {
         Args: {
           p_completion_status: string
