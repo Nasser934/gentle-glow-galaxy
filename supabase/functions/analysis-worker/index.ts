@@ -17,6 +17,7 @@ import {
   shouldContinueResearch,
   buildPublicResearch,
   researchBudgetExhausted,
+  countExtractedSources,
   SEARCH_BATCH_SIZE,
   MIN_UNIQUE_SOURCES,
   MAX_TOTAL_QUERIES,
@@ -286,7 +287,9 @@ serve(async (req) => {
           `Searching ${batch.length} targeted queries in parallel`,
         );
 
-        const result = await runSearchBatch(batch);
+        const result = await runSearchBatch(batch, {
+          alreadyCompletedIds: completedIds,
+        });
         const mergedSources = mergeResearchSources(state.sources ?? [], result.sources);
         const completedIds = Array.from(
           new Set([...(state.completedQueryIds ?? []), ...result.completedQueryIds]),
@@ -328,9 +331,7 @@ serve(async (req) => {
       /* TAVILY PAGE EXTRACTION */
       if (state.phase === "extracting") {
         const selected = selectExtractionBatch(state.sources ?? []);
-        const extractedCount = (state.sources ?? []).filter(
-          (source) => source.extracted && Boolean(source.extractedContent),
-        ).length;
+        const extractedCount = countExtractedSources(state.sources ?? []);
         const extractionTarget = Math.min(
           Math.max(MIN_UNIQUE_SOURCES, 30),
           (state.sources ?? []).length,
@@ -363,9 +364,7 @@ serve(async (req) => {
 
         const extracted = await extractSourceBatch(selected, inputs);
         const updatedSources = applyExtractedSources(state.sources, extracted);
-        const newExtractedCount = updatedSources.filter(
-          (source) => source.extracted && Boolean(source.extractedContent),
-        ).length;
+        const newExtractedCount = countExtractedSources(updatedSources);
         const moreToExtract =
           newExtractedCount < extractionTarget &&
           selectExtractionBatch(updatedSources).length > 0;
