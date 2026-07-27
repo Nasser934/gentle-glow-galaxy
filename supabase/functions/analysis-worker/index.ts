@@ -449,7 +449,7 @@ serve(async (req) => {
       status: expectedStatus,
       attemptKey: activeAttemptKey,
       attempt: activeAttempt,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
     });
 
     const shouldFail = !retryableError(error) || activeAttempt >= MAX_STAGE_ATTEMPTS;
