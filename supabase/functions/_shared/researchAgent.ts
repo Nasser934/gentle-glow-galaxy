@@ -1,3 +1,4 @@
+// Deep research agent: Kimi planning → parallel Tavily search → extract → review.
 import {
   kimiStructured,
   KimiError,
