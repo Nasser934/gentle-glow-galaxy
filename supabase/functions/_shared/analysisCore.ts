@@ -1,3 +1,14 @@
+import {
+  claimSourceCoverage,
+  resolvedScenarioCompleteness,
+  type ResolvedConcept,
+} from "./ai/schemas/resolved-concept.schema.ts";
+import {
+  governedStageInstruction,
+  type PromptStage,
+} from "./ai/promptManifest.ts";
+import { computeVerdict } from "./evidence.ts";
+
 // Shared analysis core — extracted verbatim from analyze-concept so the
 // synchronous function and the async job worker use identical research,
 // prompts, schema and report shaping. Do not change prompt or schema content.
@@ -148,6 +159,11 @@ async function scrapeCompetitors(rawUrls: string) {
   return out;
 }
 
+/**
+ * @deprecated Final reports use the durable deep-research engine in
+ * researchAgent.ts. This private helper remains temporarily for source-level
+ * rollback only and is not exported or called by any runtime entry point.
+ */
 async function fetchPublicResearch(inputs: Record<string, string>) {
   const query = [inputs.projectName, inputs.industry, inputs.location].filter(Boolean).join(" ").slice(0, 160);
   const tavilyQuery = [inputs.projectName, inputs.industry, inputs.location, "market size competitors"].filter(Boolean).join(" ").slice(0, 200);
@@ -423,7 +439,11 @@ const reportSchema = {
     recommendations: { type: "array", items: { type: "string" }, description: "5–7 strategic recommendations." },
     nextSteps: { type: "array", items: { type: "string" }, description: "4–6 next steps." },
 
-    inputQualityScore: { type: "number", description: "0-100. Overall quality of the user-supplied brief." },
+    inputQualityScore: {
+      type: "number",
+      description:
+        "Backward-compatible Brief Clarity score for user-owned/private fields only. Public research fields are excluded.",
+    },
     inputCompleteness: {
       type: "object",
       properties: {
@@ -517,7 +537,7 @@ export const REPORT_PARTS = [
   {
     key: "decision" as const,
     label: "Scoring and decision",
-    keys: ["executiveSummary", "scores", "inputQualityScore", "inputCompleteness", "evidenceMix", "scoreExplanation"],
+    keys: ["executiveSummary", "scores", "evidenceMix", "scoreExplanation"],
   },
   {
     key: "actions" as const,
@@ -539,6 +559,127 @@ export function mergeReportParts(generationParts: Record<string, unknown>): Reco
   return merged;
 }
 
+const approximatelyEqual = (actual: number, expected: number) =>
+  Math.abs(actual - expected) <= Math.max(0.01, Math.abs(expected) * 0.000001);
+
+function monetaryMagnitude(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const match = value
+    .toUpperCase()
+    .replace(/,/g, "")
+    .match(/(-?\d+(?:\.\d+)?)\s*(BILLION|MILLION|THOUSAND|B|M|K)?\b/);
+  if (!match) return null;
+  const numeric = Number(match[1]);
+  if (!Number.isFinite(numeric)) return null;
+  const multiplier = {
+    BILLION: 1_000_000_000,
+    B: 1_000_000_000,
+    MILLION: 1_000_000,
+    M: 1_000_000,
+    THOUSAND: 1_000,
+    K: 1_000,
+  }[match[2] ?? ""] ?? 1;
+  return numeric * multiplier;
+}
+
+export function validateMarketSizing(report: Record<string, any>): void {
+  const tam = monetaryMagnitude(report?.market?.tamValue);
+  const sam = monetaryMagnitude(report?.market?.samValue);
+  const som = monetaryMagnitude(report?.market?.somValue);
+  if (tam != null && sam != null && som != null && !(tam >= sam && sam >= som)) {
+    throw new Error("Market values must satisfy TAM >= SAM >= SOM.");
+  }
+}
+
+/**
+ * Rejects internally inconsistent analyst arithmetic so the worker's existing
+ * stage retry can regenerate the affected persisted part.
+ */
+export function validateFinancialArithmetic(report: Record<string, any>): void {
+  const financials = report.financials;
+  if (!financials || typeof financials !== "object") {
+    throw new Error("Financial section is missing.");
+  }
+  const capEx = Array.isArray(financials.capEx) ? financials.capEx : [];
+  if (capEx.length === 0) throw new Error("CapEx items are missing.");
+
+  const numeric = (value: unknown, label: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) throw new Error(`${label} is not numeric.`);
+    return parsed;
+  };
+  const itemLow = capEx.reduce(
+    (sum: number, item: any) => sum + numeric(item?.low, "CapEx item low"),
+    0,
+  );
+  const itemHigh = capEx.reduce(
+    (sum: number, item: any) => sum + numeric(item?.high, "CapEx item high"),
+    0,
+  );
+  const totalLow = numeric(financials.capExLow, "CapEx low total");
+  const totalHigh = numeric(financials.capExHigh, "CapEx high total");
+  const totalMid = numeric(financials.capExMid, "CapEx midpoint");
+  if (!approximatelyEqual(totalLow, itemLow)) {
+    throw new Error("CapEx low total does not match its item total.");
+  }
+  if (!approximatelyEqual(totalHigh, itemHigh)) {
+    throw new Error("CapEx high total does not match its item total.");
+  }
+  if (!approximatelyEqual(totalMid, (totalLow + totalHigh) / 2)) {
+    throw new Error("CapEx midpoint does not match the low/high midpoint.");
+  }
+  if (totalLow > totalMid || totalMid > totalHigh) {
+    throw new Error("CapEx totals must satisfy low <= midpoint <= high.");
+  }
+
+  for (const item of Array.isArray(financials.opEx) ? financials.opEx : []) {
+    const monthly = numeric(item?.monthly, "Monthly OpEx");
+    const annual = numeric(item?.annual, "Annual OpEx");
+    if (!approximatelyEqual(annual, monthly * 12)) {
+      throw new Error("Each annual OpEx value must equal monthly OpEx multiplied by 12.");
+    }
+  }
+
+  const marketCurrency = String(report?.market?.currency ?? "").trim().toUpperCase();
+  const financialCurrency = String(financials.currency ?? "").trim().toUpperCase();
+  if (
+    marketCurrency &&
+    financialCurrency &&
+    marketCurrency !== financialCurrency
+  ) {
+    throw new Error("Market and financial currency values must match.");
+  }
+
+  validateMarketSizing(report);
+}
+
+/** Validate each model section before it is persisted, so retries regenerate
+ * the section that produced the inconsistent values. */
+export function validateGeneratedPart(
+  partKey: ReportPartKey,
+  generationParts: Record<string, unknown>,
+): void {
+  const marketPart = generationParts.market &&
+      typeof generationParts.market === "object"
+    ? generationParts.market as Record<string, unknown>
+    : {};
+  if (partKey === "market") {
+    validateMarketSizing(marketPart as Record<string, any>);
+    return;
+  }
+  if (partKey === "financial") {
+    const financialPart = generationParts.financial &&
+        typeof generationParts.financial === "object"
+      ? generationParts.financial as Record<string, unknown>
+      : {};
+    validateFinancialArithmetic({
+      ...marketPart,
+      ...financialPart,
+    } as Record<string, any>);
+  }
+}
+
 export function validateMergedReport(report: Record<string, unknown>): void {
   const requiredKeys = REPORT_PARTS.flatMap((part) => part.keys);
   const missing = requiredKeys.filter(
@@ -553,98 +694,67 @@ export function validateMergedReport(report: Record<string, unknown>): void {
   ) {
     throw new Error("Merged report has invalid core sections.");
   }
+  validateFinancialArithmetic(report as Record<string, any>);
 }
 
-export function buildPrompts(inputs: Record<string, string>, publicResearch: any) {
-  const systemPrompt = `You are an expert AI Feasibility Engine producing a board-grade business case feasibility report using the FMART framework (Financial · Market · Achievability · Risk · Timing · Operational).
-You MUST use the structured-output tool supplied with the request. All numbers must be realistic given the budget, industry, geography, and timeline.
-- Use the same currency the user implies via location (KSA → SAR, UAE → AED, EU → EUR, default USD).
-- Pick realistic TAM/SAM/SOM with credible CAGR.
-- CapEx items must sum (low/high) close to capExLow/capExHigh totals.
-- Risks: pick the most material 5–8 risks with proper Prob/Impact/Level.
-- Verdict must follow the overall score: ≥7.5 PROCEED, 6.0–7.4 PROCEED WITH CAUTION, 4.5–5.9 REVISE, <4.5 DO NOT PROCEED. The server will recompute the authoritative verdict.
-- The 'overall' score MUST equal the weighted sum: sum(scores[d] * weights[d]) for the 6 dimensions; weights MUST sum to 1.0.
-- Set per-dimension confidence honestly (0–100). If grounded web research is missing, lower Market/Timing confidence accordingly.
-- Provide a concise rationale per dimension referencing the evidence and assumptions used.
-- Use the research context below as directional evidence. Do not overstate; if coverage is "Limited" or "Low", say so in research.confidence and qualify insights.
-- When competitor scrapes are present, reference them by name in the competitors array and competitorMentions.
-
-CONSUMER EVIDENCE LAYER — also populate these new fields:
-- inputQualityScore (0-100): overall quality of the brief.
-- inputCompleteness: list missingFields, weakFields, contradictoryFields by their human-readable labels (e.g. "Revenue model & pricing", "Competitors").
-- evidenceMix: integer percentages summing to 100 — userInputPercent (from the brief), webResearchPercent (citations + scrapes), aiAssumptionPercent (AI inference). Be honest; thin briefs and few citations mean high AI %.
-- scoreExplanation: one row per dimension (financial, market, achievability, risk, timing, operational) with positiveDrivers, negativeDrivers, missingEvidence, improvementActions, decisionImplication.
-- claimEvidenceMap: 4–6 key claims (market growth, break-even, CAC, competition, regulatory…). Each row's three percents must sum to 100.
-
-CONSUMER-SAFE WORDING. Never use developer/QA language anywhere in user-visible text. Forbidden: "QA failed", "fallback used", "template mismatch", "source notes empty", "repair attempt", "raw error", "debug", "report quality weak". Prefer: "Needs validation", "Evidence is limited", "Input detail is incomplete", "Financial assumptions should be refined", "Market demand should be validated before launch", "This report is suitable for early decision-making, not final investment approval".`;
-
-  const userPrompt = `Generate the full feasibility report for this concept:
-
-**Project:** ${inputs.projectName}
-**Industry:** ${inputs.industry}
-**Location:** ${inputs.location || "Not specified"}
-**Description:** ${inputs.description}
-**Strategic Objectives:** ${inputs.strategicObjectives || "Not specified"}
-**Business Model:** ${inputs.businessModel || "Not specified"}
-**Revenue Model:** ${inputs.revenueModel || "Not specified"}
-**Founder / Team Experience:** ${inputs.founderExperience || "Not specified"}
-**Budget Range:** ${inputs.budgetRange || "Not specified"}
-**Timeline:** ${inputs.timeline || "Not specified"}
-**Team Size:** ${inputs.teamSize || "Not specified"}
-**Dependencies:** ${inputs.dependencies || "None"}
-**Assumptions:** ${inputs.assumptions || "None"}
-**Constraints:** ${inputs.constraints || "None"}
-**Success Factors:** ${inputs.successFactors || "Not specified"}
-**Known Risks:** ${inputs.knownRisks || "None"}
-**Regulatory:** ${inputs.regulatoryConsiderations || "None"}
-**Technology Readiness:** ${inputs.technologyReadiness || "Not specified"}
-**Competitor URLs (user-supplied):** ${inputs.competitorUrls || "None"}
-
-Research context — coverage=${publicResearch.coverage}, grounded=${publicResearch.grounded}:
-${JSON.stringify(publicResearch, null, 2)}
-
-Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain when relevant.`;
+export function buildPrompts(
+  inputs: Record<string, string>,
+  publicResearch: unknown,
+  resolvedConcept: ResolvedConcept | null = null,
+) {
+  const systemPrompt = governedStageInstruction("report-editor");
+  const userPrompt = JSON.stringify(
+    {
+      originalInputs: inputs,
+      researchSnapshot: publicResearch,
+      resolvedConcept,
+    },
+    null,
+    2,
+  );
   return { systemPrompt, userPrompt };
 }
+
+const PART_PROMPT_STAGE: Record<ReportPartKey, PromptStage> = {
+  market: "market-analyst",
+  financial: "financial-analyst",
+  decision: "decision-analyst",
+  actions: "actions-analyst",
+};
 
 export function buildPartPrompts(
   inputs: Record<string, string>,
   publicResearch: unknown,
   part: { key: ReportPartKey; label: string; keys: string[] },
   previousParts: Record<string, unknown> = {},
+  resolvedConcept: ResolvedConcept | null = null,
 ) {
-  const { systemPrompt, userPrompt } = buildPrompts(inputs, publicResearch as any);
-
-  const priorContext = Object.keys(previousParts).length > 0
-    ? JSON.stringify(previousParts, null, 2)
-    : "No prior report sections exist.";
-
-  const partInstruction = `
-You are generating one persisted section of a larger report.
-
-Current section:
-${part.label}
-
-Return only these top-level fields:
-${part.keys.join(", ")}
-
-Previously completed and authoritative report sections:
-${priorContext}
-
-Rules:
-- Treat previous sections as authoritative context.
-- Do not contradict values already produced.
-- Do not recreate fields from earlier sections.
-- Do not return fields from other report sections.
-- Do not omit any field required by the supplied schema.
-- Market research quality must affect confidence, not secretly change the feasibility score.
-- Weak or missing evidence must be stated plainly.
-- Never cite a source that is absent from the supplied research context.
-`;
+  const systemPrompt = governedStageInstruction(PART_PROMPT_STAGE[part.key]);
+  const partInstruction = [
+    `Generate the persisted "${part.label}" section.`,
+    `Return only these top-level fields: ${part.keys.join(", ")}.`,
+    "Treat previous sections as authoritative and do not recreate their fields.",
+    "Do not omit any field required by the supplied schema.",
+  ].join("\n");
+  const userPrompt = JSON.stringify(
+    {
+      originalInputs: inputs,
+      researchSnapshot: publicResearch,
+      resolvedConcept,
+      previousAuthoritativeParts: previousParts,
+      currentSection: {
+        key: part.key,
+        label: part.label,
+        outputFields: part.keys,
+      },
+    },
+    null,
+    2,
+  );
 
   return {
     systemPrompt: `${systemPrompt}\n${partInstruction}`,
-    userPrompt: `${userPrompt}\n${partInstruction}`,
+    userPrompt,
   };
 }
 
@@ -758,15 +868,98 @@ export function computeDecisionReadiness(
     : 0;
 
   const research = Math.max(0, Math.min(100, Number(researchQualityScore) || 0));
-  const inputQuality = Math.max(0, Math.min(100, Number(report?.inputQualityScore ?? 0) || 0));
+  const claimCoverage = claimSourceCoverage(report);
+  const scenarioCompleteness = resolvedScenarioCompleteness(
+    report?.resolvedConcept as ResolvedConcept | null | undefined,
+  );
+  const highImpactPrivateDecisions = Array.isArray(
+    report?.resolvedConcept?.unresolvedPrivateDecisions,
+  )
+    ? report.resolvedConcept.unresolvedPrivateDecisions.filter(
+      (decision: any) => decision?.decisionImpact === "high",
+    ).length
+    : 0;
+  const privateDecisionPenalty = Math.min(24, highImpactPrivateDecisions * 8);
 
   const score = roundOne(
-    (averageConfidence * 0.40 + research * 0.35 + inputQuality * 0.25) / 10,
+    (
+      research * 0.35 +
+      averageConfidence * 0.25 +
+      claimCoverage * 0.25 +
+      scenarioCompleteness * 0.15 -
+      privateDecisionPenalty
+    ) / 10,
   );
   const bounded = Math.max(0, Math.min(10, score));
   return {
     decisionReadinessScore: bounded,
     decisionReadinessStatus: decisionReadinessStatus(bounded),
+  };
+}
+
+/**
+ * Builds the display recommendation only after the authoritative FMART-O
+ * score, confidence caps, and readiness signal exist. Brief Clarity is
+ * deliberately absent from this calculation.
+ */
+export function buildDecisionSummary(report: any) {
+  const confidenceValues = Object.values(
+    report?.scores?.confidence && typeof report.scores.confidence === "object"
+      ? report.scores.confidence
+      : {},
+  )
+    .map((value) => toConfidencePercent(value))
+    .filter((value): value is number => value != null);
+  const overallConfidencePct = confidenceValues.length > 0
+    ? Math.round(
+      confidenceValues.reduce((total, value) => total + value, 0) /
+        confidenceValues.length,
+    )
+    : 0;
+  const citations = Array.isArray(report?.research?.citations)
+    ? report.research.citations
+    : [];
+  const financialsMissing =
+    !report?.financials?.breakEvenSummary ||
+    !report?.financials?.ltvCacRatio;
+  const criticalRisksWithoutMitigation = Array.isArray(report?.risks) &&
+    report.risks.some((risk: any) => {
+      const isHigh = /high|critical/i.test(
+        `${risk?.level ?? ""} ${risk?.impact ?? ""}`,
+      );
+      const mitigation = String(risk?.mitigation ?? "").trim();
+      return isHigh && mitigation.length < 12;
+    });
+
+  const decision = computeVerdict({
+    score: Number(report?.scores?.overall ?? 0),
+    overallConfidencePct,
+    aiAssumptionPct: Number(report?.evidenceMix?.aiAssumptionPercent ?? 0),
+    marketEvidenceWeak: citations.length < 3 || claimSourceCoverage(report) < 50,
+    financialsMissing,
+    criticalRisksWithoutMitigation,
+  });
+  const unresolvedHigh = Array.isArray(
+    report?.resolvedConcept?.unresolvedPrivateDecisions,
+  )
+    ? report.resolvedConcept.unresolvedPrivateDecisions.filter(
+      (item: any) => item?.decisionImpact === "high",
+    )
+    : [];
+
+  if (unresolvedHigh.length > 0) {
+    decision.blockers.push(
+      `${unresolvedHigh.length} high-impact private decision${unresolvedHigh.length === 1 ? "" : "s"} still need confirmation.`,
+    );
+    decision.nextStepHint = String(
+      unresolvedHigh[0]?.userAction ||
+        "Confirm the unresolved private decisions before commitment.",
+    );
+  }
+
+  return {
+    ...decision,
+    blockers: Array.from(new Set(decision.blockers)),
   };
 }
 
@@ -847,17 +1040,40 @@ export function finalizeReportDeterministically(
     }
   }
 
+  // New-format claim citations may reference only IDs saved in the research
+  // snapshot. Legacy reports without source IDs remain untouched.
+  const allowedSourceIds = new Set<string>(
+    (Array.isArray(output?.research?.citations) ? output.research.citations : [])
+      .map((citation: any) => String(citation?.id ?? "").trim())
+      .filter(Boolean),
+  );
+  if (allowedSourceIds.size > 0 && Array.isArray(output.claimEvidenceMap)) {
+    output.claimEvidenceMap = output.claimEvidenceMap.map((claim: any) => ({
+      ...claim,
+      sources: Array.isArray(claim?.sources)
+        ? claim.sources
+          .map((source: unknown) => String(source))
+          .filter((source: string) => allowedSourceIds.has(source))
+        : [],
+    }));
+  }
+
   // Additive, deterministic evidence-readiness signal (never affects FMART-O).
   const readiness = computeDecisionReadiness(output, qualityScore);
   output.decisionReadinessScore = readiness.decisionReadinessScore;
   output.decisionReadinessStatus = readiness.decisionReadinessStatus;
+  output.decision = buildDecisionSummary(output);
 
   return output;
 }
 
 
 
-export function buildBaseReport(parsed: any, publicResearch: any) {
+export function buildBaseReport(
+  parsed: any,
+  publicResearch: any,
+  resolvedConcept: ResolvedConcept | null = null,
+) {
   const baseReport: any = {
     reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     dateIssued: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
@@ -873,6 +1089,7 @@ export function buildBaseReport(parsed: any, publicResearch: any) {
       ...parsed.research,
       citations: publicResearch.citations,
     },
+    ...(resolvedConcept ? { resolvedConcept } : {}),
     financials: {
       currency: parsed.financials.currency,
       capExTotal: { low: parsed.financials.capExLow, high: parsed.financials.capExHigh, mid: parsed.financials.capExMid },
@@ -898,4 +1115,4 @@ export function buildBaseReport(parsed: any, publicResearch: any) {
   return baseReport;
 }
 
-export { textFrom, rateLimit, sanitizeInputs, fetchPublicResearch, reportSchema };
+export { textFrom, rateLimit, sanitizeInputs, reportSchema };

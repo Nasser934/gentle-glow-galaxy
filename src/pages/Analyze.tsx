@@ -125,7 +125,7 @@ const Analyze = () => {
   }, [focusField, loadingPrevious]);
 
 
-  // Input quality assessment (live)
+  // Brief Clarity assessment (live)
   const quality = useMemo(() => assessInputQuality(inputs), [inputs]);
   const weakKeys = useMemo(
     () => new Set(quality.fields.filter((f) => f.status === "missing" || f.status === "weak" || f.status === "needs_improvement").map((f) => f.key)),

@@ -3,9 +3,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ensureEvidenceFields, deepSanitize, buildVersionEntry } from "../_shared/evidence.ts";
-import { kimiStructured, KimiError } from "../_shared/kimi.ts";
+import { kimiStructured, KimiError, KIMI_MODEL } from "../_shared/kimi.ts";
 import {
   createInitialResearchState,
+  ensureResearchSourceIds,
   planResearchQueries,
   runSearchBatch,
   mergeResearchSources,
@@ -25,12 +26,27 @@ import {
   type ResearchState,
 } from "../_shared/researchAgent.ts";
 import {
+  conceptIsSpecificEnough,
+  resolveConcept,
+} from "../_shared/conceptResolver.ts";
+import {
+  CONCEPT_AI_POLICY_VERSION,
+  PROMPT_BUNDLE_HASH,
+  PROMPT_BUNDLE_VERSION,
+} from "../_shared/ai/promptManifest.ts";
+import type { ResolvedConcept } from "../_shared/ai/schemas/resolved-concept.schema.ts";
+import {
+  persistReportResearchSnapshot,
+  supabaseResearchPersistenceStore,
+} from "../_shared/researchPersistence.ts";
+import {
   REPORT_PARTS,
   buildPartPrompts,
   mergeReportParts,
   validateMergedReport,
   buildBaseReport,
   finalizeReportDeterministically,
+  validateGeneratedPart,
 } from "../_shared/analysisCore.ts";
 
 
@@ -48,6 +64,43 @@ const json = (body: unknown, status = 200) =>
 const MAX_STAGE_ATTEMPTS = 3;
 const LEASE_SECONDS = 180;
 const KIMI_TIMEOUT_MS = 110_000;
+const REPORT_SCHEMA_VERSION = "feasibility-report.v1";
+const conceptResolverEnabled = () =>
+  Deno.env.get("CONCEPT_RESOLVER_ENABLED") !== "false";
+
+function sourceSnapshotMetadata(
+  job: any,
+  researchPersistenceStatus: "pending" | "completed",
+): Record<string, unknown> {
+  const state = job.research_state as ResearchState | null;
+  const quality = job.research_quality as Record<string, unknown> | null;
+  const resolved = job.resolved_concept as ResolvedConcept | null;
+  const freshness = job.research?.freshness as Record<string, unknown> | null;
+  return {
+    policyVersion: job.policy_version ?? CONCEPT_AI_POLICY_VERSION,
+    promptVersion: job.prompt_version ?? PROMPT_BUNDLE_VERSION,
+    promptHash: job.prompt_hash ?? PROMPT_BUNDLE_HASH,
+    modelId: job.model_id ?? KIMI_MODEL,
+    reportSchemaVersion: REPORT_SCHEMA_VERSION,
+    conceptResolutionStatus: resolved?.resolutionStatus ?? "not_available",
+    resolverConfidence: resolved?.confidence ?? null,
+    researchRoundCount: state?.round ?? null,
+    plannedQueryCount: state?.queries?.length ?? 0,
+    successfulQueryCount: state?.completedQueryIds?.length ?? 0,
+    failedQueryCount: state?.failedQueryIds?.length ?? 0,
+    uniqueSourceCount: quality?.uniqueSources ?? 0,
+    uniqueDomainCount: quality?.uniqueDomains ?? 0,
+    authoritativeSourceCount: quality?.authoritativeSources ?? 0,
+    extractionAttemptedCount:
+      state?.sources?.filter((source) => source.extractionAttempted).length ?? 0,
+    successfulExtractionCount: quality?.extractedSources ?? 0,
+    staleCategoryCount: Array.isArray(freshness?.staleCategories)
+      ? freshness.staleCategories.length
+      : 0,
+    researchQualityScore: quality?.score ?? 0,
+    researchPersistenceStatus,
+  };
+}
 
 const admin = () =>
   createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -214,6 +267,10 @@ serve(async (req) => {
         typeof (job.research_state as ResearchState).phase === "string"
           ? job.research_state as ResearchState
           : createInitialResearchState();
+      state = {
+        ...state,
+        sources: ensureResearchSourceIds(state.sources ?? []),
+      };
 
       if (expectedStatus === "queued") {
         state = createInitialResearchState();
@@ -443,19 +500,78 @@ serve(async (req) => {
           }
         }
 
-        // Complete with the available evidence when Kimi is satisfied, no useful
-        // follow-up queries exist, or the safety budget is exhausted.
-        const finalState: ResearchState = {
+        // Resolve a concrete analytical baseline before report generation.
+        const resolvingState: ResearchState = {
           ...reviewedState,
+          phase: "resolving",
+          updatedAt: new Date().toISOString(),
+        };
+        const publicResearch = buildPublicResearch(resolvingState, quality);
+
+        const saved = await releaseLease({
+          research_state: resolvingState,
+          research_quality: quality,
+          research: publicResearch,
+          stage_detail: "Resolving the baseline project scenario from research",
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({
+          ok: true,
+          jobId,
+          stage: "researching",
+          researchPhase: "resolving",
+          uniqueSources: quality.uniqueSources,
+          uniqueDomains: quality.uniqueDomains,
+          qualityScore: quality.score,
+          qualityLevel: quality.level,
+          researchBudgetExhausted: researchBudgetExhausted(resolvingState),
+        });
+      }
+
+      /* KIMI CONCEPT RESOLUTION */
+      if (state.phase === "resolving") {
+        await beginStageAttempt(
+          "research:resolving",
+          "Resolving the baseline project scenario from research",
+        );
+
+        const quality =
+          job.research_quality && typeof job.research_quality === "object"
+            ? job.research_quality as ReturnType<typeof computeResearchQuality>
+            : computeResearchQuality(state.sources ?? []);
+        let resolvedConcept: ResolvedConcept | null = null;
+
+        if (conceptResolverEnabled()) {
+          try {
+            resolvedConcept = await resolveConcept(inputs, state, quality);
+          } catch (resolverError) {
+            if (activeAttempt < MAX_STAGE_ATTEMPTS) throw resolverError;
+            if (!conceptIsSpecificEnough(inputs)) {
+              throw new KimiError(
+                400,
+                "The project scenario could not be made specific enough for reliable analysis. Add the intended customer, solution, geography, budget, and operating model, then try again.",
+              );
+            }
+            console.warn(
+              "concept resolver exhausted retries; continuing with a specific original brief",
+              jobId,
+            );
+          }
+        }
+
+        const completedState: ResearchState = {
+          ...state,
           phase: "completed",
           updatedAt: new Date().toISOString(),
         };
-        const publicResearch = buildPublicResearch(finalState, quality);
-
+        const publicResearch = buildPublicResearch(completedState, quality);
         const saved = await releaseLease({
-          research_state: finalState,
+          research_state: completedState,
           research_quality: quality,
           research: publicResearch,
+          resolved_concept: resolvedConcept,
           research_completed_at: new Date().toISOString(),
           status: "generating",
           stage: "generating",
@@ -469,11 +585,8 @@ serve(async (req) => {
           ok: true,
           jobId,
           stage: "generating",
-          uniqueSources: quality.uniqueSources,
-          uniqueDomains: quality.uniqueDomains,
-          qualityScore: quality.score,
-          qualityLevel: quality.level,
-          researchBudgetExhausted: researchBudgetExhausted(finalState),
+          conceptResolutionStatus:
+            resolvedConcept?.resolutionStatus ?? "specific_brief_fallback",
         });
       }
 
@@ -499,7 +612,11 @@ serve(async (req) => {
       if (step >= REPORT_PARTS.length) {
         const merged = mergeReportParts(generationParts);
         validateMergedReport(merged);
-        const draft = buildBaseReport(merged, job.research ?? {});
+        const draft = buildBaseReport(
+          merged,
+          job.research ?? {},
+          job.resolved_concept as ResolvedConcept | null,
+        );
 
         const saved = await releaseLease({
           generation_step: REPORT_PARTS.length,
@@ -533,6 +650,7 @@ serve(async (req) => {
         job.research ?? {},
         part,
         previousParts,
+        job.resolved_concept as ResolvedConcept | null,
       );
 
 
@@ -552,6 +670,7 @@ serve(async (req) => {
       }
 
       const nextParts = { ...generationParts, [part.key]: parsedPart };
+      validateGeneratedPart(part.key, nextParts);
       const nextStep = step + 1;
 
       if (nextStep < REPORT_PARTS.length) {
@@ -577,7 +696,11 @@ serve(async (req) => {
 
       const merged = mergeReportParts(nextParts);
       validateMergedReport(merged);
-      const draft = buildBaseReport(merged, job.research ?? {});
+      const draft = buildBaseReport(
+        merged,
+        job.research ?? {},
+        job.resolved_concept as ResolvedConcept | null,
+      );
 
       const saved = await releaseLease({
         generation_parts: nextParts,
@@ -694,8 +817,15 @@ serve(async (req) => {
             inputs,
             output,
             parent_report_id: parentReportId,
+            root_report_id:
+              typeof job.root_report_id === "string" ? job.root_report_id : null,
             save_operation_key: saveOperationKey,
-            model_id: "k3-256k",
+            model_id: KIMI_MODEL,
+            prompt_version: job.prompt_version ?? PROMPT_BUNDLE_VERSION,
+            report_schema_version: REPORT_SCHEMA_VERSION,
+            source_mode: "in_app",
+            source_schema_version: "in_app.v1",
+            source_snapshot_metadata: sourceSnapshotMetadata(job, "pending"),
           })
           .select("id")
           .single();
@@ -720,6 +850,36 @@ serve(async (req) => {
       if (!reportId) throw new Error("Could not persist the completed report.");
 
       const completedAt = new Date();
+      const researchState = job.research_state as ResearchState | null;
+      const researchQuality = job.research_quality as ReturnType<
+        typeof computeResearchQuality
+      > | null;
+      if (!researchState || !researchQuality) {
+        throw new Error("Completed research state is missing.");
+      }
+      await persistReportResearchSnapshot(
+        supabaseResearchPersistenceStore(db),
+        {
+          reportId,
+          analysisJobId: jobId,
+          state: {
+            ...researchState,
+            sources: ensureResearchSourceIds(researchState.sources ?? []),
+          },
+          quality: researchQuality,
+          policyVersion: job.policy_version ?? CONCEPT_AI_POLICY_VERSION,
+          promptVersion: job.prompt_version ?? PROMPT_BUNDLE_VERSION,
+          promptHash: job.prompt_hash ?? PROMPT_BUNDLE_HASH,
+          modelId: job.model_id ?? KIMI_MODEL,
+          freshness:
+            job.research?.freshness && typeof job.research.freshness === "object"
+              ? job.research.freshness
+              : {},
+          sourceSnapshotMetadata: sourceSnapshotMetadata(job, "completed"),
+          completedAt: completedAt.toISOString(),
+        },
+      );
+
       const elapsedSeconds = Math.max(
         1,
         Math.round((completedAt.getTime() - new Date(job.started_at).getTime()) / 1000),

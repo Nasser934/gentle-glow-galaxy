@@ -67,7 +67,7 @@ const hasWeakMitigation = (rk: any): boolean => {
   return m.length < 8;
 };
 
-/* ---------------- Input Quality ---------------- */
+/* ---------------- Brief Clarity ---------------- */
 const FIELD_DEFS: Array<{
   key: keyof ConceptInputs; label: string;
   evaluator: (v: string, all: ConceptInputs) => InputStatus;
@@ -105,26 +105,14 @@ const FIELD_DEFS: Array<{
     evaluator: (v) => presentStatus(v),
     impact: "Required for Timing score and milestone planning.",
     suggestion: "Pick a target window for launch / completion." },
-  { key: "competitorUrls", label: "Competitors",
-    evaluator: (v) => pickStatus(wordCount(v.replace(/https?:\/\/\S+/g, "x")), 6, 2),
-    impact: "Drives competitive edge analysis and reduces AI assumption ratio.",
-    suggestion: "Paste 2–4 real competitor URLs, one per line." },
   { key: "knownRisks", label: "Known risks",
     evaluator: (v) => pickStatus(wordCount(v), 25, 8),
     impact: "Without explicit risks, Risk score relies on AI inference.",
     suggestion: "List 3+ risks (regulatory, technical, market, execution)." },
-  { key: "regulatoryConsiderations", label: "Compliance",
-    evaluator: (v) => pickStatus(wordCount(v), 20, 6),
-    impact: "Material to Risk and Timing in regulated industries.",
-    suggestion: "Name the regulators, licences, or standards that apply." },
   { key: "founderExperience", label: "Team / founder experience",
     evaluator: (v) => pickStatus(wordCount(v), 20, 6),
     impact: "Improves Achievability and Operational confidence.",
     suggestion: "Add years of experience, prior exits, and domain expertise." },
-  { key: "technologyReadiness", label: "Technology readiness",
-    evaluator: (v) => presentStatus(v),
-    impact: "Calibrates Achievability score.",
-    suggestion: "Pick the readiness level closest to your stack." },
   { key: "assumptions", label: "Financial & business assumptions",
     evaluator: (v) => pickStatus(wordCount(v), 25, 8),
     impact: "Reduces AI assumption ratio across financial claims.",
@@ -176,7 +164,7 @@ export function deriveEvidenceMix(report: FeasibilityReport, inputs: ConceptInpu
     : 50;
   const confPct = Math.max(0, Math.min(100, confidencePercent(confAvg) ?? 50));
 
-  // user input contribution scales with input quality
+  // User-input contribution scales with Brief Clarity.
   let userPct = Math.round(iq.overall * 0.45);                    // 0-45
   // web research contribution scales with citation density (cap 50)
   let webPct = Math.round(Math.min(50, citations * 6));           // 0-50
@@ -212,14 +200,12 @@ const POSITIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: Feasibility
     i.location ? `Geography specified (${i.location}).` : "",
     (r.research?.citations?.length ?? 0) > 4 ? "Multiple public sources support market context." : "",
   ].filter(Boolean),
-  achievability: (r, i) => [
-    i.technologyReadiness ? `Technology readiness: ${i.technologyReadiness}.` : "",
+  achievability: (_r, i) => [
     i.founderExperience ? "Founder/team experience provided." : "",
   ].filter(Boolean),
-  risk: (r, i) => [
+  risk: (r, _i) => [
     (r.risks?.filter((x) => x.mitigation && x.mitigation.length > 10).length || 0) > 0
       ? "Most risks have an associated mitigation." : "",
-    i.regulatoryConsiderations ? "Regulatory context provided." : "",
   ].filter(Boolean),
   timing: (r, i) => [
     i.timeline ? `Timeline specified (${i.timeline}).` : "",
@@ -237,13 +223,11 @@ const NEGATIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: Feasibility
     weak.includes("Financial & business assumptions") ? "Financial assumptions are thin." : "",
     !i.budgetRange ? "Budget not provided." : "",
   ].filter(Boolean),
-  market: (r, i, weak) => [
+  market: (r, i) => [
     !i.location ? "No geography provided." : "",
     (r.research?.citations?.length ?? 0) < 3 ? "Limited public evidence captured." : "",
-    weak.includes("Competitors") ? "Few competitors supplied." : "",
   ].filter(Boolean),
   achievability: (_r, i) => [
-    !i.technologyReadiness ? "Technology readiness not set." : "",
     !i.founderExperience ? "Team experience not described." : "",
   ].filter(Boolean),
   risk: (r, i) => [
@@ -262,9 +246,9 @@ const NEGATIVE_DRIVERS: Record<ScoreExplanationRow["dimension"], (r: Feasibility
 
 const IMPROVE_ACTIONS: Record<ScoreExplanationRow["dimension"], string[]> = {
   financial: ["Add pricing and expected customer count.", "Quantify CAC, churn, and gross margin.", "Confirm budget range."],
-  market: ["Add the target geography and segment.", "Paste 2–4 competitor URLs.", "Cite a recent market sizing source."],
-  achievability: ["Select technology readiness.", "Describe team/founder experience and prior wins."],
-  risk: ["List 3+ risks with mitigation.", "Document regulatory and compliance constraints."],
+  market: ["Confirm the target geography and segment.", "Validate demand through customer interviews."],
+  achievability: ["Describe team/founder experience and prior wins.", "Validate the selected technology approach."],
+  risk: ["List known private risks with mitigation.", "Confirm which researched compliance requirements apply."],
   timing: ["Choose a realistic timeline.", "Note any seasonality or policy windows."],
   operational: ["Specify team size and key roles.", "List external dependencies and SLAs."],
 };
@@ -343,7 +327,7 @@ export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: Concep
       aiAssumptionPercent: 0,
       confidence: conf(confidencePercent(report.scores.confidence?.market) ?? 50),
       sources: cites.slice(0, 2),
-      userCanImproveBy: "Paste 2–4 competitor URLs and note their pricing or positioning.",
+      userCanImproveBy: "Validate the researched competitor set and positioning with customers.",
     },
     {
       claimId: "regulatory",
@@ -373,7 +357,6 @@ export function deriveClaimEvidenceMap(report: FeasibilityReport, inputs: Concep
 export function computeVerdict(args: {
   score: number;
   overallConfidencePct: number;
-  inputQuality: number;
   aiAssumptionPct: number;
   marketEvidenceWeak: boolean;
   financialsMissing: boolean;
@@ -382,29 +365,22 @@ export function computeVerdict(args: {
   const blockers: string[] = [];
   let verdict: ConsumerVerdict = "PROCEED";
 
-  if (args.score >= 8.5 && args.overallConfidencePct >= 70 && !args.criticalRisksWithoutMitigation) {
+  if (args.score >= 7.5) {
     verdict = "PROCEED";
-  } else if (args.score >= 7.0) {
-    verdict = args.overallConfidencePct >= 70 ? "CONDITIONAL PROCEED" : "CONDITIONAL PROCEED WITH VALIDATION";
-  } else if (args.score >= 5.5) {
+  } else if (args.score >= 6.0) {
+    verdict = args.overallConfidencePct >= 70
+      ? "CONDITIONAL PROCEED"
+      : "CONDITIONAL PROCEED WITH VALIDATION";
+  } else if (args.score >= 4.5) {
     verdict = "REVISE";
   } else {
     verdict = "DO NOT PROCEED";
   }
 
-  if (args.inputQuality < 60) {
-    verdict = "IMPROVE INPUTS BEFORE INVESTMENT DECISION";
-    blockers.push("Input quality is below 60% — strengthen the brief before relying on these numbers.");
-  }
-  if (args.overallConfidencePct < 50 && (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED")) {
-    verdict = "CONDITIONAL PROCEED WITH VALIDATION";
+  if (args.overallConfidencePct < 50) {
     blockers.push("Analysis confidence is below 50% — validation required before any commitment.");
   }
   if (args.criticalRisksWithoutMitigation) {
-    // Never show Proceed when a critical/high risk lacks mitigation.
-    if (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED") {
-      verdict = "CONDITIONAL PROCEED WITH VALIDATION";
-    }
     blockers.push("Critical/high risk has no mitigation. Address before proceeding.");
   }
 
@@ -472,7 +448,6 @@ export function ensureEvidenceFields(report: FeasibilityReport, inputs: ConceptI
     r.decision = computeVerdict({
       score: r.scores.overall ?? 0,
       overallConfidencePct: overallConfPct,
-      inputQuality: r.inputQualityScore ?? 0,
       aiAssumptionPct: r.evidenceMix?.aiAssumptionPercent ?? 0,
       marketEvidenceWeak, financialsMissing, criticalRisksWithoutMitigation,
     });
@@ -578,15 +553,15 @@ export function deriveAssumptionRegister(
   rows.push({
     assumption: `Competitive intensity is ${(report.competitors?.length || 0) >= 4 ? "moderate to strong" : "limited or weakly mapped"}.`,
     section: "Competitive Landscape",
-    sourceType: presentTrim(inputs.competitorUrls) ? "Mixed" : "AI assumption",
+    sourceType: presentTrim(inputs.competitorUrls) ? "Mixed" : "Web research",
     evidenceBasis: presentTrim(inputs.competitorUrls)
-      ? "Based on the URLs you provided plus AI inference."
-      : "AI-inferred — no competitor URLs supplied.",
+      ? "Based on the URLs you provided and the saved research snapshot."
+      : "Based on the saved public competitive research.",
     confidence: conf(mConf),
     riskIfWrong: "Mis-reading competition leads to wrong positioning and CAC.",
     howToValidate: "Build a side-by-side feature/price matrix of 3–5 competitors.",
-    whatToAdd: "Paste 2–4 competitor URLs and note their pricing and positioning.",
-    expectedImpact: "Sharpens Market score and lowers AI assumption ratio.",
+    whatToAdd: "Confirm the closest competitors and their positioning with prospective customers.",
+    expectedImpact: "Improves confidence in competitive positioning.",
   });
 
   // ---- Financial ----
@@ -784,12 +759,33 @@ export function buildVersionEntry(
   const nextConfPct = confidencePercent(nextConfAvg) ?? 50;
   const prevAi = previous.evidenceMix?.aiAssumptionPercent ?? 0;
   const nextAi = next.evidenceMix?.aiAssumptionPercent ?? 0;
+  const prevReadiness = Number(previous.decisionReadinessScore ?? 0);
+  const nextReadiness = Number(next.decisionReadinessScore ?? 0);
+  const prevResearch = Number((previous.research as any)?.quality?.score ?? 0);
+  const nextResearch = Number((next.research as any)?.quality?.score ?? 0);
+  const unresolvedFields = (report: FeasibilityReport) =>
+    new Set(
+      (report.resolvedConcept?.unresolvedPrivateDecisions ?? [])
+        .map((decision) => decision.field)
+        .filter(Boolean),
+    );
+  const prevUnresolved = unresolvedFields(previous);
+  const nextUnresolved = unresolvedFields(next);
+  const unresolvedDecisionsAdded = Array.from(nextUnresolved)
+    .filter((field) => !prevUnresolved.has(field));
+  const unresolvedDecisionsResolved = Array.from(prevUnresolved)
+    .filter((field) => !nextUnresolved.has(field));
 
   const summaryParts: string[] = [];
   if (changed.length) summaryParts.push(`Updated ${changed.length} field${changed.length === 1 ? "" : "s"}.`);
   if (nextConfPct > prevConfPct + 2) summaryParts.push("Confidence improved.");
   else if (nextConfPct < prevConfPct - 2) summaryParts.push("Confidence dropped — new info revealed weaknesses.");
   if (nextAi < prevAi - 3) summaryParts.push("AI assumption ratio decreased.");
+  if (nextReadiness > prevReadiness) summaryParts.push("Decision readiness improved.");
+  if (nextResearch > prevResearch) summaryParts.push("Research quality improved.");
+  if (unresolvedDecisionsResolved.length > 0) {
+    summaryParts.push(`${unresolvedDecisionsResolved.length} private decision${unresolvedDecisionsResolved.length === 1 ? "" : "s"} resolved.`);
+  }
   if (!summaryParts.length) summaryParts.push("Re-run produced minor changes.");
 
   return {
@@ -804,6 +800,14 @@ export function buildVersionEntry(
     confidenceDelta: nextConfPct - prevConfPct,
     previousAiAssumptionPercent: prevAi,
     newAiAssumptionPercent: nextAi,
+    previousDecisionReadiness: prevReadiness,
+    newDecisionReadiness: nextReadiness,
+    decisionReadinessDelta: Number((nextReadiness - prevReadiness).toFixed(2)),
+    previousResearchQuality: prevResearch,
+    newResearchQuality: nextResearch,
+    researchQualityDelta: Number((nextResearch - prevResearch).toFixed(2)),
+    unresolvedDecisionsAdded,
+    unresolvedDecisionsResolved,
     summary: summaryParts.join(" "),
   };
 }

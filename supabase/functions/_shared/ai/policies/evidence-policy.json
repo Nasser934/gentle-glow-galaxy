@@ -1,0 +1,13 @@
+{
+  "version": "evidence-policy.v1",
+  "claimOrigins": [
+    "user_provided",
+    "web_evidence",
+    "benchmark",
+    "inference",
+    "assumption"
+  ],
+  "requireSnapshotSourceIds": true,
+  "publicFactsAreResearchResolvable": true,
+  "excerptMaximumCharacters": 6000
+}

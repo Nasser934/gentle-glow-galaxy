@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(15);
+SELECT plan(22);
 
 -- Seed as the migration/test owner so RLS cannot affect fixture setup.
 RESET ROLE;
@@ -42,6 +42,50 @@ INSERT INTO public.reports (
     'in_app'
   );
 
+INSERT INTO public.report_research_runs (
+  id,
+  report_id,
+  source_count,
+  unique_domain_count
+) VALUES
+  (
+    '30000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
+    1,
+    1
+  ),
+  (
+    '30000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
+    1,
+    1
+  );
+
+INSERT INTO public.report_research_sources (
+  research_run_id,
+  report_id,
+  normalized_url,
+  url,
+  domain,
+  title
+) VALUES
+  (
+    '30000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
+    'https://private.example/source',
+    'https://private.example/source',
+    'private.example',
+    'Private source'
+  ),
+  (
+    '30000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
+    'https://public.example/source',
+    'https://public.example/source',
+    'public.example',
+    'Public source'
+  );
+
 SET LOCAL ROLE anon;
 SELECT results_eq(
   $$ SELECT count(*)::bigint FROM public.reports WHERE id = '10000000-0000-4000-8000-000000000001' $$,
@@ -53,6 +97,18 @@ SELECT results_eq(
   ARRAY[1::bigint],
   'logged-out users can read explicitly public reports'
 );
+SELECT results_eq(
+  $$ SELECT count(*)::bigint FROM public.report_research_runs
+     WHERE report_id = '10000000-0000-4000-8000-000000000001' $$,
+  ARRAY[0::bigint],
+  'logged-out users cannot read a private report research run'
+);
+SELECT results_eq(
+  $$ SELECT count(*)::bigint FROM public.report_research_sources
+     WHERE report_id = '10000000-0000-4000-8000-000000000002' $$,
+  ARRAY[1::bigint],
+  'logged-out users can read public report sources'
+);
 
 RESET ROLE;
 SET LOCAL ROLE authenticated;
@@ -62,12 +118,44 @@ SELECT results_eq(
   ARRAY[1::bigint],
   'the owner can read a private report'
 );
+SELECT results_eq(
+  $$ SELECT count(*)::bigint FROM public.report_research_sources
+     WHERE report_id = '10000000-0000-4000-8000-000000000001' $$,
+  ARRAY[1::bigint],
+  'the owner can read private report sources'
+);
 
 SELECT set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', true);
 SELECT results_eq(
   $$ SELECT count(*)::bigint FROM public.reports WHERE id = '10000000-0000-4000-8000-000000000001' $$,
   ARRAY[0::bigint],
   'another authenticated user cannot read the private report'
+);
+SELECT results_eq(
+  $$ SELECT count(*)::bigint FROM public.report_research_runs
+     WHERE report_id = '10000000-0000-4000-8000-000000000001' $$,
+  ARRAY[0::bigint],
+  'another authenticated user cannot read the private research run'
+);
+SELECT results_eq(
+  $$ SELECT count(*)::bigint FROM public.report_research_sources
+     WHERE report_id = '10000000-0000-4000-8000-000000000001' $$,
+  ARRAY[0::bigint],
+  'another authenticated user cannot read private research sources'
+);
+SELECT throws_ok(
+  $$ INSERT INTO public.report_research_runs (report_id)
+     VALUES ('10000000-0000-4000-8000-000000000002') $$,
+  '42501',
+  'permission denied for table report_research_runs',
+  'clients cannot insert research runs'
+);
+SELECT throws_ok(
+  $$ DELETE FROM public.report_research_sources
+     WHERE report_id = '10000000-0000-4000-8000-000000000002' $$,
+  '42501',
+  'permission denied for table report_research_sources',
+  'clients cannot delete research sources'
 );
 SELECT results_eq(
   $$ WITH changed AS (

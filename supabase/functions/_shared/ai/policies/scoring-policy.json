@@ -1,0 +1,18 @@
+{
+  "version": "scoring-policy.v1",
+  "dimensions": [
+    "financial",
+    "market",
+    "achievability",
+    "risk",
+    "timing",
+    "operational"
+  ],
+  "verdictBands": [
+    { "minimum": 7.5, "verdict": "PROCEED" },
+    { "minimum": 6.0, "verdict": "PROCEED WITH CAUTION" },
+    { "minimum": 4.5, "verdict": "REVISE" },
+    { "minimum": 0, "verdict": "DO NOT PROCEED" }
+  ],
+  "weightsMustSumTo": 1
+}

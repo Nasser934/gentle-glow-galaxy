@@ -1,0 +1,11 @@
+{
+  "version": "research-policy.v1",
+  "maxRounds": 6,
+  "maxQueries": 60,
+  "maxUniqueSources": 120,
+  "maxResultsPerQuery": 20,
+  "searchConcurrency": 4,
+  "extractionBatchSize": 20,
+  "preferredAuthorityMinimum": 75,
+  "freshnessWindowYears": 3
+}

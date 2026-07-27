@@ -3,6 +3,7 @@ import {
   kimiStructured,
   KimiError,
 } from "./kimi.ts";
+import { governedStageInstruction } from "./ai/promptManifest.ts";
 export const MIN_UNIQUE_SOURCES = 20;
 export const MAX_RESEARCH_ROUNDS = 6;
 export const MAX_TOTAL_QUERIES = 60;
@@ -30,6 +31,7 @@ export interface PlannedQuery {
   reason: string;
 }
 export interface ResearchSource {
+  id: string;
   url: string;
   normalizedUrl: string;
   domain: string;
@@ -70,6 +72,7 @@ export interface ResearchState {
     | "searching"
     | "extracting"
     | "reviewing"
+    | "resolving"
     | "completed";
   round: number;
   queries: PlannedQuery[];
@@ -299,6 +302,28 @@ function normalizeUrl(raw: string): string {
   } catch {
     return raw.trim();
   }
+}
+
+/** Stable, non-secret source identifier used by resolver and report citations. */
+export function sourceIdFromUrl(normalizedUrl: string): string {
+  let hash = 14695981039346656037n;
+  for (const char of String(normalizedUrl ?? "")) {
+    hash ^= BigInt(char.codePointAt(0) ?? 0);
+    hash = BigInt.asUintN(64, hash * 1099511628211n);
+  }
+  return `source-${hash.toString(16).padStart(16, "0")}`;
+}
+
+/** Backfills IDs on persisted in-flight state created before source IDs existed. */
+export function ensureResearchSourceIds(
+  sources: Array<Omit<ResearchSource, "id"> & { id?: string }>,
+): ResearchSource[] {
+  return (sources ?? []).map((source) => ({
+    ...source,
+    id: typeof source.id === "string" && source.id.trim()
+      ? source.id.trim()
+      : sourceIdFromUrl(source.normalizedUrl || source.url),
+  }));
 }
 function domainFromUrl(raw: string): string {
   try {
@@ -579,16 +604,7 @@ export async function planResearchQueries(
     [
       {
         role: "system",
-        content: `You are the research planner for a feasibility-analysis system.
-Plan targeted internet searches before any business score is created.
-Cover market size, growth, actual customer demand, willingness to pay,
-competitors, pricing, startup costs, operating costs, regulation,
-technology readiness, failure risks and local market context.
-Use geography-specific searches.
-Use English and the local language when useful.
-Prefer searches likely to return government, regulator, official statistics,
-academic, company filings and established industry-research sources.
-Do not produce conclusions yet.`,
+        content: governedStageInstruction("research-planner"),
       },
       {
         role: "user",
@@ -651,6 +667,7 @@ export async function searchOneQuery(
       );
       if (relevance < 0.25) continue;
       sources.push({
+        id: sourceIdFromUrl(normalizedUrl),
         url,
         normalizedUrl,
         domain,
@@ -697,10 +714,10 @@ export function mergeResearchSources(
   incoming: ResearchSource[],
 ): ResearchSource[] {
   const byUrl = new Map<string, ResearchSource>();
-  for (const source of [
+  for (const source of ensureResearchSourceIds([
     ...(existing ?? []),
     ...(incoming ?? []),
-  ]) {
+  ])) {
     const current = byUrl.get(source.normalizedUrl);
     if (!current) {
       byUrl.set(source.normalizedUrl, source);
@@ -708,6 +725,7 @@ export function mergeResearchSources(
     }
     byUrl.set(source.normalizedUrl, {
       ...current,
+      id: current.id || source.id || sourceIdFromUrl(source.normalizedUrl),
       title:
         current.title.length >= source.title.length
           ? current.title
@@ -1055,6 +1073,7 @@ function compactSourcesForReview(
         sourceRank(b) - sourceRank(a),
     )
     .map((source) => ({
+      id: source.id,
       title: source.title,
       url: source.url,
       domain: source.domain,
@@ -1076,22 +1095,7 @@ export async function reviewResearch(
     [
       {
         role: "system",
-        content: `You are reviewing internet research for a board-grade
-feasibility analysis.
-Determine whether the evidence is sufficient to support:
-- market size and growth
-- customer demand and willingness to pay
-- direct competition and pricing
-- startup and operating cost assumptions
-- regulation and compliance
-- technical feasibility
-- execution risks
-- local geographic context
-Do not mark the research sufficient merely because many URLs exist.
-Check source authority, geographic relevance, independent confirmation and
-coverage of the required topics.
-If evidence has material gaps, return targeted additional search queries.
-Do not repeat queries already executed.`,
+        content: governedStageInstruction("research-reviewer"),
       },
       {
         role: "user",
@@ -1243,6 +1247,7 @@ export function buildPublicResearch(
     }
     contextChars += content.length;
     contextSources.push({
+      id: source.id,
       title: source.title,
       url: source.url,
       domain: source.domain,
@@ -1273,6 +1278,7 @@ export function buildPublicResearch(
     sources: contextSources,
     citations: sorted.map(
       (source) => ({
+        id: source.id,
         title: source.title,
         url: source.url,
         source: source.domain,

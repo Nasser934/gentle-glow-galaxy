@@ -40,9 +40,19 @@ vi.mock("@/components/report/InteractiveDashboard", () => ({
 }));
 
 vi.mock("@/components/report/evidence/EvidencePanel", () => ({
-  EvidenceSections: () => <div>Evidence sections</div>,
+  WhyThisScore: () => <div>Why this score</div>,
   ReportFamilyPanel: () => <div>Report family</div>,
   VersionComparison: () => <div>Version comparison</div>,
+}));
+
+vi.mock("@/components/report/evidence/ReportEvidenceSummary", () => ({
+  ReportEvidenceSummary: () => (
+    <div data-testid="report-evidence-summary">Evidence summary</div>
+  ),
+}));
+
+vi.mock("@/components/report/research/ResearchSourcesPanel", () => ({
+  ResearchSourcesPanel: () => <div>Research source list</div>,
 }));
 
 vi.mock("@/components/report/StatusControl", () => ({
@@ -108,6 +118,8 @@ describe("report route compatibility guard", () => {
     expect(await screen.findByTestId("interactive-dashboard")).toHaveTextContent(
       "Project Atlas — Internal Field-Ops Platform",
     );
+    expect(screen.getAllByTestId("report-evidence-summary")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Research & Sources" })).toBeInTheDocument();
   });
 
   it("renders a normalized external-agent report", async () => {

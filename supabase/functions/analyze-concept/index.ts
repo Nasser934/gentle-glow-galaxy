@@ -1,14 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
-import { kimiStructured, KimiError } from "../_shared/kimi.ts";
 import {
   rateLimit,
   sanitizeInputs,
-  fetchPublicResearch,
-  reportSchema,
-  buildPrompts,
-  buildBaseReport,
 } from "../_shared/analysisCore.ts";
 
 const corsHeaders = {
@@ -73,38 +67,31 @@ serve(async (req) => {
       });
     }
 
-    // AI provider: Kimi Code only (see _shared/kimi.ts). No fallback providers.
-    const publicResearch = await fetchPublicResearch(inputs);
-    const { systemPrompt, userPrompt } = buildPrompts(inputs, publicResearch);
-
-    const parsed = await kimiStructured(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      "provide_report",
-      "Provide the full feasibility report.",
-      reportSchema as Record<string, unknown>,
+    // Deprecated final-analysis entry point. Keep compatibility for callers, but
+    // route every final report through the one durable deep-research engine.
+    const queued = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/start-analysis`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...body, inputs }),
+        signal: AbortSignal.timeout(15_000),
+      },
     );
-    if (!parsed || typeof parsed !== "object" || !parsed.scores || !parsed.financials) {
-      throw new KimiError(502, "AI did not return a structured report.");
-    }
-
-    const baseReport = buildBaseReport(parsed, publicResearch);
-
-    // Server-side: fill missing evidence fields, compute authoritative verdict,
-    // then sanitize every string leaf to strip internal/QA wording.
-    const enriched = ensureEvidenceFields(baseReport, inputs);
-    const report = deepSanitize(enriched);
-
-    return new Response(JSON.stringify(report), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(await queued.text(), {
+      status: queued.status,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        Deprecation: "true",
+        Link: '</functions/v1/start-analysis>; rel="successor-version"',
+      },
+    });
   } catch (e) {
     console.error("analyze-concept error:", e);
-    if (e instanceof KimiError) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
     return new Response(JSON.stringify({ error: "Analysis failed. Please try again." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
