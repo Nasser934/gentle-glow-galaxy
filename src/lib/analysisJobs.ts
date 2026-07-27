@@ -20,6 +20,8 @@ export interface AnalysisJob {
   error: string | null;
   started_at: string;
   completed_at: string | null;
+  generation_step: number;
+  stage_detail: string | null;
 }
 
 export const STAGE_LABEL: Record<JobStage, string> = {
