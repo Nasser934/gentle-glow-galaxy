@@ -7,8 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   type AnalysisJob,
-  STAGE_LABEL,
   formatElapsed,
+  getAnalysisActivityLabel,
   listActiveAnalysisJobs,
 } from "@/lib/analysisJobs";
 
