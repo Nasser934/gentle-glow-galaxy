@@ -47,12 +47,37 @@ serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Optional re-run: the new analysis becomes a child version of the parent report.
+    const rawParentId = typeof body?.parentReportId === "string" ? body.parentReportId.trim() : "";
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let parentReportId: string | null = null;
+    let rootReportId: string | null = null;
+    let previousInputs: unknown = null;
+    let previousOutput: unknown = null;
+    if (rawParentId) {
+      if (!uuidRe.test(rawParentId)) return json({ error: "Invalid report reference." }, 400);
+      const { data: parent } = await admin
+        .from("reports")
+        .select("id, user_id, root_report_id, parent_report_id, inputs, output")
+        .eq("id", rawParentId)
+        .maybeSingle();
+      if (!parent) return json({ error: "Original report not found." }, 404);
+      if (parent.user_id !== userId) {
+        return json({ error: "Only the report owner can create a new version." }, 403);
+      }
+      rootReportId = (parent.root_report_id as string | null) ?? parent.parent_report_id ?? parent.id;
+      parentReportId = rootReportId;
+      previousInputs = parent.inputs;
+      previousOutput = parent.output;
+    }
+
     // Duplicate guard: reuse an in-flight job with the same title for this user.
     const { data: existing } = await admin
       .from("analysis_jobs")
       .select("id, status, started_at")
       .eq("user_id", userId)
       .eq("title", inputs.projectName)
+      .is("parent_report_id", parentReportId as never)
       .not("status", "in", '("completed","failed")')
       .gte("started_at", new Date(Date.now() - 30 * 60_000).toISOString())
       .maybeSingle();
@@ -66,6 +91,10 @@ serve(async (req) => {
         inputs,
         status: "queued",
         stage: "queued",
+        parent_report_id: parentReportId,
+        root_report_id: rootReportId,
+        previous_inputs: previousInputs,
+        previous_output: previousOutput,
         started_at: new Date().toISOString(),
       })
       .select("id, started_at")
