@@ -111,6 +111,14 @@ const AnalysisProgress = () => {
           })}
         </ol>
 
+        {!done && !failed && job.stage_detail && (
+          <p className="mt-3 text-[12px] text-muted-foreground">
+            {getAnalysisActivityLabel(job)}
+          </p>
+        )}
+
+
+
         {failed && (
           <div className="mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[13px]">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
