@@ -1,100 +1,358 @@
-// Durable analysis worker. Pulls one job message off the pgmq queue and runs a
-// single stage so every invocation stays well inside Edge Function limits.
-// Stages: queued -> researching -> generating -> validating -> saving -> completed
+// Durable analysis worker. Claims one job through a database lease and runs a
+// single stage (or one persisted report part) per invocation.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
 import { kimiStructured, KimiError } from "../_shared/kimi.ts";
-import { fetchPublicResearch, reportSchema, buildPrompts, buildBaseReport } from "../_shared/analysisCore.ts";
+import {
+  fetchPublicResearch,
+  REPORT_PARTS,
+  buildPartPrompts,
+  mergeReportParts,
+  validateMergedReport,
+  buildBaseReport,
+} from "../_shared/analysisCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, x-worker-secret",
 };
-const json = (b: unknown, status = 200) =>
-  new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const MAX_ATTEMPTS = 3;
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const MAX_STAGE_ATTEMPTS = 3;
+const LEASE_SECONDS = 180;
+const KIMI_TIMEOUT_MS = 110_000;
 
 const admin = () =>
   createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-async function selfKick(secret: string) {
-  fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/analysis-worker`, {
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof KimiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Analysis failed. Please try again.";
+}
+
+function retryableError(error: unknown): boolean {
+  if (!(error instanceof KimiError)) return true;
+  return ![400, 401, 402, 403, 404].includes(error.status);
+}
+
+function kickWorker(secret: string) {
+  const task = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/analysis-worker`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-worker-secret": secret },
     body: "{}",
-  }).catch(() => {});
+    signal: AbortSignal.timeout(10_000),
+  }).catch((error) => {
+    console.warn(
+      "analysis-worker self-kick failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  });
+
+  try {
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(task);
+  } catch (_) { /* ignore */ }
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const db = admin();
-  const { data: cfg } = await db.from("job_worker_config").select("worker_secret").maybeSingle();
-  const secret = cfg?.worker_secret ?? "";
+
+  const { data: config, error: configError } = await db
+    .from("job_worker_config")
+    .select("worker_secret")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (configError) {
+    console.error("worker config read failed", configError.message);
+    return json({ error: "worker_config_failed" }, 500);
+  }
+
+  const secret = config?.worker_secret ?? "";
   const provided = req.headers.get("x-worker-secret") ?? "";
   if (!secret || provided !== secret) return json({ error: "Forbidden" }, 403);
 
-  // Claim one queued message (visibility timeout hides it from other workers).
-  const { data: msgs, error: readErr } = await db.rpc("read_analysis_job_queue", { p_vt: 240, p_qty: 1 });
-  if (readErr) {
-    console.error("queue read failed", readErr.message);
+  const { data: messages, error: queueError } = await db.rpc("read_analysis_job_queue", {
+    p_vt: 240,
+    p_qty: 1,
+  });
+
+  if (queueError) {
+    console.error("queue read failed", queueError.message);
     return json({ error: "queue_read_failed" }, 500);
   }
-  const msg = Array.isArray(msgs) ? msgs[0] : null;
-  if (!msg) return json({ idle: true });
 
-  const msgId = msg.msg_id as number;
-  const jobId = msg.job_id as string;
+  const message = Array.isArray(messages) && messages.length > 0 ? messages[0] : null;
+  if (!message) return json({ idle: true });
 
-  const { data: job } = await db.from("analysis_jobs").select("*").eq("id", jobId).maybeSingle();
-  if (!job || job.status === "completed" || job.status === "failed") {
-    await db.rpc("delete_analysis_job_msg", { p_msg_id: msgId });
-    await selfKick(secret);
-    return json({ skipped: true });
+  const messageId = Number(message.msg_id);
+  const jobId = String(message.job_id);
+
+  const { data: claimedRows, error: claimError } = await db.rpc("claim_analysis_job", {
+    p_job_id: jobId,
+    p_lease_seconds: LEASE_SECONDS,
+  });
+
+  if (claimError) {
+    console.error("job claim failed", jobId, claimError.message);
+    return json({ error: "job_claim_failed" }, 500);
   }
 
-  const setStage = async (patch: Record<string, unknown>) => {
-    await db.from("analysis_jobs").update(patch).eq("id", jobId);
+  const job = Array.isArray(claimedRows) && claimedRows.length > 0 ? claimedRows[0] : null;
+
+  // Remove the queue message after the database claim. Recovery is driven by
+  // the persisted job row and lease.
+  await db.rpc("delete_analysis_job_msg", { p_msg_id: messageId });
+
+  if (!job) {
+    kickWorker(secret);
+    return json({ skipped: true, jobId });
+  }
+
+  const leaseToken = String(job.lease_token);
+  let expectedStatus = String(job.status);
+  let activeAttempt = 0;
+  let activeAttemptKey = expectedStatus;
+
+  const updateWithLease = async (patch: Record<string, unknown>) => {
+    const { data, error } = await db
+      .from("analysis_jobs")
+      .update(patch)
+      .eq("id", jobId)
+      .eq("lease_token", leaseToken)
+      .eq("status", expectedStatus)
+      .select("id, status")
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  };
+
+  const releaseLease = async (patch: Record<string, unknown>) =>
+    updateWithLease({ ...patch, lease_token: null, lease_expires_at: null });
+
+  const enqueueNext = async (delay = 0) => {
+    const { error } = await db.rpc("enqueue_analysis_job", { p_job_id: jobId, p_delay: delay });
+    if (error) {
+      // The watchdog will recover a job without a queue message.
+      console.error("enqueue next stage failed", jobId, error.message);
+      return;
+    }
+    kickWorker(secret);
+  };
+
+  const beginStageAttempt = async (key: string, detail: string) => {
+    const attempts =
+      job.stage_attempts && typeof job.stage_attempts === "object"
+        ? { ...job.stage_attempts as Record<string, number> }
+        : {} as Record<string, number>;
+
+    const previous = Number(attempts[key] ?? 0);
+    if (previous >= MAX_STAGE_ATTEMPTS) {
+      throw new KimiError(504, `The ${detail.toLowerCase()} stage exceeded its retry limit.`);
+    }
+
+    activeAttempt = previous + 1;
+    activeAttemptKey = key;
+    attempts[key] = activeAttempt;
+
+    const updated = await updateWithLease({
+      stage_attempts: attempts,
+      attempts: Number(job.attempts ?? 0) + 1,
+      stage_detail: detail,
+      error: null,
+    });
+
+    if (!updated) throw new Error("Worker lease is no longer active.");
+    return attempts;
   };
 
   try {
-    const inputs = (job.inputs ?? {}) as Record<string, string>;
+    const inputs =
+      job.inputs && typeof job.inputs === "object"
+        ? job.inputs as Record<string, string>
+        : {} as Record<string, string>;
 
-    if (job.status === "queued") {
-      await setStage({ status: "researching", stage: "researching" });
+    /* RESEARCH */
+    if (expectedStatus === "queued" || expectedStatus === "researching") {
+      if (expectedStatus === "queued") {
+        const moved = await updateWithLease({
+          status: "researching",
+          stage: "researching",
+          stage_detail: "Collecting public market evidence",
+        });
+        if (!moved) return json({ stale: true, jobId });
+        expectedStatus = "researching";
+      }
+
+      await beginStageAttempt("researching", "Collecting public market evidence");
+
       const research = await fetchPublicResearch(inputs);
-      await setStage({ research, status: "generating", stage: "generating" });
-    } else if (job.status === "researching") {
-      // Retry of a partially-run research stage.
-      const research = await fetchPublicResearch(inputs);
-      await setStage({ research, status: "generating", stage: "generating" });
-    } else if (job.status === "generating") {
-      const research = job.research ?? (await fetchPublicResearch(inputs));
-      const { systemPrompt, userPrompt } = buildPrompts(inputs, research);
-      const parsed = await kimiStructured(
+      const step = Number(job.generation_step ?? 0);
+
+      const saved = await releaseLease({
+        research,
+        status: "generating",
+        stage: "generating",
+        generation_step: step,
+        stage_detail: `Preparing report section ${step + 1} of ${REPORT_PARTS.length}`,
+        error: null,
+      });
+
+      if (saved) await enqueueNext();
+      return json({ ok: true, jobId, stage: "generating" });
+    }
+
+    /* GENERATION */
+    if (expectedStatus === "generating") {
+      const generationParts =
+        job.generation_parts && typeof job.generation_parts === "object"
+          ? { ...job.generation_parts as Record<string, unknown> }
+          : {} as Record<string, unknown>;
+
+      let step = Math.max(0, Number(job.generation_step ?? 0));
+
+      // Skip every part that was already persisted.
+      while (step < REPORT_PARTS.length && generationParts[REPORT_PARTS[step].key]) {
+        step += 1;
+      }
+
+      // Recovery: all parts exist but the worker died before validation.
+      if (step >= REPORT_PARTS.length) {
+        const merged = mergeReportParts(generationParts);
+        validateMergedReport(merged);
+        const draft = buildBaseReport(merged, job.research ?? {});
+
+        const saved = await releaseLease({
+          generation_step: REPORT_PARTS.length,
+          generation_parts: generationParts,
+          draft,
+          status: "validating",
+          stage: "validating",
+          stage_detail: "Checking report consistency",
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({ ok: true, jobId, stage: "validating" });
+      }
+
+      const part = REPORT_PARTS[step];
+
+      await beginStageAttempt(
+        `generating:${part.key}`,
+        `${part.label} — section ${step + 1} of ${REPORT_PARTS.length}`,
+      );
+
+      const { systemPrompt, userPrompt } = buildPartPrompts(inputs, job.research ?? {}, part);
+
+      const parsedPart = await kimiStructured(
         [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        "provide_report",
-        "Provide the full feasibility report.",
-        reportSchema as Record<string, unknown>,
+        `provide_${part.key}_report`,
+        `Provide the ${part.label} report section.`,
+        part.schema as Record<string, unknown>,
+        { reasoningEffort: "low", timeoutMs: KIMI_TIMEOUT_MS },
       );
-      if (!parsed || typeof parsed !== "object" || !parsed.scores || !parsed.financials) {
-        throw new KimiError(502, "AI did not return a structured report.");
+
+      if (!parsedPart || typeof parsedPart !== "object" || Array.isArray(parsedPart)) {
+        throw new KimiError(502, `Kimi returned an invalid ${part.label} section.`);
       }
-      const draft = buildBaseReport(parsed, research);
-      await setStage({ research, draft, status: "validating", stage: "validating" });
-    } else if (job.status === "validating") {
+
+      const nextParts = { ...generationParts, [part.key]: parsedPart };
+      const nextStep = step + 1;
+
+      if (nextStep < REPORT_PARTS.length) {
+        const nextPart = REPORT_PARTS[nextStep];
+        const saved = await releaseLease({
+          generation_parts: nextParts,
+          generation_step: nextStep,
+          status: "generating",
+          stage: "generating",
+          stage_detail: `${nextPart.label} — section ${nextStep + 1} of ${REPORT_PARTS.length}`,
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({
+          ok: true,
+          jobId,
+          stage: "generating",
+          completedPart: part.key,
+          nextPart: nextPart.key,
+        });
+      }
+
+      const merged = mergeReportParts(nextParts);
+      validateMergedReport(merged);
+      const draft = buildBaseReport(merged, job.research ?? {});
+
+      const saved = await releaseLease({
+        generation_parts: nextParts,
+        generation_step: REPORT_PARTS.length,
+        draft,
+        status: "validating",
+        stage: "validating",
+        stage_detail: "Checking report consistency",
+        error: null,
+      });
+
+      if (saved) await enqueueNext();
+      return json({ ok: true, jobId, stage: "validating", completedPart: part.key });
+    }
+
+    /* VALIDATION */
+    if (expectedStatus === "validating") {
+      await beginStageAttempt("validating", "Checking report consistency");
+
+      if (!job.draft || typeof job.draft !== "object") {
+        throw new Error("Persisted report draft is missing.");
+      }
+
       const enriched = ensureEvidenceFields(job.draft, inputs);
       const report = deepSanitize(enriched);
-      await setStage({ draft: report, status: "saving", stage: "saving" });
-    } else if (job.status === "saving") {
-      let reportId = job.report_id as string | null;
+
+      const saved = await releaseLease({
+        draft: report,
+        status: "saving",
+        stage: "saving",
+        stage_detail: "Saving the completed report",
+        error: null,
+      });
+
+      if (saved) await enqueueNext();
+      return json({ ok: true, jobId, stage: "saving" });
+    }
+
+    /* SAVING */
+    if (expectedStatus === "saving") {
+      await beginStageAttempt("saving", "Saving the completed report");
+
+      const saveOperationKey = `analysis-job:${jobId}`;
+      let reportId = typeof job.report_id === "string" ? job.report_id : null;
+
       if (!reportId) {
-        const { data: saved, error: saveErr } = await db
+        const { data: existingReport } = await db
+          .from("reports")
+          .select("id")
+          .eq("save_operation_key", saveOperationKey)
+          .maybeSingle();
+        reportId = existingReport?.id ?? null;
+      }
+
+      if (!reportId) {
+        const { data: inserted, error: insertError } = await db
           .from("reports")
           .insert({
             user_id: job.user_id,
@@ -102,57 +360,126 @@ serve(async (req) => {
             industry: inputs.industry || null,
             inputs,
             output: job.draft,
+            save_operation_key: saveOperationKey,
+            model_id: "k3-256k",
           })
-          .select("id, slug")
+          .select("id")
           .single();
-        if (saveErr || !saved) throw new Error(saveErr?.message || "Could not save the report.");
-        reportId = saved.id;
-      }
-      const completedAt = new Date();
-      const seconds = Math.max(1, Math.round((completedAt.getTime() - new Date(job.started_at).getTime()) / 1000));
-      const mins = Math.floor(seconds / 60);
-      const duration = mins > 0 ? `${mins}m ${seconds % 60}s` : `${seconds}s`;
 
-      await setStage({
+        if (insertError) {
+          // A prior worker may have inserted the same report before termination.
+          if (insertError.code === "23505") {
+            const { data: recovered } = await db
+              .from("reports")
+              .select("id")
+              .eq("save_operation_key", saveOperationKey)
+              .single();
+            reportId = recovered?.id ?? null;
+          } else {
+            throw insertError;
+          }
+        } else {
+          reportId = inserted?.id ?? null;
+        }
+      }
+
+      if (!reportId) throw new Error("Could not persist the completed report.");
+
+      const completedAt = new Date();
+      const elapsedSeconds = Math.max(
+        1,
+        Math.round((completedAt.getTime() - new Date(job.started_at).getTime()) / 1000),
+      );
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const duration = minutes > 0 ? `${minutes}m ${elapsedSeconds % 60}s` : `${elapsedSeconds}s`;
+
+      const completed = await releaseLease({
         report_id: reportId,
         status: "completed",
         stage: "completed",
+        stage_detail: null,
         completed_at: completedAt.toISOString(),
         error: null,
+        queue_pending: false,
       });
 
-      await db.from("notifications").insert({
-        user_id: job.user_id,
-        report_id: reportId,
-        kind: "analysis",
-        title: `${job.title} analysis is ready`,
-        body: `Completed in ${duration}.`,
-        url: `/reports/${reportId}`,
-      });
+      if (!completed) return json({ stale: true, jobId });
+
+      const { data: existingNotification } = await db
+        .from("notifications")
+        .select("id")
+        .eq("user_id", job.user_id)
+        .eq("report_id", reportId)
+        .eq("kind", "analysis")
+        .maybeSingle();
+
+      if (!existingNotification) {
+        await db.from("notifications").insert({
+          user_id: job.user_id,
+          report_id: reportId,
+          kind: "analysis",
+          title: `${job.title} analysis is ready`,
+          body: `Completed in ${duration}.`,
+          url: `/reports/${reportId}`,
+        });
+      }
+
+      kickWorker(secret);
+      return json({ ok: true, jobId, stage: "completed", reportId });
     }
 
-    await db.rpc("delete_analysis_job_msg", { p_msg_id: msgId });
+    await releaseLease({
+      status: "failed",
+      stage: "failed",
+      stage_detail: null,
+      error: `Unsupported analysis stage: ${expectedStatus}`,
+      completed_at: new Date().toISOString(),
+      queue_pending: false,
+    });
 
-    const { data: after } = await db.from("analysis_jobs").select("status").eq("id", jobId).maybeSingle();
-    if (after && after.status !== "completed" && after.status !== "failed") {
-      await db.rpc("enqueue_analysis_job", { p_job_id: jobId, p_delay: 0 });
+    return json({ failed: true, jobId });
+  } catch (error) {
+    const message = safeErrorMessage(error);
+
+    console.error("analysis-worker stage failed", {
+      jobId,
+      status: expectedStatus,
+      attemptKey: activeAttemptKey,
+      attempt: activeAttempt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    const shouldFail = !retryableError(error) || activeAttempt >= MAX_STAGE_ATTEMPTS;
+
+    const patch = shouldFail
+      ? {
+          status: "failed",
+          stage: "failed",
+          stage_detail: null,
+          error: message,
+          completed_at: new Date().toISOString(),
+          queue_pending: false,
+        }
+      : {
+          error: message,
+          stage_detail: `Retrying ${activeAttemptKey} after attempt ${activeAttempt}`,
+          queue_pending: false,
+        };
+
+    let updated = null;
+    try {
+      updated = await releaseLease(patch);
+    } catch (updateError) {
+      console.error(
+        "failed to persist worker error",
+        jobId,
+        updateError instanceof Error ? updateError.message : String(updateError),
+      );
     }
-    await selfKick(secret);
-    return json({ ok: true, jobId, stage: after?.status });
-  } catch (e) {
-    const attempts = (job.attempts ?? 0) + 1;
-    const message = e instanceof KimiError ? e.message : "Analysis failed. Please try again.";
-    console.error("analysis-worker error", jobId, job.status, e);
-    await db.rpc("delete_analysis_job_msg", { p_msg_id: msgId });
 
-    if (attempts >= MAX_ATTEMPTS) {
-      await setStage({
-        attempts,
-        status: "failed",
-        stage: "failed",
-        error: message,
-        completed_at: new Date().toISOString(),
-      });
+    if (!updated) return json({ stale: true, jobId });
+
+    if (shouldFail) {
       await db.from("notifications").insert({
         user_id: job.user_id,
         kind: "analysis",
@@ -160,12 +487,12 @@ serve(async (req) => {
         body: message,
         url: `/analysis/${jobId}`,
       });
-      return json({ failed: true, jobId });
+      return json({ failed: true, jobId, attempt: activeAttempt });
     }
 
-    await setStage({ attempts, error: message });
-    await db.rpc("enqueue_analysis_job", { p_job_id: jobId, p_delay: 5 });
-    await selfKick(secret);
-    return json({ retry: true, attempts, jobId });
+    const retryDelay = activeAttempt === 1 ? 10 : activeAttempt === 2 ? 30 : 60;
+    await enqueueNext(retryDelay);
+
+    return json({ retry: true, jobId, attempt: activeAttempt, retryDelay });
   }
 });
