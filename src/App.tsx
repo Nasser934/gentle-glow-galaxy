@@ -37,6 +37,7 @@ const SharedReport = lazyWithRetry(() => import("./pages/SharedReport"));
 const Compare = lazyWithRetry(() => import("./pages/Compare"));
 const DecisionRoom = lazyWithRetry(() => import("./pages/DecisionRoom"));
 const DecisionRoomEntry = lazyWithRetry(() => import("./pages/DecisionRoomEntry"));
+const AnalysisProgress = lazyWithRetry(() => import("./pages/AnalysisProgress"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 const OAuthConsent = lazyWithRetry(() => import("./pages/OAuthConsent"));
 
