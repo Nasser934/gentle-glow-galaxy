@@ -34,6 +34,9 @@ const admin = () =>
 function safeErrorMessage(error: unknown): string {
   if (error instanceof KimiError) return error.message;
   if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && typeof (error as { message?: string }).message === "string") {
+    return (error as { message: string }).message;
+  }
   return "Analysis failed. Please try again.";
 }
 
