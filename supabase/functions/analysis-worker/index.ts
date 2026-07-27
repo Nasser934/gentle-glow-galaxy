@@ -339,7 +339,7 @@ serve(async (req) => {
     if (expectedStatus === "saving") {
       await beginStageAttempt("saving", "Saving the completed report");
 
-      const saveOperationKey = `analysis-job:${jobId}`;
+      const saveOperationKey = `analysis-job-${jobId}`;
       let reportId = typeof job.report_id === "string" ? job.report_id : null;
 
       if (!reportId) {
