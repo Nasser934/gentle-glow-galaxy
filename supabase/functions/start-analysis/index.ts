@@ -71,16 +71,18 @@ serve(async (req) => {
       previousOutput = parent.output;
     }
 
-    // Duplicate guard: reuse an in-flight job with the same title for this user.
-    const { data: existing } = await admin
+    // Duplicate guard: reuse an in-flight job with the same title and parent.
+    let dupQuery = admin
       .from("analysis_jobs")
       .select("id, status, started_at")
       .eq("user_id", userId)
       .eq("title", inputs.projectName)
-      .is("parent_report_id", parentReportId as never)
       .not("status", "in", '("completed","failed")')
-      .gte("started_at", new Date(Date.now() - 30 * 60_000).toISOString())
-      .maybeSingle();
+      .gte("started_at", new Date(Date.now() - 30 * 60_000).toISOString());
+    dupQuery = parentReportId
+      ? dupQuery.eq("parent_report_id", parentReportId)
+      : dupQuery.is("parent_report_id", null);
+    const { data: existing } = await dupQuery.maybeSingle();
     if (existing?.id) return json({ jobId: existing.id, reused: true });
 
     const { data: job, error: insertErr } = await admin
