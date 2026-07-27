@@ -42,6 +42,8 @@ export interface ResearchSource {
   queryIds: string[];
   publishedDate: string | null;
   extracted: boolean;
+  /** True once an extraction attempt was made (successful or not). */
+  extractionAttempted?: boolean;
 }
 export interface ResearchReview {
   enough: boolean;
@@ -186,6 +188,62 @@ function tavilyKey(): string {
   }
   return key;
 }
+export class TavilyError extends Error {
+  status: number;
+  retryAfterSeconds: number | null;
+  constructor(status: number, message: string, retryAfterSeconds: number | null = null) {
+    super(message);
+    this.name = "TavilyError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export const TAVILY_MAX_ATTEMPTS = 3;
+export const TAVILY_RETRY_STATUSES = [429, 500, 502, 503, 504];
+const TAVILY_BACKOFF_MS = [2_000, 5_000];
+
+export type SleepFn = (ms: number) => Promise<void>;
+const defaultSleep: SleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function isRetryableTavilyError(error: unknown): boolean {
+  if (error instanceof TavilyError) {
+    return TAVILY_RETRY_STATUSES.includes(error.status);
+  }
+  // Network/timeout failures are transient.
+  return true;
+}
+
+/** Delay before the next attempt (attempt is 1-based and already failed). */
+export function tavilyRetryDelayMs(attempt: number, error: unknown): number {
+  if (
+    error instanceof TavilyError &&
+    typeof error.retryAfterSeconds === "number" &&
+    Number.isFinite(error.retryAfterSeconds) &&
+    error.retryAfterSeconds > 0
+  ) {
+    return Math.min(error.retryAfterSeconds, 30) * 1_000;
+  }
+  return TAVILY_BACKOFF_MS[attempt - 1] ?? TAVILY_BACKOFF_MS[TAVILY_BACKOFF_MS.length - 1];
+}
+
+export async function withTavilyRetry<T>(
+  run: () => Promise<T>,
+  sleep: SleepFn = defaultSleep,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= TAVILY_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableTavilyError(error) || attempt === TAVILY_MAX_ATTEMPTS) throw error;
+      await sleep(tavilyRetryDelayMs(attempt, error));
+    }
+  }
+  throw lastError;
+}
+
 async function tavilyPost(
   path: string,
   body: Record<string, unknown>,
@@ -206,12 +264,19 @@ async function tavilyPost(
   );
   if (!response.ok) {
     const safeText = (await response.text()).slice(0, 300);
-    throw new Error(
+    const retryAfterRaw = response.headers?.get?.("retry-after");
+    const retryAfter = retryAfterRaw && /^\d+$/.test(retryAfterRaw.trim())
+      ? Number(retryAfterRaw.trim())
+      : null;
+    throw new TavilyError(
+      response.status,
       `Tavily ${path} failed with status ${response.status}: ${safeText}`,
+      retryAfter,
     );
   }
   return await response.json();
 }
+
 function normalizeUrl(raw: string): string {
   try {
     const url = new URL(raw);
@@ -244,51 +309,81 @@ function domainFromUrl(raw: string): string {
     return "unknown";
   }
 }
-function authorityScore(domain: string): number {
-  const d = domain.toLowerCase();
-  if (
-    d.endsWith(".gov") ||
-    d.endsWith(".gov.sa") ||
-    d.endsWith(".gov.ae") ||
-    d.endsWith(".edu") ||
-    d.endsWith(".ac.uk")
-  ) {
+/** Exact-domain or true-subdomain match. `fakeun.org` never matches `un.org`. */
+export function isDomainOrSubdomain(domain: string, root: string): boolean {
+  const d = String(domain ?? "").toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  const r = String(root ?? "").toLowerCase();
+  return d === r || d.endsWith(`.${r}`);
+}
+
+const AUTHORITY_SUFFIXES: string[] = ["gov", "edu", "gov.sa", "gov.ae", "ac.uk", "int"];
+const TIER_ONE_DOMAINS = [
+  "worldbank.org", "imf.org", "oecd.org", "un.org", "who.int", "itu.int",
+  "statista.com", "gartner.com", "mckinsey.com", "deloitte.com",
+  "pwc.com", "ey.com", "kpmg.com",
+];
+const TIER_TWO_DOMAINS = [
+  "reuters.com", "bloomberg.com", "ft.com", "economist.com", "forbes.com",
+];
+const LOW_TRUST_DOMAINS = [
+  "reddit.com", "news.ycombinator.com", "wikipedia.org", "quora.com", "medium.com",
+];
+
+export function authorityScore(domain: string): number {
+  const d = String(domain ?? "").toLowerCase().replace(/^www\./, "");
+  // Public-sector / academic TLD suffixes must be real label boundaries.
+  if (AUTHORITY_SUFFIXES.some((suffix) => d === suffix || d.endsWith(`.${suffix}`))) {
     return 100;
   }
-  if (
-    d.includes("worldbank.org") ||
-    d.includes("imf.org") ||
-    d.includes("oecd.org") ||
-    d.includes("un.org") ||
-    d.includes("itu.int") ||
-    d.includes("statista.com") ||
-    d.includes("gartner.com") ||
-    d.includes("mckinsey.com") ||
-    d.includes("deloitte.com") ||
-    d.includes("pwc.com") ||
-    d.includes("ey.com") ||
-    d.includes("kpmg.com")
-  ) {
-    return 90;
-  }
-  if (
-    d.includes("reuters.com") ||
-    d.includes("bloomberg.com") ||
-    d.includes("ft.com") ||
-    d.includes("economist.com") ||
-    d.includes("forbes.com")
-  ) {
-    return 75;
-  }
-  if (
-    d.includes("reddit.com") ||
-    d.includes("news.ycombinator.com") ||
-    d.includes("wikipedia.org")
-  ) {
-    return 35;
-  }
+  if (TIER_ONE_DOMAINS.some((root) => isDomainOrSubdomain(d, root))) return 90;
+  if (TIER_TWO_DOMAINS.some((root) => isDomainOrSubdomain(d, root))) return 75;
+  if (LOW_TRUST_DOMAINS.some((root) => isDomainOrSubdomain(d, root))) return 35;
   return 55;
 }
+
+/** Categories where only reasonably recent evidence is acceptable. */
+export const FRESHNESS_SENSITIVE_CATEGORIES: ResearchCategory[] = [
+  "market_size",
+  "market_growth",
+  "competitors",
+  "pricing",
+  "regulation",
+  "technology",
+];
+export const FRESHNESS_WINDOW_YEARS = 3;
+
+export function freshnessStartDate(
+  category: ResearchCategory,
+  now: Date = new Date(),
+): string | null {
+  if (!FRESHNESS_SENSITIVE_CATEGORIES.includes(category)) return null;
+  return `${now.getUTCFullYear() - FRESHNESS_WINDOW_YEARS}-01-01`;
+}
+
+/** True when the source is older than the freshness window (unknown dates are not stale). */
+export function isStaleSource(
+  source: { publishedDate: string | null },
+  now: Date = new Date(),
+): boolean {
+  if (!source.publishedDate) return false;
+  const parsed = new Date(source.publishedDate);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getUTCFullYear() < now.getUTCFullYear() - FRESHNESS_WINDOW_YEARS;
+}
+
+/** A source only counts as extracted with real extracted page content. */
+export function isExtractedSource(source: ResearchSource): boolean {
+  return (
+    source.extracted === true &&
+    typeof source.extractedContent === "string" &&
+    source.extractedContent.trim().length > 100
+  );
+}
+
+export function countExtractedSources(sources: ResearchSource[]): number {
+  return (sources ?? []).filter(isExtractedSource).length;
+}
+
 function clamp(
   value: number,
   min: number,
@@ -397,7 +492,8 @@ export function createInitialResearchState():
   const now = new Date().toISOString();
   return {
     phase: "planning",
-    round: 0,
+    // The initial search is round 1; expansions go up to MAX_RESEARCH_ROUNDS.
+    round: 1,
     queries: [],
     completedQueryIds: [],
     failedQueryIds: [],
@@ -407,6 +503,74 @@ export function createInitialResearchState():
     updatedAt: now,
   };
 }
+
+export const MIN_INITIAL_QUERIES = 8;
+export const MAX_INITIAL_QUERIES = 12;
+
+const FALLBACK_QUERY_TEMPLATES: Record<ResearchCategory, string> = {
+  market_size: "{industry} market size {location} report",
+  market_growth: "{industry} market growth forecast {location}",
+  customer_demand: "{industry} customer demand and adoption {location} survey",
+  pricing: "{industry} pricing benchmarks {location}",
+  competitors: "leading {industry} companies competing in {location}",
+  costs: "{industry} startup and operating costs {location}",
+  regulation: "{industry} regulation licensing requirements {location}",
+  technology: "{industry} technology platforms and readiness {project}",
+  risks: "{industry} business failure risks and challenges {location}",
+  local_context: "{location} {industry} market conditions and local context",
+};
+
+/**
+ * Deterministic, context-specific fallback queries for research categories the
+ * planner failed to cover. Never emits a bare project-name query.
+ */
+export function buildFallbackQueries(
+  inputs: Record<string, string>,
+  existing: PlannedQuery[],
+  limit = MAX_INITIAL_QUERIES,
+): PlannedQuery[] {
+  const industry = (inputs.industry || inputs.businessModel || "business").trim();
+  const location = (inputs.location || "global market").trim();
+  const project = (inputs.projectName || industry).trim();
+  const covered = new Set(existing.map((query) => query.category));
+  const existingText = new Set(existing.map((query) => query.query.trim().toLowerCase()));
+  const missing = REQUIRED_CATEGORIES.filter((category) => !covered.has(category));
+  const ordered = [...missing, ...REQUIRED_CATEGORIES.filter((c) => covered.has(c))];
+
+  const candidates: PlannedQuery[] = [];
+  for (const category of ordered) {
+    if (existing.length + candidates.length >= limit) break;
+    const query = FALLBACK_QUERY_TEMPLATES[category]
+      .replaceAll("{industry}", industry)
+      .replaceAll("{location}", location)
+      .replaceAll("{project}", project)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (query.length < 8 || existingText.has(query.toLowerCase())) continue;
+    existingText.add(query.toLowerCase());
+    candidates.push({
+      id: crypto.randomUUID(),
+      query,
+      category,
+      priority: missing.includes(category) ? 8 : 4,
+      reason: `Deterministic fallback query ensuring ${category} coverage.`,
+    });
+  }
+  return candidates;
+}
+
+/** Guarantees 8–12 distinct initial queries covering the required categories. */
+export function ensureMinimumQueryPlan(
+  planned: PlannedQuery[],
+  inputs: Record<string, string>,
+): PlannedQuery[] {
+  const base = planned.slice(0, MAX_INITIAL_QUERIES);
+  if (base.length >= MIN_INITIAL_QUERIES) return base;
+  const fallbacks = buildFallbackQueries(inputs, base, MAX_INITIAL_QUERIES);
+  const combined = [...base, ...fallbacks].slice(0, MAX_INITIAL_QUERIES);
+  return combined;
+}
+
 export async function planResearchQueries(
   inputs: Record<string, string>,
 ): Promise<PlannedQuery[]> {
@@ -439,29 +603,39 @@ Do not produce conclusions yet.`,
       timeoutMs: 100_000,
     },
   );
-  return cleanPlannedQueries(result?.queries ?? []);
+  const cleaned = cleanPlannedQueries(result?.queries ?? []);
+  return ensureMinimumQueryPlan(cleaned, inputs);
 }
-async function searchOneQuery(
+
+export async function searchOneQuery(
   planned: PlannedQuery,
+  sleep?: SleepFn,
+  now: Date = new Date(),
 ): Promise<{
   queryId: string;
   sources: ResearchSource[];
   failed: boolean;
 }> {
+  const startDate = freshnessStartDate(planned.category, now);
   try {
-    const data = await tavilyPost(
-      "/search",
-      {
-        query: planned.query,
-        search_depth: "advanced",
-        max_results: 20,
-        chunks_per_source: 3,
-        include_answer: false,
-        include_raw_content: false,
-        include_images: false,
-        topic: "general",
-      },
-      35_000,
+    const data = await withTavilyRetry(
+      () =>
+        tavilyPost(
+          "/search",
+          {
+            query: planned.query,
+            search_depth: "advanced",
+            max_results: 20,
+            chunks_per_source: 3,
+            include_answer: false,
+            include_raw_content: false,
+            include_images: false,
+            topic: "general",
+            ...(startDate ? { start_date: startDate } : {}),
+          },
+          35_000,
+        ),
+      sleep,
     );
     const sources: ResearchSource[] = [];
     for (const result of data?.results ?? []) {
@@ -494,6 +668,7 @@ async function searchOneQuery(
             ? result.published_date
             : null,
         extracted: false,
+        extractionAttempted: false,
       });
     }
     return {
@@ -503,7 +678,7 @@ async function searchOneQuery(
     };
   } catch (error) {
     console.warn(
-      "Tavily query failed",
+      "Tavily query failed after retries",
       planned.id,
       error instanceof Error
         ? error.message
@@ -516,6 +691,7 @@ async function searchOneQuery(
     };
   }
 }
+
 export function mergeResearchSources(
   existing: ResearchSource[],
   incoming: ResearchSource[],
@@ -545,6 +721,9 @@ export function mergeResearchSources(
         source.extractedContent,
       extracted:
         current.extracted || source.extracted,
+      extractionAttempted: Boolean(
+        current.extractionAttempted || source.extractionAttempted,
+      ),
       relevanceScore: Math.max(
         current.relevanceScore,
         source.relevanceScore,
@@ -586,19 +765,20 @@ export function mergeResearchSources(
 }
 export async function runSearchBatch(
   queries: PlannedQuery[],
+  options: { sleep?: SleepFn; alreadyCompletedIds?: string[]; now?: Date } = {},
 ): Promise<{
   completedQueryIds: string[];
   failedQueryIds: string[];
   sources: ResearchSource[];
 }> {
-  const selected = queries.slice(
-    0,
-    SEARCH_BATCH_SIZE,
-  );
+  const done = new Set(options.alreadyCompletedIds ?? []);
+  const selected = queries
+    .filter((query) => !done.has(query.id))
+    .slice(0, SEARCH_BATCH_SIZE);
   const results = await mapWithConcurrency(
     selected,
     SEARCH_CONCURRENCY,
-    searchOneQuery,
+    (query) => searchOneQuery(query, options.sleep, options.now),
   );
   return {
     completedQueryIds: results
@@ -625,12 +805,14 @@ export function selectExtractionBatch(
     .filter(
       (source) =>
         !source.extracted &&
-        !source.extractedContent,
+        !source.extractedContent &&
+        !source.extractionAttempted,
     )
     .sort(
       (a, b) =>
         sourceRank(b) - sourceRank(a),
     );
+
   const selected: ResearchSource[] = [];
   const domainCounts = new Map<string, number>();
   for (const source of candidates) {
@@ -672,6 +854,7 @@ export function selectExtractionBatch(
 export async function extractSourceBatch(
   selected: ResearchSource[],
   inputs: Record<string, string>,
+  sleep?: SleepFn,
 ): Promise<ResearchSource[]> {
   if (selected.length === 0) return [];
   const focusQuery = [
@@ -684,20 +867,24 @@ export async function extractSourceBatch(
     .join(" ")
     .slice(0, 500);
   try {
-    const data = await tavilyPost(
-      "/extract",
-      {
-        urls: selected.map(
-          (source) => source.url,
+    const data = await withTavilyRetry(
+      () =>
+        tavilyPost(
+          "/extract",
+          {
+            urls: selected.map(
+              (source) => source.url,
+            ),
+            query: focusQuery,
+            chunks_per_source: 5,
+            extract_depth: "advanced",
+            format: "markdown",
+            include_images: false,
+            timeout: 60,
+          },
+          70_000,
         ),
-        query: focusQuery,
-        chunks_per_source: 5,
-        extract_depth: "advanced",
-        format: "markdown",
-        include_images: false,
-        timeout: 60,
-      },
-      70_000,
+      sleep,
     );
     const extractedByUrl = new Map<
       string,
@@ -723,27 +910,32 @@ export async function extractSourceBatch(
       const content = extractedByUrl.get(
         source.normalizedUrl,
       );
+      const usable = typeof content === "string" && content.trim().length > 100;
       return {
         ...source,
-        extracted: true,
-        extractedContent:
-          content ?? source.snippet,
+        // Only a real extracted page counts as extracted. The search snippet
+        // stays available in `snippet` but never counts as extracted content.
+        extracted: usable,
+        extractedContent: usable ? content! : null,
+        extractionAttempted: true,
       };
     });
   } catch (error) {
     console.warn(
-      "Tavily extraction batch failed",
+      "Tavily extraction batch failed after retries",
       error instanceof Error
         ? error.message
         : String(error),
     );
     return selected.map((source) => ({
       ...source,
-      extracted: true,
-      extractedContent: source.snippet,
+      extracted: false,
+      extractedContent: null,
+      extractionAttempted: true,
     }));
   }
 }
+
 export function applyExtractedSources(
   allSources: ResearchSource[],
   extracted: ResearchSource[],
@@ -772,11 +964,7 @@ export function computeResearchQuality(
       (source) =>
         source.authorityScore >= 75,
     ).length;
-  const extractedSources = sources.filter(
-    (source) =>
-      source.extracted &&
-      Boolean(source.extractedContent),
-  ).length;
+  const extractedSources = countExtractedSources(sources);
   const coveredCategories = Array.from(
     new Set(
       sources.flatMap(
@@ -986,6 +1174,45 @@ export function shouldContinueResearch(
   }
   return !review.enough;
 }
+
+/**
+ * Freshness audit: which freshness-sensitive categories are supported only by
+ * sources older than the freshness window. Older authoritative publications are
+ * kept, but the report surfaces a stale-data warning for them.
+ */
+export function buildFreshnessReport(
+  sources: ResearchSource[],
+  now: Date = new Date(),
+): {
+  windowYears: number;
+  cutoffYear: number;
+  staleCategories: ResearchCategory[];
+  warnings: string[];
+  datedSourceCount: number;
+} {
+  const cutoffYear = now.getUTCFullYear() - FRESHNESS_WINDOW_YEARS;
+  const staleCategories: ResearchCategory[] = [];
+  for (const category of FRESHNESS_SENSITIVE_CATEGORIES) {
+    const inCategory = (sources ?? []).filter((source) =>
+      source.categories.includes(category) && source.publishedDate
+    );
+    if (inCategory.length === 0) continue;
+    if (inCategory.every((source) => isStaleSource(source, now))) {
+      staleCategories.push(category);
+    }
+  }
+  return {
+    windowYears: FRESHNESS_WINDOW_YEARS,
+    cutoffYear,
+    staleCategories,
+    warnings: staleCategories.map(
+      (category) =>
+        `${category.replace(/_/g, " ")} evidence relies only on sources published before ${cutoffYear}.`,
+    ),
+    datedSourceCount: (sources ?? []).filter((source) => Boolean(source.publishedDate)).length,
+  };
+}
+
 export function buildPublicResearch(
   state: ResearchState,
   quality: ResearchQuality,
@@ -1036,6 +1263,7 @@ export function buildPublicResearch(
     grounded:
       quality.uniqueSources > 0,
     quality,
+    freshness: buildFreshnessReport(state.sources),
     review: state.review,
     executedQueries: state.queries,
     sourceCount:
