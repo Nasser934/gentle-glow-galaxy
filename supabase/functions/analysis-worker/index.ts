@@ -5,13 +5,32 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
 import { kimiStructured, KimiError } from "../_shared/kimi.ts";
 import {
-  fetchPublicResearch,
+  createInitialResearchState,
+  planResearchQueries,
+  runSearchBatch,
+  mergeResearchSources,
+  selectExtractionBatch,
+  extractSourceBatch,
+  applyExtractedSources,
+  computeResearchQuality,
+  reviewResearch,
+  shouldContinueResearch,
+  buildPublicResearch,
+  researchBudgetExhausted,
+  SEARCH_BATCH_SIZE,
+  MIN_UNIQUE_SOURCES,
+  MAX_TOTAL_QUERIES,
+  type ResearchState,
+} from "../_shared/researchAgent.ts";
+import {
   REPORT_PARTS,
   buildPartPrompts,
   mergeReportParts,
   validateMergedReport,
   buildBaseReport,
+  finalizeReportDeterministically,
 } from "../_shared/analysisCore.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,33 +206,280 @@ serve(async (req) => {
 
     /* RESEARCH */
     if (expectedStatus === "queued" || expectedStatus === "researching") {
+      let state: ResearchState =
+        job.research_state &&
+        typeof job.research_state === "object" &&
+        typeof (job.research_state as ResearchState).phase === "string"
+          ? job.research_state as ResearchState
+          : createInitialResearchState();
+
       if (expectedStatus === "queued") {
+        state = createInitialResearchState();
         const moved = await updateWithLease({
           status: "researching",
           stage: "researching",
-          stage_detail: "Collecting public market evidence",
+          stage_detail: "Planning targeted market research",
+          research_state: state,
+          research_started_at: state.startedAt,
+          error: null,
         });
         if (!moved) return json({ stale: true, jobId });
         expectedStatus = "researching";
       }
 
-      await beginStageAttempt("researching", "Collecting public market evidence");
+      /* KIMI RESEARCH PLANNING */
+      if (state.phase === "planning") {
+        await beginStageAttempt(
+          `research:planning:${state.round}`,
+          "Planning targeted market research",
+        );
 
-      const research = await fetchPublicResearch(inputs);
-      const step = Number(job.generation_step ?? 0);
+        const planned = await planResearchQueries(inputs);
+        if (planned.length === 0) {
+          throw new KimiError(502, "Kimi did not return a valid research plan.");
+        }
 
-      const saved = await releaseLease({
-        research,
-        status: "generating",
-        stage: "generating",
-        generation_step: step,
-        stage_detail: `Preparing report section ${step + 1} of ${REPORT_PARTS.length}`,
-        error: null,
-      });
+        const nextState: ResearchState = {
+          ...state,
+          phase: "searching",
+          queries: planned,
+          updatedAt: new Date().toISOString(),
+        };
 
-      if (saved) await enqueueNext();
-      return json({ ok: true, jobId, stage: "generating" });
+        const saved = await releaseLease({
+          research_state: nextState,
+          stage_detail:
+            `Searching ${Math.min(SEARCH_BATCH_SIZE, planned.length)} targeted queries in parallel`,
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({ ok: true, jobId, researchPhase: "searching", queryCount: planned.length });
+      }
+
+      /* PARALLEL TAVILY SEARCH */
+      if (state.phase === "searching") {
+        const completed = new Set(state.completedQueryIds ?? []);
+        const failed = new Set(state.failedQueryIds ?? []);
+        const pending = state.queries
+          .filter((query) => !completed.has(query.id) && !failed.has(query.id))
+          .sort((a, b) => b.priority - a.priority);
+
+        if (pending.length === 0) {
+          const nextState: ResearchState = {
+            ...state,
+            phase: "extracting",
+            updatedAt: new Date().toISOString(),
+          };
+          const saved = await releaseLease({
+            research_state: nextState,
+            stage_detail: "Reading the strongest source pages",
+            error: null,
+          });
+          if (saved) await enqueueNext();
+          return json({ ok: true, jobId, researchPhase: "extracting" });
+        }
+
+        const batch = pending.slice(0, SEARCH_BATCH_SIZE);
+        await beginStageAttempt(
+          `research:searching:${state.round}:${batch.map((query) => query.id).join(",")}`,
+          `Searching ${batch.length} targeted queries in parallel`,
+        );
+
+        const result = await runSearchBatch(batch);
+        const mergedSources = mergeResearchSources(state.sources ?? [], result.sources);
+        const completedIds = Array.from(
+          new Set([...(state.completedQueryIds ?? []), ...result.completedQueryIds]),
+        );
+        const failedIds = Array.from(
+          new Set([...(state.failedQueryIds ?? []), ...result.failedQueryIds]),
+        );
+        const remaining = state.queries.filter(
+          (query) => !completedIds.includes(query.id) && !failedIds.includes(query.id),
+        );
+
+        const nextState: ResearchState = {
+          ...state,
+          phase: remaining.length > 0 ? "searching" : "extracting",
+          completedQueryIds: completedIds,
+          failedQueryIds: failedIds,
+          sources: mergedSources,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const saved = await releaseLease({
+          research_state: nextState,
+          stage_detail: remaining.length > 0
+            ? `Searching ${Math.min(SEARCH_BATCH_SIZE, remaining.length)} more queries · ${mergedSources.length} unique sources found`
+            : `Reading source pages · ${mergedSources.length} unique sources found`,
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({
+          ok: true,
+          jobId,
+          researchPhase: nextState.phase,
+          uniqueSources: mergedSources.length,
+          remainingQueries: remaining.length,
+        });
+      }
+
+      /* TAVILY PAGE EXTRACTION */
+      if (state.phase === "extracting") {
+        const selected = selectExtractionBatch(state.sources ?? []);
+        const extractedCount = (state.sources ?? []).filter(
+          (source) => source.extracted && Boolean(source.extractedContent),
+        ).length;
+        const extractionTarget = Math.min(
+          Math.max(MIN_UNIQUE_SOURCES, 30),
+          (state.sources ?? []).length,
+        );
+
+        if (selected.length === 0 || extractedCount >= extractionTarget) {
+          const nextState: ResearchState = {
+            ...state,
+            phase: "reviewing",
+            updatedAt: new Date().toISOString(),
+          };
+          const saved = await releaseLease({
+            research_state: nextState,
+            stage_detail: "Kimi is reviewing evidence coverage",
+            error: null,
+          });
+          if (saved) await enqueueNext();
+          return json({
+            ok: true,
+            jobId,
+            researchPhase: "reviewing",
+            extractedSources: extractedCount,
+          });
+        }
+
+        await beginStageAttempt(
+          `research:extracting:${state.round}:${extractedCount}`,
+          `Reading ${selected.length} source pages`,
+        );
+
+        const extracted = await extractSourceBatch(selected, inputs);
+        const updatedSources = applyExtractedSources(state.sources, extracted);
+        const newExtractedCount = updatedSources.filter(
+          (source) => source.extracted && Boolean(source.extractedContent),
+        ).length;
+        const moreToExtract =
+          newExtractedCount < extractionTarget &&
+          selectExtractionBatch(updatedSources).length > 0;
+
+        const nextState: ResearchState = {
+          ...state,
+          phase: moreToExtract ? "extracting" : "reviewing",
+          sources: updatedSources,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const saved = await releaseLease({
+          research_state: nextState,
+          stage_detail: moreToExtract
+            ? `Reading more sources · ${newExtractedCount} pages reviewed`
+            : `Kimi is reviewing ${updatedSources.length} unique sources`,
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({
+          ok: true,
+          jobId,
+          researchPhase: nextState.phase,
+          extractedSources: newExtractedCount,
+        });
+      }
+
+      /* KIMI RESEARCH REVIEW */
+      if (state.phase === "reviewing") {
+        await beginStageAttempt(
+          `research:reviewing:${state.round}`,
+          "Reviewing evidence quality and research gaps",
+        );
+
+        const quality = computeResearchQuality(state.sources ?? []);
+        const review = await reviewResearch(inputs, state, quality);
+        const reviewedState: ResearchState = {
+          ...state,
+          review,
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (shouldContinueResearch(reviewedState, quality, review)) {
+          const remainingSlots = Math.max(0, MAX_TOTAL_QUERIES - state.queries.length);
+          const additionalQueries = review.additionalQueries.slice(0, remainingSlots);
+
+          if (additionalQueries.length > 0) {
+            const nextState: ResearchState = {
+              ...reviewedState,
+              phase: "searching",
+              round: state.round + 1,
+              queries: [...state.queries, ...additionalQueries],
+              updatedAt: new Date().toISOString(),
+            };
+
+            const saved = await releaseLease({
+              research_state: nextState,
+              research_quality: quality,
+              stage_detail:
+                `Expanding research for ${review.missingAreas.length} evidence gaps · round ${nextState.round + 1}`,
+              error: null,
+            });
+
+            if (saved) await enqueueNext();
+            return json({
+              ok: true,
+              jobId,
+              researchPhase: "searching",
+              researchRound: nextState.round,
+              uniqueSources: quality.uniqueSources,
+              qualityScore: quality.score,
+              missingAreas: review.missingAreas,
+            });
+          }
+        }
+
+        // Complete with the available evidence when Kimi is satisfied, no useful
+        // follow-up queries exist, or the safety budget is exhausted.
+        const finalState: ResearchState = {
+          ...reviewedState,
+          phase: "completed",
+          updatedAt: new Date().toISOString(),
+        };
+        const publicResearch = buildPublicResearch(finalState, quality);
+
+        const saved = await releaseLease({
+          research_state: finalState,
+          research_quality: quality,
+          research: publicResearch,
+          research_completed_at: new Date().toISOString(),
+          status: "generating",
+          stage: "generating",
+          generation_step: Number(job.generation_step ?? 0),
+          stage_detail: `${REPORT_PARTS[0].label} — section 1 of ${REPORT_PARTS.length}`,
+          error: null,
+        });
+
+        if (saved) await enqueueNext();
+        return json({
+          ok: true,
+          jobId,
+          stage: "generating",
+          uniqueSources: quality.uniqueSources,
+          uniqueDomains: quality.uniqueDomains,
+          qualityScore: quality.score,
+          qualityLevel: quality.level,
+          researchBudgetExhausted: researchBudgetExhausted(finalState),
+        });
+      }
+
+      throw new Error(`Unsupported research phase: ${state.phase}`);
     }
+
 
     /* GENERATION */
     if (expectedStatus === "generating") {
@@ -256,7 +522,19 @@ serve(async (req) => {
         `${part.label} — section ${step + 1} of ${REPORT_PARTS.length}`,
       );
 
-      const { systemPrompt, userPrompt } = buildPartPrompts(inputs, job.research ?? {}, part);
+      const previousParts = Object.fromEntries(
+        REPORT_PARTS.slice(0, step)
+          .filter((previousPart) => generationParts[previousPart.key])
+          .map((previousPart) => [previousPart.key, generationParts[previousPart.key]]),
+      );
+
+      const { systemPrompt, userPrompt } = buildPartPrompts(
+        inputs,
+        job.research ?? {},
+        part,
+        previousParts,
+      );
+
 
       const parsedPart = await kimiStructured(
         [
@@ -324,7 +602,34 @@ serve(async (req) => {
       }
 
       const enriched = ensureEvidenceFields(job.draft, inputs);
-      const report = deepSanitize(enriched);
+      const finalized = finalizeReportDeterministically(
+        enriched,
+        job.research_quality as { score?: number; level?: string } | null,
+      );
+      const report = deepSanitize(finalized);
+
+      const scores = report.scores as Record<string, unknown> | undefined;
+      if (!scores) throw new Error("Final report scores are missing.");
+
+      const overall = Number(scores.overall);
+      const expectedVerdict = overall >= 7.5
+        ? "PROCEED"
+        : overall >= 6.0
+          ? "PROCEED WITH CAUTION"
+          : overall >= 4.5
+            ? "REVISE"
+            : "DO NOT PROCEED";
+      if (scores.verdict !== expectedVerdict) {
+        throw new Error("Final report verdict does not match its score.");
+      }
+
+      const weightSum = Object.values(
+        (scores.weights ?? {}) as Record<string, unknown>,
+      ).reduce((sum: number, value) => sum + Number(value ?? 0), 0);
+      if (Math.abs(weightSum - 1) > 0.001) {
+        throw new Error("FMART-O weights do not sum to 1.");
+      }
+
 
       const saved = await releaseLease({
         draft: report,
