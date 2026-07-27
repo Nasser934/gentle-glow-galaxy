@@ -504,3 +504,56 @@ export function ensureEvidenceFields(report: any, inputs: any): any {
 
   return r;
 }
+
+/* ---------------- Version comparison (mirrors src/lib/evidence.ts) ---------------- */
+export function buildVersionEntry(
+  previous: any,
+  next: any,
+  prevInputs: Record<string, unknown>,
+  nextInputs: Record<string, unknown>,
+): Record<string, unknown> {
+  const changed: string[] = [];
+  for (const key of Object.keys(nextInputs ?? {})) {
+    if ((prevInputs as any)?.[key] !== (nextInputs as any)?.[key]) changed.push(key);
+  }
+  const avg = (report: any) =>
+    report?.scores?.confidence
+      ? Object.values(report.scores.confidence).reduce(
+          (a: number, b: any) => a + (Number(b) || 0),
+          0,
+        ) / 6
+      : 50;
+  const prevConfPct = confidencePercent(avg(previous)) ?? 50;
+  const nextConfPct = confidencePercent(avg(next)) ?? 50;
+  const prevAi = previous?.evidenceMix?.aiAssumptionPercent ?? 0;
+  const nextAi = next?.evidenceMix?.aiAssumptionPercent ?? 0;
+
+  const summaryParts: string[] = [];
+  if (changed.length) {
+    summaryParts.push(`Updated ${changed.length} field${changed.length === 1 ? "" : "s"}.`);
+  }
+  if (nextConfPct > prevConfPct + 2) summaryParts.push("Confidence improved.");
+  else if (nextConfPct < prevConfPct - 2) {
+    summaryParts.push("Confidence dropped — new info revealed weaknesses.");
+  }
+  if (nextAi < prevAi - 3) summaryParts.push("AI assumption ratio decreased.");
+  if (!summaryParts.length) summaryParts.push("Re-run produced minor changes.");
+
+  const prevScore = Number(previous?.scores?.overall ?? 0);
+  const nextScore = Number(next?.scores?.overall ?? 0);
+
+  return {
+    versionId: `v${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    changedInputs: changed,
+    previousScore: prevScore,
+    newScore: nextScore,
+    scoreDelta: Number((nextScore - prevScore).toFixed(2)),
+    previousConfidence: prevConfPct,
+    newConfidence: nextConfPct,
+    previousAiAssumptionPercent: prevAi,
+    newAiAssumptionPercent: nextAi,
+    confidenceDelta: nextConfPct - prevConfPct,
+    summary: summaryParts.join(" "),
+  };
+}

@@ -46,9 +46,12 @@ export function getAnalysisActivityLabel(job: AnalysisJob): string {
   return STAGE_LABEL[job.stage] ?? job.stage;
 }
 
-/** Kick off a durable background analysis. Returns immediately with the job id. */
-export async function startAnalysisJob(inputs: ConceptInputs): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("start-analysis", { body: { inputs } });
+/** Kick off a durable background analysis. Returns immediately with the job id.
+ *  Pass `parentReportId` to create a new version of an existing report. */
+export async function startAnalysisJob(inputs: ConceptInputs, parentReportId?: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("start-analysis", {
+    body: parentReportId ? { inputs, parentReportId } : { inputs },
+  });
   if (error) {
     let detail = error.message;
     try {

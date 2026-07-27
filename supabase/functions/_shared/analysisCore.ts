@@ -716,6 +716,60 @@ function confidenceCapForQuality(qualityScore: number) {
   return { market: 45, timing: 42, financial: 50, other: 65 };
 }
 
+/** Normalize a confidence value of any scale (0-1, 0-10, 0-100) to a percentage. */
+export function toConfidencePercent(raw: unknown): number | null {
+  if (raw == null) return null;
+  let n = typeof raw === "string" ? parseFloat(raw.replace(/[%,\s]/g, "")) : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) n = 0;
+  if (n > 0 && n <= 1) n = n * 100;
+  else if (n > 1 && n <= 10) n = n * 10;
+  while (n > 100) n = n / 10;
+  return Math.round(n);
+}
+
+export type DecisionReadinessStatus =
+  | "READY"
+  | "NEEDS VALIDATION"
+  | "INSUFFICIENT EVIDENCE";
+
+export function decisionReadinessStatus(score: number): DecisionReadinessStatus {
+  if (score >= 7.5) return "READY";
+  if (score >= 5.0) return "NEEDS VALIDATION";
+  return "INSUFFICIENT EVIDENCE";
+}
+
+/**
+ * Evidence-readiness signal. Deliberately separate from the FMART-O feasibility
+ * score: weak evidence lowers readiness, never `scores.overall`.
+ */
+export function computeDecisionReadiness(
+  report: any,
+  researchQualityScore: number,
+): { decisionReadinessScore: number; decisionReadinessStatus: DecisionReadinessStatus } {
+  const confidence = report?.scores?.confidence && typeof report.scores.confidence === "object"
+    ? report.scores.confidence
+    : {};
+  const confidenceValues = Object.values(confidence)
+    .map((value) => toConfidencePercent(value))
+    .filter((value): value is number => value != null);
+  const averageConfidence = confidenceValues.length > 0
+    ? confidenceValues.reduce((total, value) => total + value, 0) / confidenceValues.length
+    : 0;
+
+  const research = Math.max(0, Math.min(100, Number(researchQualityScore) || 0));
+  const inputQuality = Math.max(0, Math.min(100, Number(report?.inputQualityScore ?? 0) || 0));
+
+  const score = roundOne(
+    (averageConfidence * 0.40 + research * 0.35 + inputQuality * 0.25) / 10,
+  );
+  const bounded = Math.max(0, Math.min(10, score));
+  return {
+    decisionReadinessScore: bounded,
+    decisionReadinessStatus: decisionReadinessStatus(bounded),
+  };
+}
+
 /**
  * Deterministic server-side finalization. Research quality can only lower
  * confidence and evidence-mix claims — never the FMART-O score itself.
@@ -792,6 +846,11 @@ export function finalizeReportDeterministically(
       }
     }
   }
+
+  // Additive, deterministic evidence-readiness signal (never affects FMART-O).
+  const readiness = computeDecisionReadiness(output, qualityScore);
+  output.decisionReadinessScore = readiness.decisionReadinessScore;
+  output.decisionReadinessStatus = readiness.decisionReadinessStatus;
 
   return output;
 }

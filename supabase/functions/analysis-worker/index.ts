@@ -2,7 +2,7 @@
 // single stage (or one persisted report part) per invocation.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { ensureEvidenceFields, deepSanitize } from "../_shared/evidence.ts";
+import { ensureEvidenceFields, deepSanitize, buildVersionEntry } from "../_shared/evidence.ts";
 import { kimiStructured, KimiError } from "../_shared/kimi.ts";
 import {
   createInitialResearchState,
@@ -17,9 +17,11 @@ import {
   shouldContinueResearch,
   buildPublicResearch,
   researchBudgetExhausted,
+  countExtractedSources,
   SEARCH_BATCH_SIZE,
   MIN_UNIQUE_SOURCES,
   MAX_TOTAL_QUERIES,
+  MAX_RESEARCH_ROUNDS,
   type ResearchState,
 } from "../_shared/researchAgent.ts";
 import {
@@ -286,7 +288,9 @@ serve(async (req) => {
           `Searching ${batch.length} targeted queries in parallel`,
         );
 
-        const result = await runSearchBatch(batch);
+        const result = await runSearchBatch(batch, {
+          alreadyCompletedIds: Array.from(completed),
+        });
         const mergedSources = mergeResearchSources(state.sources ?? [], result.sources);
         const completedIds = Array.from(
           new Set([...(state.completedQueryIds ?? []), ...result.completedQueryIds]),
@@ -328,9 +332,7 @@ serve(async (req) => {
       /* TAVILY PAGE EXTRACTION */
       if (state.phase === "extracting") {
         const selected = selectExtractionBatch(state.sources ?? []);
-        const extractedCount = (state.sources ?? []).filter(
-          (source) => source.extracted && Boolean(source.extractedContent),
-        ).length;
+        const extractedCount = countExtractedSources(state.sources ?? []);
         const extractionTarget = Math.min(
           Math.max(MIN_UNIQUE_SOURCES, 30),
           (state.sources ?? []).length,
@@ -363,9 +365,7 @@ serve(async (req) => {
 
         const extracted = await extractSourceBatch(selected, inputs);
         const updatedSources = applyExtractedSources(state.sources, extracted);
-        const newExtractedCount = updatedSources.filter(
-          (source) => source.extracted && Boolean(source.extractedContent),
-        ).length;
+        const newExtractedCount = countExtractedSources(updatedSources);
         const moreToExtract =
           newExtractedCount < extractionTarget &&
           selectExtractionBatch(updatedSources).length > 0;
@@ -426,7 +426,7 @@ serve(async (req) => {
               research_state: nextState,
               research_quality: quality,
               stage_detail:
-                `Expanding research for ${review.missingAreas.length} evidence gaps · round ${nextState.round + 1}`,
+                `Expanding research for ${review.missingAreas.length} evidence gaps · round ${nextState.round} of ${MAX_RESEARCH_ROUNDS}`,
               error: null,
             });
 
@@ -659,6 +659,31 @@ serve(async (req) => {
         reportId = existingReport?.id ?? null;
       }
 
+      // Re-run support: link the new report to the report being improved and
+      // append a version-comparison entry. The original row is never modified.
+      const parentReportId = typeof job.parent_report_id === "string" ? job.parent_report_id : null;
+      let output: any = job.draft;
+      if (parentReportId && job.previous_output && job.previous_inputs) {
+        try {
+          const previous = ensureEvidenceFields(job.previous_output, job.previous_inputs);
+          const versionEntry = buildVersionEntry(
+            previous,
+            output,
+            job.previous_inputs as Record<string, unknown>,
+            inputs,
+          );
+          const history = Array.isArray((job.previous_output as any).reportVersions)
+            ? (job.previous_output as any).reportVersions
+            : [];
+          output = { ...output, reportVersions: [...history, versionEntry] };
+        } catch (versionError) {
+          console.warn(
+            "version entry build failed",
+            versionError instanceof Error ? versionError.message : String(versionError),
+          );
+        }
+      }
+
       if (!reportId) {
         const { data: inserted, error: insertError } = await db
           .from("reports")
@@ -667,7 +692,8 @@ serve(async (req) => {
             title: inputs.projectName || "Untitled analysis",
             industry: inputs.industry || null,
             inputs,
-            output: job.draft,
+            output,
+            parent_report_id: parentReportId,
             save_operation_key: saveOperationKey,
             model_id: "k3-256k",
           })

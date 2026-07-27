@@ -16,8 +16,8 @@ import {
 } from "@/types/analysis";
 import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
-import { getReportById, saveReport, saveRerunReport } from "@/lib/reports";
-import { assessInputQuality, ensureEvidenceFields, buildVersionEntry } from "@/lib/evidence";
+import { getReportById } from "@/lib/reports";
+import { assessInputQuality } from "@/lib/evidence";
 import { startAnalysisJob } from "@/lib/analysisJobs";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
@@ -247,40 +247,11 @@ const Analyze = () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
 
-    // Re-runs keep the synchronous path (version diffing happens client-side).
-    if (isReRun && previousReport && previousInputs) {
-      try {
-        const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
-        if (error) {
-          let detail = error.message;
-          try {
-            const ctx: any = (error as any).context;
-            if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
-            else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
-          } catch (_) { /* ignore */ }
-          throw new Error(detail);
-        }
-        if (data?.error) throw new Error(data.error);
-
-        let enriched = ensureEvidenceFields(data, inputs);
-        const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
-        const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
-        const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
-        enriched = { ...enriched, reportVersions: [...history, versionEntry] };
-        const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
-        navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
-      } catch (e: any) {
-        toast.error(e?.message || "Analysis failed.");
-      } finally {
-        setIsAnalyzing(false);
-      }
-      return;
-    }
-
-    // First-time analysis: enqueue a durable background job and return instantly.
+    // Every analysis — including re-runs — goes through the durable async
+    // pipeline. Re-runs pass the parent report so the worker links the version.
     try {
-      const jobId = await startAnalysisJob(inputs);
-      toast.success("Analysis started", {
+      const jobId = await startAnalysisJob(inputs, isReRun && reportId ? reportId : undefined);
+      toast.success(isReRun ? "New version started" : "Analysis started", {
         description: "We'll notify you as soon as your report is ready.",
       });
       navigate(`/analysis/${jobId}`);

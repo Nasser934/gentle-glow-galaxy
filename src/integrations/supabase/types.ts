@@ -28,13 +28,16 @@ export type Database = {
           lease_expires_at: string | null
           lease_token: string | null
           parent_report_id: string | null
+          previous_inputs: Json | null
+          previous_output: Json | null
           queue_pending: boolean
           report_id: string | null
           research: Json | null
           research_completed_at: string | null
-          research_quality: Json | null
+          research_quality: Json
           research_started_at: string | null
-          research_state: Json | null
+          research_state: Json
+          root_report_id: string | null
           stage: string
           stage_attempts: Json
           stage_detail: string | null
@@ -57,13 +60,16 @@ export type Database = {
           lease_expires_at?: string | null
           lease_token?: string | null
           parent_report_id?: string | null
+          previous_inputs?: Json | null
+          previous_output?: Json | null
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
           research_completed_at?: string | null
-          research_quality?: Json | null
+          research_quality?: Json
           research_started_at?: string | null
-          research_state?: Json | null
+          research_state?: Json
+          root_report_id?: string | null
           stage?: string
           stage_attempts?: Json
           stage_detail?: string | null
@@ -86,13 +92,16 @@ export type Database = {
           lease_expires_at?: string | null
           lease_token?: string | null
           parent_report_id?: string | null
+          previous_inputs?: Json | null
+          previous_output?: Json | null
           queue_pending?: boolean
           report_id?: string | null
           research?: Json | null
           research_completed_at?: string | null
-          research_quality?: Json | null
+          research_quality?: Json
           research_started_at?: string | null
-          research_state?: Json | null
+          research_state?: Json
+          root_report_id?: string | null
           stage?: string
           stage_attempts?: Json
           stage_detail?: string | null
@@ -113,6 +122,13 @@ export type Database = {
           {
             foreignKeyName: "analysis_jobs_report_id_fkey"
             columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analysis_jobs_root_report_id_fkey"
+            columns: ["root_report_id"]
             isOneToOne: false
             referencedRelation: "reports"
             referencedColumns: ["id"]
@@ -682,13 +698,16 @@ export type Database = {
           lease_expires_at: string | null
           lease_token: string | null
           parent_report_id: string | null
+          previous_inputs: Json | null
+          previous_output: Json | null
           queue_pending: boolean
           report_id: string | null
           research: Json | null
           research_completed_at: string | null
-          research_quality: Json | null
+          research_quality: Json
           research_started_at: string | null
-          research_state: Json | null
+          research_state: Json
+          root_report_id: string | null
           stage: string
           stage_attempts: Json
           stage_detail: string | null
