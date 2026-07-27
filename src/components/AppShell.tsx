@@ -181,7 +181,10 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
           </div>
         </header>
 
-        {/* Page header */}
+        {/* Global background-analysis indicator */}
+        <AnalysisJobsIndicator />
+
+
         {(title || actions) && (
           <div className="border-b border-border bg-background px-4 py-5 lg:px-8">
             <div className="flex flex-wrap items-end justify-between gap-3">

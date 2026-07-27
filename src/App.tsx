@@ -84,6 +84,7 @@ const App = () => (
               <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
               <Route path="/r/:slug" element={<ReportRouteErrorBoundary><SharedReport /></ReportRouteErrorBoundary>} />
               <Route path="/analyze" element={<ProtectedRoute><Shelled><Analyze /></Shelled></ProtectedRoute>} />
+              <Route path="/analysis/:jobId" element={<ProtectedRoute><Shelled><AnalysisProgress /></Shelled></ProtectedRoute>} />
               <Route path="/results" element={<ProtectedRoute><ReportRouteErrorBoundary><Shelled><Results /></Shelled></ReportRouteErrorBoundary></ProtectedRoute>} />
               <Route path="/reports/:reportId" element={<ProtectedRoute><ReportRouteErrorBoundary><Shelled><Results /></Shelled></ReportRouteErrorBoundary></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Shelled><Dashboard /></Shelled></ProtectedRoute>} />
