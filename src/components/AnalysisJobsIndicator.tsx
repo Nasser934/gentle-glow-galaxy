@@ -7,8 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   type AnalysisJob,
-  STAGE_LABEL,
   formatElapsed,
+  getAnalysisActivityLabel,
   listActiveAnalysisJobs,
 } from "@/lib/analysisJobs";
 
@@ -73,7 +73,7 @@ export const AnalysisJobsIndicator = () => {
         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
         <span className="truncate text-[13px] font-medium text-foreground">{primary.title}</span>
         <span className="text-[12px] text-muted-foreground">
-          {STAGE_LABEL[primary.stage] ?? primary.stage} · {formatElapsed(primary.started_at)}
+          {getAnalysisActivityLabel(primary)} · {formatElapsed(primary.started_at)}
         </span>
         {jobs.length > 1 && (
           <span className="text-[12px] text-muted-foreground">+{jobs.length - 1} more</span>

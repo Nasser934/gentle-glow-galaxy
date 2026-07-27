@@ -20,20 +20,40 @@ function apiKey(): string {
   return key;
 }
 
-async function callKimi(body: Record<string, unknown>): Promise<any> {
-  const response = await fetch(KIMI_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: KIMI_MODEL,
-      reasoning_effort: "high",
-      stream: false,
-      ...body,
-    }),
-  });
+export interface KimiStructuredOptions {
+  reasoningEffort?: "low" | "high" | "max";
+  timeoutMs?: number;
+}
+
+async function callKimi(body: Record<string, unknown>, timeoutMs?: number): Promise<any> {
+  let response: Response;
+  try {
+    response = await fetch(KIMI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: KIMI_MODEL,
+        reasoning_effort: "high",
+        stream: false,
+        ...body,
+      }),
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    ) {
+      throw new KimiError(
+        504,
+        "Kimi did not complete this report section within the processing window.",
+      );
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const text = await response.text();
@@ -77,7 +97,11 @@ export async function kimiStructured(
   toolName: string,
   toolDescription: string,
   parameters: Record<string, unknown>,
+  options: KimiStructuredOptions = {},
 ): Promise<any> {
+  const reasoningEffort = options.reasoningEffort ?? "high";
+  const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 10_000), 120_000);
+
   const guided: KimiMessage[] = [
     ...messages,
     {
@@ -91,9 +115,10 @@ export async function kimiStructured(
 
   const data = await callKimi({
     messages: guided,
+    reasoning_effort: reasoningEffort,
     tools: [{ type: "function", function: { name: toolName, description: toolDescription, parameters } }],
     tool_choice: "auto",
-  });
+  }, timeoutMs);
 
   const message = data.choices?.[0]?.message;
   const args = message?.tool_calls?.[0]?.function?.arguments;

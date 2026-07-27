@@ -20,6 +20,8 @@ export interface AnalysisJob {
   error: string | null;
   started_at: string;
   completed_at: string | null;
+  generation_step: number;
+  stage_detail: string | null;
 }
 
 export const STAGE_LABEL: Record<JobStage, string> = {
@@ -36,7 +38,13 @@ export const STAGE_ORDER: JobStage[] = ["queued", "researching", "generating", "
 
 export const isActiveStage = (s: JobStage) => s !== "completed" && s !== "failed";
 
-const JOB_COLUMNS = "id, user_id, title, status, stage, report_id, error, started_at, completed_at";
+const JOB_COLUMNS =
+  "id, user_id, title, status, stage, report_id, error, started_at, completed_at, generation_step, stage_detail";
+
+export function getAnalysisActivityLabel(job: AnalysisJob): string {
+  if (job.stage_detail?.trim()) return job.stage_detail;
+  return STAGE_LABEL[job.stage] ?? job.stage;
+}
 
 /** Kick off a durable background analysis. Returns immediately with the job id. */
 export async function startAnalysisJob(inputs: ConceptInputs): Promise<string> {
