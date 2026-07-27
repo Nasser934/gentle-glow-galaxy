@@ -3,6 +3,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { sanitizeInputs } from "../_shared/analysisCore.ts";
+import { KIMI_MODEL } from "../_shared/kimi.ts";
+import {
+  CONCEPT_AI_POLICY_VERSION,
+  PROMPT_BUNDLE_HASH,
+  PROMPT_BUNDLE_VERSION,
+} from "../_shared/ai/promptManifest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,8 +71,8 @@ serve(async (req) => {
       if (parent.user_id !== userId) {
         return json({ error: "Only the report owner can create a new version." }, 403);
       }
-      rootReportId = (parent.root_report_id as string | null) ?? parent.parent_report_id ?? parent.id;
-      parentReportId = rootReportId;
+      rootReportId = (parent.root_report_id as string | null) ?? parent.id;
+      parentReportId = parent.id;
       previousInputs = parent.inputs;
       previousOutput = parent.output;
     }
@@ -97,6 +103,10 @@ serve(async (req) => {
         root_report_id: rootReportId,
         previous_inputs: previousInputs,
         previous_output: previousOutput,
+        policy_version: CONCEPT_AI_POLICY_VERSION,
+        prompt_version: PROMPT_BUNDLE_VERSION,
+        prompt_hash: PROMPT_BUNDLE_HASH,
+        model_id: KIMI_MODEL,
         started_at: new Date().toISOString(),
       })
       .select("id, started_at")

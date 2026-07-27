@@ -1,6 +1,7 @@
 // ============================================================
 // Concept AI — full data model (FMART feasibility report)
 // ============================================================
+import type { ResolvedConcept } from "../../supabase/functions/_shared/ai/schemas/resolved-concept.schema";
 
 export interface ConceptInputs {
   // Project Overview
@@ -118,6 +119,7 @@ export interface Competitor {
 }
 
 export interface ResearchCitation {
+  id?: string;
   title: string;
   url: string;
   source: string;
@@ -209,6 +211,8 @@ export interface FeasibilityReport {
   customer: CustomerProfile;
   competitors: Competitor[];
   research?: MarketResearch;
+  /** Research-supported analytical baseline; absent on legacy/external reports. */
+  resolvedConcept?: ResolvedConcept;
 
   financials: Financials;
 
@@ -293,6 +297,14 @@ export interface ReportVersion {
   confidenceDelta: number;
   previousAiAssumptionPercent: number;
   newAiAssumptionPercent: number;
+  previousDecisionReadiness?: number;
+  newDecisionReadiness?: number;
+  decisionReadinessDelta?: number;
+  previousResearchQuality?: number;
+  newResearchQuality?: number;
+  researchQualityDelta?: number;
+  unresolvedDecisionsAdded?: string[];
+  unresolvedDecisionsResolved?: string[];
   summary: string;
 }
 

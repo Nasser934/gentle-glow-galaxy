@@ -23,6 +23,7 @@ import {
 } from "./analysisCore.ts";
 
 const source = (over: Partial<ResearchSource> = {}): ResearchSource => ({
+  id: "source-example",
   url: "https://example.com/a",
   normalizedUrl: "example.com/a",
   domain: "example.com",
@@ -158,13 +159,37 @@ describe("decision readiness", () => {
     };
     const { decisionReadinessScore, decisionReadinessStatus: status } = computeDecisionReadiness(report, 20);
     expect(report.scores.overall).toBe(8.2);
-    expect(decisionReadinessScore).toBeCloseTo(2.9, 1);
+    expect(decisionReadinessScore).toBeCloseTo(1.5, 1);
     expect(status).toBe("INSUFFICIENT EVIDENCE");
   });
   it("rewards strong evidence", () => {
     const report = {
       scores: { confidence: { market: 90, financial: 90, achievability: 90, risk: 90, timing: 90, operational: 90 } },
       inputQualityScore: 85,
+      claimEvidenceMap: [
+        { sources: ["source-1"] },
+        { sources: ["source-2"] },
+      ],
+      resolvedConcept: {
+        selectedBaselineScenario: {
+          name: "Baseline",
+          description: "Resolved scenario",
+          productCategory: "Service",
+          customerProblem: "Problem",
+          targetCustomer: "Buyer",
+          targetGeography: "Saudi Arabia",
+          valueProposition: "Value",
+          businessModel: "Services",
+          revenueModel: "Per engagement",
+          pricingApproach: "Benchmark-led",
+          operatingModel: "Direct",
+          technologyApproach: "Established stack",
+          regulatoryScope: "Applicable licences",
+          costProfile: "People-led",
+          commercialUnit: "Engagement",
+        },
+        unresolvedPrivateDecisions: [],
+      },
     };
     const { decisionReadinessScore, decisionReadinessStatus: status } = computeDecisionReadiness(report, 80);
     expect(decisionReadinessScore).toBeGreaterThanOrEqual(7.5);

@@ -273,7 +273,7 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           <TabsTrigger value="market" className="gap-2"><TrendingUp className="h-4 w-4" /> Market</TabsTrigger>
           <TabsTrigger value="financial" className="gap-2"><PieChartIcon className="h-4 w-4" /> Financial</TabsTrigger>
           <TabsTrigger value="risk" className="gap-2"><AlertTriangle className="h-4 w-4" /> Risk</TabsTrigger>
-          <TabsTrigger value="research" className="gap-2"><Globe2 className="h-4 w-4" /> Research</TabsTrigger>
+          <TabsTrigger value="insights" className="gap-2"><Globe2 className="h-4 w-4" /> Insights</TabsTrigger>
           <TabsTrigger value="roadmap" className="gap-2"><Route className="h-4 w-4" /> Roadmap</TabsTrigger>
         </TabsList>
 
@@ -528,13 +528,13 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
           </div>
         </TabsContent>
 
-        <TabsContent value="research" className="space-y-4">
+        <TabsContent value="insights" className="space-y-4">
           {research ? (
             <>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                    <Globe2 className="h-4 w-4 text-primary" /> Free-source market research
+                    <Globe2 className="h-4 w-4 text-primary" /> Research-backed market insights
                     <Badge variant="outline">{research.confidence} confidence</Badge>
                     <Badge variant="outline">{research.sentiment}</Badge>
                   </CardTitle>
@@ -549,21 +549,9 @@ export const InteractiveDashboard = ({ report, inputs }: { report: FeasibilityRe
                 <MiniInsight title="Reddit/community signals" items={research.redditSignals} citations={research.citations} />
                 <MiniInsight title="Open web signals" items={research.webSignals} citations={research.citations} />
               </div>
-              <Card>
-                <CardHeader><CardTitle className="text-base">Research Citations</CardTitle></CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2">
-                  {research.citations.slice(0, 8).map((citation) => (
-                    <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer" className="rounded-md border border-border p-3 transition-colors hover:bg-accent">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{citation.source}</div>
-                      <div className="mt-1 line-clamp-2 font-medium text-foreground">{citation.title}</div>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{citation.takeaway}</p>
-                    </a>
-                  ))}
-                </CardContent>
-              </Card>
             </>
           ) : (
-            <Card><CardContent className="p-6 text-sm text-muted-foreground">Run a new analysis to include free public Reddit/web research signals.</CardContent></Card>
+            <Card><CardContent className="p-6 text-sm text-muted-foreground">Run a new analysis to include public research signals.</CardContent></Card>
           )}
         </TabsContent>
 

@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
+    "prompts:build": "node scripts/build-prompt-bundle.mjs",
+    "prompts:check": "node scripts/check-prompt-bundle.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

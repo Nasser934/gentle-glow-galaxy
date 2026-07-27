@@ -127,7 +127,7 @@ export function deepSanitize<T>(value: T): T {
   return value;
 }
 
-/* ---------------- Input Quality ---------------- */
+/* ---------------- Brief Clarity ---------------- */
 const FIELD_DEFS: Array<{
   key: string; label: string;
   evaluator: (v: string, all: any) => InputStatus;
@@ -165,26 +165,14 @@ const FIELD_DEFS: Array<{
     evaluator: (v) => presentStatus(v),
     impact: "Required for Timing score and milestone planning.",
     suggestion: "Pick a target window for launch / completion." },
-  { key: "competitorUrls", label: "Competitors",
-    evaluator: (v) => pickStatus(wordCount((v || "").replace(/https?:\/\/\S+/g, "x")), 6, 2),
-    impact: "Drives competitive edge analysis and reduces AI assumption ratio.",
-    suggestion: "Paste 2–4 real competitor URLs, one per line." },
   { key: "knownRisks", label: "Known risks",
     evaluator: (v) => pickStatus(wordCount(v), 25, 8),
     impact: "Without explicit risks, Risk score relies on AI inference.",
     suggestion: "List 3+ risks (regulatory, technical, market, execution)." },
-  { key: "regulatoryConsiderations", label: "Compliance",
-    evaluator: (v) => pickStatus(wordCount(v), 20, 6),
-    impact: "Material to Risk and Timing in regulated industries.",
-    suggestion: "Name the regulators, licences, or standards that apply." },
   { key: "founderExperience", label: "Team / founder experience",
     evaluator: (v) => pickStatus(wordCount(v), 20, 6),
     impact: "Improves Achievability and Operational confidence.",
     suggestion: "Add years of experience, prior exits, and domain expertise." },
-  { key: "technologyReadiness", label: "Technology readiness",
-    evaluator: (v) => presentStatus(v),
-    impact: "Calibrates Achievability score.",
-    suggestion: "Pick the readiness level closest to your stack." },
   { key: "assumptions", label: "Financial & business assumptions",
     evaluator: (v) => pickStatus(wordCount(v), 25, 8),
     impact: "Reduces AI assumption ratio across financial claims.",
@@ -267,16 +255,12 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
       if (getCitations(report).length > 4) positives.push("Multiple public sources support market context.");
       if (!inputs?.location) negatives.push("No geography provided.");
       if (getCitations(report).length < 3) negatives.push("Limited public evidence captured.");
-      if (allWeak.includes("Competitors")) negatives.push("Few competitors supplied.");
     } else if (dim === "achievability") {
-      if (inputs?.technologyReadiness) positives.push(`Technology readiness: ${inputs.technologyReadiness}.`);
       if (inputs?.founderExperience) positives.push("Founder/team experience provided.");
-      if (!inputs?.technologyReadiness) negatives.push("Technology readiness not set.");
       if (!inputs?.founderExperience) negatives.push("Team experience not described.");
     } else if (dim === "risk") {
       const mitigated = (report?.risks || []).filter((x: any) => x.mitigation && x.mitigation.length > 10).length;
       if (mitigated > 0) positives.push("Most risks have an associated mitigation.");
-      if (inputs?.regulatoryConsiderations) positives.push("Regulatory context provided.");
       const unmitigated = (report?.risks || []).filter((x: any) => !x.mitigation || x.mitigation.length < 8).length;
       if (unmitigated > 0) negatives.push("One or more risks lack mitigation.");
       if (!inputs?.knownRisks) negatives.push("User-supplied risks are missing.");
@@ -292,9 +276,9 @@ export function deriveScoreExplanation(report: any, inputs: any): ScoreExplanati
     }
     const improveActions: Record<ScoreExplanationRow["dimension"], string[]> = {
       financial: ["Add pricing and expected customer count.", "Quantify CAC, churn, and gross margin.", "Confirm budget range."],
-      market: ["Add the target geography and segment.", "Paste 2–4 competitor URLs.", "Cite a recent market sizing source."],
-      achievability: ["Select technology readiness.", "Describe team/founder experience and prior wins."],
-      risk: ["List 3+ risks with mitigation.", "Document regulatory and compliance constraints."],
+      market: ["Confirm the target geography and segment.", "Validate demand through customer interviews."],
+      achievability: ["Describe team/founder experience and prior wins.", "Validate the selected technology approach."],
+      risk: ["List known private risks with mitigation.", "Confirm which researched compliance requirements apply."],
       timing: ["Choose a realistic timeline.", "Note any seasonality or policy windows."],
       operational: ["Specify team size and key roles.", "List external dependencies and SLAs."],
     };
@@ -362,7 +346,7 @@ export function deriveClaimEvidenceMap(report: any, inputs: any): ClaimEvidenceR
       aiAssumptionPercent: 0,
       confidence: conf(confidencePercent(report?.scores?.confidence?.market) ?? 50),
       sources: cites.slice(0, 2),
-      userCanImproveBy: "Paste 2–4 competitor URLs and note their pricing or positioning.",
+      userCanImproveBy: "Validate the researched competitor set and positioning with customers.",
     },
     {
       claimId: "regulatory",
@@ -391,7 +375,6 @@ export function deriveClaimEvidenceMap(report: any, inputs: any): ClaimEvidenceR
 export function computeVerdict(args: {
   score: number;
   overallConfidencePct: number;
-  inputQuality: number;
   aiAssumptionPct: number;
   marketEvidenceWeak: boolean;
   financialsMissing: boolean;
@@ -400,28 +383,22 @@ export function computeVerdict(args: {
   const blockers: string[] = [];
   let verdict: ConsumerVerdict = "PROCEED";
 
-  if (args.score >= 8.5 && args.overallConfidencePct >= 70 && !args.criticalRisksWithoutMitigation) {
+  if (args.score >= 7.5) {
     verdict = "PROCEED";
-  } else if (args.score >= 7.0) {
-    verdict = args.overallConfidencePct >= 70 ? "CONDITIONAL PROCEED" : "CONDITIONAL PROCEED WITH VALIDATION";
-  } else if (args.score >= 5.5) {
+  } else if (args.score >= 6.0) {
+    verdict = args.overallConfidencePct >= 70
+      ? "CONDITIONAL PROCEED"
+      : "CONDITIONAL PROCEED WITH VALIDATION";
+  } else if (args.score >= 4.5) {
     verdict = "REVISE";
   } else {
     verdict = "DO NOT PROCEED";
   }
 
-  if (args.inputQuality < 60) {
-    verdict = "IMPROVE INPUTS BEFORE INVESTMENT DECISION";
-    blockers.push("Input quality is below 60% — strengthen the brief before relying on these numbers.");
-  }
-  if (args.overallConfidencePct < 50 && (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED")) {
-    verdict = "CONDITIONAL PROCEED WITH VALIDATION";
+  if (args.overallConfidencePct < 50) {
     blockers.push("Analysis confidence is below 50% — validation required before any commitment.");
   }
   if (args.criticalRisksWithoutMitigation) {
-    if (verdict === "PROCEED" || verdict === "CONDITIONAL PROCEED") {
-      verdict = "CONDITIONAL PROCEED WITH VALIDATION";
-    }
     blockers.push("Critical/high risk has no mitigation. Address before proceeding.");
   }
 
@@ -491,16 +468,14 @@ export function ensureEvidenceFields(report: any, inputs: any): any {
     (rk: any) => isHighRisk(rk) && hasWeakMitigation(rk),
   );
 
-  const decision = computeVerdict({
-    score: r.scores?.overall ?? 0,
-    overallConfidencePct: overallConfPct,
-    inputQuality: r.inputQualityScore ?? 0,
-    aiAssumptionPct: r.evidenceMix?.aiAssumptionPercent ?? 0,
-    marketEvidenceWeak, financialsMissing, criticalRisksWithoutMitigation,
-  });
-  r.decision = decision;
-  // Keep legacy 4-state verdict authoritative server-side too.
-  if (r.scores) r.scores.verdict = legacyVerdictFromConsumer(decision.verdict);
+  if (!r.decision) {
+    r.decision = computeVerdict({
+      score: r.scores?.overall ?? 0,
+      overallConfidencePct: overallConfPct,
+      aiAssumptionPct: r.evidenceMix?.aiAssumptionPercent ?? 0,
+      marketEvidenceWeak, financialsMissing, criticalRisksWithoutMitigation,
+    });
+  }
 
   return r;
 }
@@ -527,6 +502,22 @@ export function buildVersionEntry(
   const nextConfPct = confidencePercent(avg(next)) ?? 50;
   const prevAi = previous?.evidenceMix?.aiAssumptionPercent ?? 0;
   const nextAi = next?.evidenceMix?.aiAssumptionPercent ?? 0;
+  const prevReadiness = Number(previous?.decisionReadinessScore ?? 0);
+  const nextReadiness = Number(next?.decisionReadinessScore ?? 0);
+  const prevResearch = Number(previous?.research?.quality?.score ?? 0);
+  const nextResearch = Number(next?.research?.quality?.score ?? 0);
+  const unresolvedFields = (report: any) =>
+    new Set<string>(
+      (report?.resolvedConcept?.unresolvedPrivateDecisions ?? [])
+        .map((decision: any) => String(decision?.field ?? ""))
+        .filter(Boolean),
+    );
+  const prevUnresolved = unresolvedFields(previous);
+  const nextUnresolved = unresolvedFields(next);
+  const unresolvedDecisionsAdded = Array.from(nextUnresolved)
+    .filter((field) => !prevUnresolved.has(field));
+  const unresolvedDecisionsResolved = Array.from(prevUnresolved)
+    .filter((field) => !nextUnresolved.has(field));
 
   const summaryParts: string[] = [];
   if (changed.length) {
@@ -537,6 +528,11 @@ export function buildVersionEntry(
     summaryParts.push("Confidence dropped — new info revealed weaknesses.");
   }
   if (nextAi < prevAi - 3) summaryParts.push("AI assumption ratio decreased.");
+  if (nextReadiness > prevReadiness) summaryParts.push("Decision readiness improved.");
+  if (nextResearch > prevResearch) summaryParts.push("Research quality improved.");
+  if (unresolvedDecisionsResolved.length > 0) {
+    summaryParts.push(`${unresolvedDecisionsResolved.length} private decision${unresolvedDecisionsResolved.length === 1 ? "" : "s"} resolved.`);
+  }
   if (!summaryParts.length) summaryParts.push("Re-run produced minor changes.");
 
   const prevScore = Number(previous?.scores?.overall ?? 0);
@@ -554,6 +550,14 @@ export function buildVersionEntry(
     previousAiAssumptionPercent: prevAi,
     newAiAssumptionPercent: nextAi,
     confidenceDelta: nextConfPct - prevConfPct,
+    previousDecisionReadiness: prevReadiness,
+    newDecisionReadiness: nextReadiness,
+    decisionReadinessDelta: Number((nextReadiness - prevReadiness).toFixed(2)),
+    previousResearchQuality: prevResearch,
+    newResearchQuality: nextResearch,
+    researchQualityDelta: Number((nextResearch - prevResearch).toFixed(2)),
+    unresolvedDecisionsAdded,
+    unresolvedDecisionsResolved,
     summary: summaryParts.join(" "),
   };
 }

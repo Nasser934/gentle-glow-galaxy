@@ -1,0 +1,15 @@
+{
+  "version": "confidence-policy.v1",
+  "readinessWeights": {
+    "researchQuality": 0.35,
+    "analystConfidence": 0.25,
+    "claimSourceCoverage": 0.25,
+    "resolvedScenarioCompleteness": 0.15
+  },
+  "highImpactPrivateDecisionPenaltyPoints": 8,
+  "readinessBands": [
+    { "minimum": 7.5, "status": "READY" },
+    { "minimum": 5.0, "status": "NEEDS VALIDATION" },
+    { "minimum": 0, "status": "INSUFFICIENT EVIDENCE" }
+  ]
+}

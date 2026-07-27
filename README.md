@@ -12,7 +12,8 @@ Concept AI turns a short concept brief into a structured feasibility report:
 
 - **Guided intake** — four-step form (Overview, Scope, Assumptions, Risks) with AI autofill and per-field completion.
 - **Industry templates** — one-click pre-fill for SaaS, Telecom, Infrastructure, Government, Real Estate and Healthcare.
-- **Grounded research** — live web search via Tavily plus targeted scraping of competitor URLs, Reddit, Hacker News and Wikipedia. Every finding is backed by citations.
+- **Grounded research** — Kimi-planned parallel Tavily search and batched extraction, with up to 120 persisted sources and claim-level citations.
+- **Concept resolution** — broad briefs are converted into a clearly labelled, research-supported baseline while the original user input remains unchanged.
 - **FMART scoring** — Financial, Market, Achievability, Risk, Timing and Operational dimensions, each with a confidence score, rationale and configurable weights.
 - **Interactive dashboard** — radar chart, risk heatmap, market and CapEx visuals, methodology panel, evidence chips that link findings back to sources.
 - **Financial sensitivity** — driver sliders, tornado chart and a 2,000-iteration Monte Carlo simulation (P10 / P50 / P90 outcomes).
@@ -25,8 +26,8 @@ Concept AI turns a short concept brief into a structured feasibility report:
 
 - **Frontend** — Vite, React 18, TypeScript, Tailwind CSS, shadcn/ui, framer-motion, recharts, react-markdown.
 - **Backend** — Lovable Cloud (Supabase): Postgres with Row-Level Security, Auth, Edge Functions (Deno).
-- **AI** — Lovable AI Gateway (Google Gemini 2.5 family).
-- **Research** — Tavily Search API.
+- **AI** — Kimi for research planning, review, concept resolution, and staged report analysis.
+- **Research** — Tavily Search and Extract APIs.
 - **Exports** — `jspdf` + `html2canvas-pro`, `pptxgenjs`, `exceljs`.
 
 ## Architecture
@@ -42,12 +43,17 @@ src/pages
   Compare         Side-by-side comparison
 
 supabase/functions
-  analyze-concept  Tavily + scraping + Gemini → FeasibilityReport
+  start-analysis   Authenticated async job creation and idempotent re-run entry
+  analysis-worker  Kimi planning → Tavily search/extract → resolution → report
+  analyze-concept  Deprecated compatibility proxy to start-analysis
   autofill-brief   Bulk AI fill of empty brief fields
   complete-field   Single-field AI suggestion
 
 Database (public schema)
   reports                   — concept inputs + FMART output, slug, status, public flag
+  analysis_jobs             — leased async jobs, retries, progress, prompt provenance
+  report_research_runs      — permanent report-level research snapshots
+  report_research_sources   — complete, paged source metadata and excerpts
   report_comments           — threaded comments (RLS: visible when report visible)
   report_status_history     — append-only status changes
   notifications             — owner alerts (DB triggers on comments + status)
@@ -75,6 +81,7 @@ The `.env` file is generated and managed by Lovable Cloud — do not edit it man
 Server-side secrets live in Lovable Cloud and are injected into Edge Functions:
 
 - `LOVABLE_API_KEY` — AI Gateway access
+- `KIMI_CODE_API_KEY` — Kimi analysis access
 - `TAVILY_API_KEY` — web search
 
 ## Deployment
