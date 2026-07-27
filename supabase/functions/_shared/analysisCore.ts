@@ -606,6 +606,34 @@ Be specific, realistic, and consultant-grade. Cite competitor scrapes by domain 
   return { systemPrompt, userPrompt };
 }
 
+export function buildPartPrompts(
+  inputs: Record<string, string>,
+  publicResearch: unknown,
+  part: { key: ReportPartKey; label: string; keys: string[] },
+) {
+  const { systemPrompt, userPrompt } = buildPrompts(inputs, publicResearch as any);
+
+  const partInstruction = `
+You are generating one persisted section of a larger report.
+
+Current section:
+${part.label}
+
+Return only these top-level fields:
+${part.keys.join(", ")}
+
+Do not return fields from other report sections.
+Do not omit any field required by the supplied schema.
+Keep all calculations and assumptions internally consistent with the project context.
+`;
+
+  return {
+    systemPrompt: `${systemPrompt}\n${partInstruction}`,
+    userPrompt: `${userPrompt}\n${partInstruction}`,
+  };
+}
+
+
 export function buildBaseReport(parsed: any, publicResearch: any) {
   const baseReport: any = {
     reportId: `FSB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
