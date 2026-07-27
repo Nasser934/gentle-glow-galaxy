@@ -11,6 +11,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { AnalysisJobsIndicator } from "@/components/AnalysisJobsIndicator";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -184,7 +185,7 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
         {/* Global background-analysis indicator */}
         <AnalysisJobsIndicator />
 
-
+        {/* Page header */}
         {(title || actions) && (
           <div className="border-b border-border bg-background px-4 py-5 lg:px-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
