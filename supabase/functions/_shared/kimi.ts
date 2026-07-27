@@ -97,7 +97,11 @@ export async function kimiStructured(
   toolName: string,
   toolDescription: string,
   parameters: Record<string, unknown>,
+  options: KimiStructuredOptions = {},
 ): Promise<any> {
+  const reasoningEffort = options.reasoningEffort ?? "high";
+  const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 10_000), 120_000);
+
   const guided: KimiMessage[] = [
     ...messages,
     {
@@ -111,9 +115,10 @@ export async function kimiStructured(
 
   const data = await callKimi({
     messages: guided,
+    reasoning_effort: reasoningEffort,
     tools: [{ type: "function", function: { name: toolName, description: toolDescription, parameters } }],
     tool_choice: "auto",
-  });
+  }, timeoutMs);
 
   const message = data.choices?.[0]?.message;
   const args = message?.tool_calls?.[0]?.function?.arguments;
