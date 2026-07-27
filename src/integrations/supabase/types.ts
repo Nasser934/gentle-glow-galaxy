@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          draft: Json | null
+          error: string | null
+          id: string
+          inputs: Json
+          parent_report_id: string | null
+          report_id: string | null
+          research: Json | null
+          stage: string
+          started_at: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          draft?: Json | null
+          error?: string | null
+          id?: string
+          inputs?: Json
+          parent_report_id?: string | null
+          report_id?: string | null
+          research?: Json | null
+          stage?: string
+          started_at?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          draft?: Json | null
+          error?: string | null
+          id?: string
+          inputs?: Json
+          parent_report_id?: string | null
+          report_id?: string | null
+          research?: Json | null
+          stage?: string
+          started_at?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_jobs_parent_report_id_fkey"
+            columns: ["parent_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analysis_jobs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analysis_rate_limits: {
         Row: {
           function_name: string
@@ -113,6 +185,24 @@ export type Database = {
           updated_at?: string
           user_id?: string
           window_start?: string
+        }
+        Relationships: []
+      }
+      job_worker_config: {
+        Row: {
+          created_at: string
+          id: boolean
+          worker_secret: string
+        }
+        Insert: {
+          created_at?: string
+          id?: boolean
+          worker_secret?: string
+        }
+        Update: {
+          created_at?: string
+          id?: boolean
+          worker_secret?: string
         }
         Relationships: []
       }
@@ -556,6 +646,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      delete_analysis_job_msg: { Args: { p_msg_id: number }; Returns: boolean }
+      enqueue_analysis_job: {
+        Args: { p_delay?: number; p_job_id: string }
+        Returns: number
+      }
       generate_report_display_id: { Args: never; Returns: string }
       generate_report_slug: { Args: never; Returns: string }
       get_report_by_slug: {
@@ -609,6 +704,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      kick_analysis_worker: { Args: never; Returns: undefined }
+      read_analysis_job_queue: {
+        Args: { p_qty?: number; p_vt?: number }
+        Returns: {
+          job_id: string
+          msg_id: number
+          read_ct: number
+        }[]
       }
     }
     Enums: {

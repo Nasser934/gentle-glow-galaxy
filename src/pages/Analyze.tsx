@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { findTemplate, applyTemplate } from "@/lib/industryTemplates";
 import { getReportById, saveReport, saveRerunReport } from "@/lib/reports";
 import { assessInputQuality, ensureEvidenceFields, buildVersionEntry } from "@/lib/evidence";
+import { startAnalysisJob } from "@/lib/analysisJobs";
 
 const STEPS = ["Project Overview", "Scope & Resources", "Assumptions & Constraints", "Risk Inputs"];
 
@@ -245,54 +246,51 @@ const Analyze = () => {
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsAnalyzing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
-      if (error) {
-        let detail = error.message;
-        try {
-          const ctx: any = (error as any).context;
-          if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
-          else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
-        } catch (_) { /* ignore */ }
-        throw new Error(detail);
-      }
-      if (data?.error) throw new Error(data.error);
 
-      // Enrich with evidence layer
-      let enriched = ensureEvidenceFields(data, inputs);
+    // Re-runs keep the synchronous path (version diffing happens client-side).
+    if (isReRun && previousReport && previousInputs) {
+      try {
+        const { data, error } = await supabase.functions.invoke("analyze-concept", { body: { inputs } });
+        if (error) {
+          let detail = error.message;
+          try {
+            const ctx: any = (error as any).context;
+            if (ctx?.json) { const j = await ctx.json(); if (j?.error) detail = j.error; }
+            else if (ctx?.text) { const t = await ctx.text(); if (t) detail = t; }
+          } catch (_) { /* ignore */ }
+          throw new Error(detail);
+        }
+        if (data?.error) throw new Error(data.error);
 
-      // If this is a re-run, carry version history forward, append diff, save linked row.
-      if (isReRun && previousReport && previousInputs) {
+        let enriched = ensureEvidenceFields(data, inputs);
         const prevEnriched = ensureEvidenceFields(previousReport, previousInputs);
         const versionEntry = buildVersionEntry(prevEnriched, enriched, previousInputs, inputs);
         const history = Array.isArray(previousReport.reportVersions) ? previousReport.reportVersions : [];
         enriched = { ...enriched, reportVersions: [...history, versionEntry] };
-        try {
-          const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
-          navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
-          return;
-        } catch (e) {
-          console.warn("Save new version failed", e);
-          // fall through — still navigate so user sees results
-        }
-      }
-
-      // First-time analysis: save first, then navigate to the canonical owner
-      // workspace. This prevents Results.tsx from auto-saving a duplicate row.
-      try {
-        const saved = await saveReport(inputs, enriched);
+        const saved = await saveRerunReport({ parentReportId: reportId, inputs, report: enriched });
         navigate(`/reports/${saved.id}`, { state: { report: enriched, inputs, slug: saved.slug, reportId: saved.id } });
-        return;
-      } catch (e) {
-        console.warn("Initial save failed; falling back to /results", e);
+      } catch (e: any) {
+        toast.error(e?.message || "Analysis failed.");
+      } finally {
+        setIsAnalyzing(false);
       }
-      navigate("/results", { state: { report: enriched, inputs } });
+      return;
+    }
+
+    // First-time analysis: enqueue a durable background job and return instantly.
+    try {
+      const jobId = await startAnalysisJob(inputs);
+      toast.success("Analysis started", {
+        description: "We'll notify you as soon as your report is ready.",
+      });
+      navigate(`/analysis/${jobId}`);
     } catch (e: any) {
       toast.error(e?.message || "Analysis failed.");
     } finally {
       setIsAnalyzing(false);
     }
   };
+
 
 
 

@@ -11,6 +11,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { AnalysisJobsIndicator } from "@/components/AnalysisJobsIndicator";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -180,6 +181,9 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
             <UserMenu />
           </div>
         </header>
+
+        {/* Global background-analysis indicator */}
+        <AnalysisJobsIndicator />
 
         {/* Page header */}
         {(title || actions) && (

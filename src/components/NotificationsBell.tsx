@@ -1,7 +1,7 @@
 // Phase 11 — In-app notifications bell (auth users only)
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, MessageSquare, Activity, Share2, Trash2 } from "lucide-react";
+import { Bell, Check, MessageSquare, Activity, Share2, Trash2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 interface Notification {
   id: string;
-  kind: "comment" | "status" | "shared";
+  kind: "comment" | "status" | "shared" | "analysis";
   title: string;
   body: string | null;
   url: string | null;
@@ -20,7 +20,7 @@ interface Notification {
 }
 
 const iconFor = (k: Notification["kind"]) =>
-  k === "comment" ? MessageSquare : k === "status" ? Activity : Share2;
+  k === "comment" ? MessageSquare : k === "status" ? Activity : k === "analysis" ? Sparkles : Share2;
 
 export const NotificationsBell = () => {
   const { user } = useAuth();
