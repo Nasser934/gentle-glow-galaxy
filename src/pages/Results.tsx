@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, RefreshCw, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
