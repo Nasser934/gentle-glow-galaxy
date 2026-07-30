@@ -178,7 +178,7 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
           <div className="flex items-center gap-1.5">
             <Button asChild size="sm" variant="outline" className="h-8 gap-1.5">
               <Link to="/analyze">
-                <PlusCircle className="h-3.5 w-3.5" /> New report
+                <PlusCircle className="h-3.5 w-3.5" /> New analysis
               </Link>
             </Button>
             <ThemeToggle />
