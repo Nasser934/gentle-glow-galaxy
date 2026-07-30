@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   PlusCircle,
@@ -10,8 +10,8 @@ import {
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
-import { NotificationsBell } from "@/components/NotificationsBell";
 import { AnalysisJobsIndicator } from "@/components/AnalysisJobsIndicator";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -176,7 +176,11 @@ export const AppShell = ({ children, title, subtitle, actions }: AppShellProps) 
           <div className="flex-1" />
 
           <div className="flex items-center gap-1.5">
-            <NotificationsBell />
+            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5">
+              <Link to="/analyze">
+                <PlusCircle className="h-3.5 w-3.5" /> New report
+              </Link>
+            </Button>
             <ThemeToggle />
             <UserMenu />
           </div>

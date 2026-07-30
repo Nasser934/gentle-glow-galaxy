@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, Share2, Check, Lock } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2, Presentation, RefreshCw, Share2, Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -443,9 +443,20 @@ const Results = () => {
                 onChanged={(s) => { setStatus(s); setActivityRefresh((n) => n + 1); }}
               />
             )}
-            <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
-              <ArrowLeft className="h-3.5 w-3.5" /> New
-            </Button>
+            {canEdit && reportId ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/analyze?reportId=${reportId}`)}
+                className="h-8 gap-1.5"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Re-run analysis
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => navigate("/analyze")} className="h-8 gap-1.5">
+                <ArrowLeft className="h-3.5 w-3.5" /> New
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleShare} disabled={savingShare} className="h-8 gap-1.5">
               {savingShare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
               {copied ? "Copied" : "Share"}
